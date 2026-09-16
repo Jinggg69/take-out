@@ -1,0 +1,20 @@
+# Java build output and IDE files
+**/target/
+**/.idea/
+*.iml
+*.class
+
+# Logs and local environment configuration
+*.log
+.env
+.env.*
+!.env.example
+**/application-dev.yml
+
+# Frontend dependencies and Nginx runtime files
+**/node_modules/
+frontend/nginx-1.20.2/logs/
+frontend/nginx-1.20.2/temp/
+
+# Database backups
+database/backups/
