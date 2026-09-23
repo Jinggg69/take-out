@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.DishMapper">
+
+    <insert id="insert" parameterType="com.sky.entity.Dish"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into dish
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            name,
+            category_id,
+            <if test="price != null">price,</if>
+            <if test="image != null">image,</if>
+            <if test="description != null">description,</if>
+            <if test="status != null">status,</if>
+            create_time,
+            update_time,
+            create_user,
+            update_user,
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            #{name},
+            #{categoryId},
+            <if test="price != null">#{price},</if>
+            <if test="image != null">#{image},</if>
+            <if test="description != null">#{description},</if>
+            <if test="status != null">#{status},</if>
+            #{createTime},
+            #{updateTime},
+            #{createUser},
+            #{updateUser},
+        </trim>
+    </insert>
+
+    <insert id="insertFlavors">
+        insert into dish_flavor (dish_id, name, `value`)
+        values
+        <foreach collection="flavors" item="flavor" separator=",">
+            (#{flavor.dishId}, #{flavor.name}, #{flavor.value})
+        </foreach>
+    </insert>
+
+</mapper>
