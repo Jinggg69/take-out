@@ -40,4 +40,13 @@
         </foreach>
     </insert>
 
+    <select id="pageQuery" resultType="com.sky.entity.Dish">
+        select * from dish
+        <where>
+            <if test="name != null and !name.isEmpty()">
+                and name like CONCAT('%', #{name}, '%')
+            </if>
+        </where>
+        order by create_time desc
+    </select>
 </mapper>
