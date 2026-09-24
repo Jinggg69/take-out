@@ -53,4 +53,9 @@ public interface DishMapper {
     @Select("select * from dish where id = #{id}")
     Dish getById(Long id);
 
+    /**
+     * 根据id更新菜品及修改记录
+     */
+    @AutoFill(OperationType.UPDATE)
+    void updateById(Dish dish);
 }

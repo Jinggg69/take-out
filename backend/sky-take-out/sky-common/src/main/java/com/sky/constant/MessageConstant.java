@@ -21,6 +21,9 @@ public class MessageConstant {
     public static final String PASSWORD_EDIT_FAILED = "密码修改失败";
     public static final String DISH_ON_SALE = "起售中的菜品不能删除";
     public static final String DISH_NOT_FOUND = "菜品不存在，无法删除";
+    public static final String DISH_NOT_EXIST = "菜品不存在";
+    public static final String DISH_ID_REQUIRED = "菜品ID不能为空";
+    public static final String DISH_STATUS_INVALID = "菜品状态只能为起售或停售";
     public static final String DISH_IDS_EMPTY = "请选择要删除的菜品";
     public static final String SETMEAL_ON_SALE = "起售中的套餐不能删除";
     public static final String DISH_BE_RELATED_BY_SETMEAL = "当前菜品关联了套餐,不能删除";

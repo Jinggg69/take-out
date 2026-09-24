@@ -8,6 +8,7 @@ import com.sky.dto.DishDTO;
 import com.sky.dto.DishPageQueryDTO;
 import com.sky.entity.Dish;
 import com.sky.entity.DishFlavor;
+import com.sky.exception.BaseException;
 import com.sky.exception.DeletionNotAllowedException;
 import com.sky.mapper.DishFlavorMapper;
 import com.sky.mapper.DishMapper;
@@ -21,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -98,5 +100,75 @@ public class DishServiceImpl implements DishService {
 
         dishFlavorMapper.deleteByDishIds(ids);
         dishMapper.deleteBatch(ids);
+    }
+
+    /**
+     * 根据id查询菜品和对应的口味
+     * @param id
+     * @return
+     */
+    @Override
+    public DishVO getByIdWithFlavor(Long id) {
+        // 根据id查询菜品
+        Dish dish = dishMapper.getById(id);
+        if (dish == null) {
+            throw new BaseException(MessageConstant.DISH_NOT_EXIST);
+        }
+        // 根据菜品id查询对应的口味列表
+        List<DishFlavor> dishFlavors = dishFlavorMapper.getByDishId(id);
+        // 将菜品和口味列表封装到DishVO中
+        DishVO dishVO = new DishVO();
+        BeanUtils.copyProperties(dish, dishVO);
+        dishVO.setFlavors(dishFlavors);
+        return dishVO;
+    }
+
+    /**
+     * 修改菜品和对应的口味
+     * @param dishDTO
+     */
+    @Override
+    @Transactional
+    public void updateWithFlavor(DishDTO dishDTO) {
+        if (dishDTO == null || dishDTO.getId() == null) {
+            throw new BaseException(MessageConstant.DISH_ID_REQUIRED);
+        }
+        if (dishMapper.getById(dishDTO.getId()) == null) {
+            throw new BaseException(MessageConstant.DISH_NOT_EXIST);
+        }
+
+        // 更新菜品信息
+        Dish dish = new Dish();
+        BeanUtils.copyProperties(dishDTO, dish);
+        dishMapper.updateById(dish);
+
+        // 删除原有的口味信息
+        dishFlavorMapper.deleteByDishIds(Collections.singletonList(dish.getId()));
+
+        // 插入新的口味信息
+        List<DishFlavor> flavors = dishDTO.getFlavors();
+        if (flavors != null && !flavors.isEmpty()) {
+            for (DishFlavor flavor : flavors) {
+                flavor.setDishId(dish.getId());
+            }
+            dishMapper.insertFlavors(flavors);
+        }
+    }
+
+    @Override
+    public void startOrStop(Integer status, Long id) {
+        if (!StatusConstant.ENABLE.equals(status) && !StatusConstant.DISABLE.equals(status)) {
+            throw new BaseException(MessageConstant.DISH_STATUS_INVALID);
+        }
+        if (id == null) {
+            throw new BaseException(MessageConstant.DISH_ID_REQUIRED);
+        }
+        if (dishMapper.getById(id) == null) {
+            throw new BaseException(MessageConstant.DISH_NOT_EXIST);
+        }
+
+        // 只更新售卖状态，修改时间和修改人由公共字段填充切面处理。
+        Dish dish = Dish.builder().id(id).status(status).build();
+        dishMapper.updateById(dish);
     }
 }
