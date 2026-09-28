@@ -156,6 +156,12 @@ public class DishServiceImpl implements DishService {
     }
 
     @Override
+    public List<Dish> list(Long categoryId) {
+        Dish dish = Dish.builder().categoryId(categoryId).status(StatusConstant.ENABLE).build();
+        return dishMapper.list(dish);
+    }
+
+    @Override
     public void startOrStop(Integer status, Long id) {
         if (!StatusConstant.ENABLE.equals(status) && !StatusConstant.DISABLE.equals(status)) {
             throw new BaseException(MessageConstant.DISH_STATUS_INVALID);

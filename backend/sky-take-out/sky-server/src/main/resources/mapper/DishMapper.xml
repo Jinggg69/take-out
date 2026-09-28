@@ -73,6 +73,15 @@
         order by d.create_time desc
     </select>
 
+    <select id="list" resultType="com.sky.entity.Dish">
+        select * from dish
+        <where>
+            <if test="categoryId != null">and category_id = #{categoryId}</if>
+            <if test="status != null">and status = #{status}</if>
+        </where>
+        order by create_time desc, id desc
+    </select>
+
     <delete id="deleteBatch">
         delete from dish where id in
         <foreach collection="ids" item="id" separator="," open="(" close=")">
