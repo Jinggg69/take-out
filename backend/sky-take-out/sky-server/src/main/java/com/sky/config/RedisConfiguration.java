@@ -14,7 +14,9 @@ public class RedisConfiguration {
 
     @Bean
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
+        //创建操作工具
         RedisTemplate<String, Object> redisTemplate = new RedisTemplate<>();
+        //设置连接工厂
         redisTemplate.setConnectionFactory(connectionFactory);
 
         // 普通键和 Hash 字段名使用字符串序列化，方便查看和管理。

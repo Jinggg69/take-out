@@ -1,4 +1,4 @@
-package com.sky;
+package com.sky.test;
 
 import com.github.pagehelper.PageInterceptor;
 import com.sky.aspect.AutoFillAspect;

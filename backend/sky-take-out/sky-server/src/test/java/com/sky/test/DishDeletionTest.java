@@ -1,4 +1,4 @@
-package com.sky;
+package com.sky.test;
 
 import com.sky.constant.MessageConstant;
 import com.sky.controller.admin.DishController;

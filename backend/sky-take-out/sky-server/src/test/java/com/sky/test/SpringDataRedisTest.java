@@ -1,4 +1,4 @@
-package com.sky;
+package com.sky.test;
 
 import com.sky.config.RedisConfiguration;
 import org.junit.jupiter.api.AfterEach;
