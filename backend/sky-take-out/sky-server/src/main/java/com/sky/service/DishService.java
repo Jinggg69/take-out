@@ -46,6 +46,13 @@ public interface DishService {
     List<Dish> list(Long categoryId);
 
     /**
+     * 条件查询菜品和口味
+     * @param dish
+     * @return
+     */
+    List<DishVO> listWithFlavor(Dish dish);
+
+    /**
      * 菜品起售、停售
      * @param status 1为起售，0为停售
      * @param id 菜品id
