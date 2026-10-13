@@ -21,3 +21,8 @@ database/backups/
 
 # Local Redis binaries, credentials and persisted data
 tools/redis/
+
+# Local visual review files, tools and uni-app build output
+/brand-review/
+/tools/
+**/unpackage/

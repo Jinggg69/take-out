@@ -1,0 +1,1 @@
+<view class="empty-box data-v-b7e015ec"><image class="empty-img data-v-b7e015ec" src="./../../static/brand/state-address.png" mode="aspectFit"></image><view class="empty-des data-v-b7e015ec">{{textLabel}}</view></view>

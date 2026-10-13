@@ -1,0 +1,9 @@
+{
+  "navigationStyle": "custom",
+  "navigationBarTitleText": "订单备注",
+  "enablePullDownRefresh": false,
+  "navigationBarBackgroundColor": "#9E2026",
+  "usingComponents": {
+    "uni-nav-bar": "/components/uni-nav-bar/uni-nav-bar"
+  }
+}

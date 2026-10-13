@@ -1,0 +1,107 @@
+.navBar {
+  position: fixed;
+  display: flex;
+  z-index: 9;
+  top: 0;
+  left: 0;
+  height: 160rpx;
+  width: 100vw;
+  // padding-top: var(--status-bar-height);
+  box-sizing: border-box;
+  height: 304rpx;
+  opacity: 1;
+  background: linear-gradient(
+    184deg,
+    rgba(0, 0, 0, 0.35) 25%,
+    rgba(51, 51, 51, 0) 96%
+  );
+  /* #ifdef H5 */
+  padding-top: 20rpx;
+  /* #endif */
+  .leftNav {
+    .back {
+      width: 88rpx;
+      height: 88rpx;
+    }
+  }
+  .centerNav {
+    width: calc(100vw - 176rpx);
+    text-align: center;
+    line-height: 88rpx;
+    font-size: 36rpx;
+    color: #fff;
+  }
+  .logo {
+    height: 66rpx;
+    width: 184rpx;
+  }
+
+  .index_bg {
+    width: 750rpx;
+    height: 304rpx;
+  }
+
+  .test_image {
+    height: 56rpx;
+    width: 56rpx;
+  }
+  .person-box{
+    position: fixed;
+    left: 38rpx;
+    z-index: 9999;
+		top:100rpx ;
+    display: flex;
+    align-items: center;
+  }
+  .person-title{
+    flex: 1;
+    height: 36rpx;
+    font-size: 26rpx;
+    font-family: PingFangSC, PingFangSC-Medium;
+    font-weight: 500;
+    text-align: left;
+    color: #ffffff;
+    line-height: 36rpx;
+    letter-spacing: 0px;
+    margin-left: 14rpx;
+  }
+}
+
+.brand-navbar {
+  height: calc(280rpx + var(--status-bar-height));
+  background: linear-gradient(135deg, #75191E, #9E2026 65%, #B23A32);
+  pointer-events: none;
+  overflow: hidden;
+  .person-box {
+    pointer-events: auto;
+    left: 30rpx;
+    height: 32px;
+    min-width: 180rpx;
+    max-width: calc(100vw - 140px);
+    margin-top: -5px;
+    padding: 0 12rpx;
+    border-radius: 32rpx;
+    background: rgba(48, 40, 36, .22);
+    box-sizing: border-box;
+  }
+  .test_image { width: 36rpx; height: 36rpx; flex-shrink: 0; }
+  .person-title { margin-left: 10rpx; font-size: 24rpx; white-space: nowrap; color: #FFF8EE; }
+  .brand-scenery { position: absolute; left: 0; right: 0; bottom: 0; height: 210rpx; }
+  .brand-dam {
+    position: absolute; right: 35rpx; bottom: 150rpx; width: 370rpx; height: 84rpx;
+    border-top: 6rpx solid rgba(201, 164, 92, .4);
+    border-bottom: 5rpx solid rgba(201, 164, 92, .3);
+    background: repeating-linear-gradient(90deg, transparent, transparent 32rpx, rgba(201, 164, 92, .28) 32rpx, rgba(201, 164, 92, .28) 40rpx);
+    transform: skewX(-8deg);
+    &::before, &::after { content: ''; position: absolute; top: -30rpx; width: 26rpx; height: 30rpx; border: 4rpx solid rgba(201, 164, 92, .4); }
+    &::before { left: 18rpx; } &::after { right: 18rpx; }
+  }
+  .brand-water { position: absolute; width: 900rpx; height: 150rpx; border: 2rpx solid rgba(201, 164, 92, .28); border-radius: 50%; }
+  .water-back { left: -100rpx; bottom: 20rpx; transform: rotate(-5deg); }
+  .water-front { left: -40rpx; bottom: 0; transform: rotate(6deg); }
+  .brand-fish {
+    position: absolute; left: 78rpx; bottom: 198rpx; width: 56rpx; height: 22rpx;
+    border: 2rpx solid rgba(201, 164, 92, .5); border-radius: 50%; transform: rotate(-22deg);
+    &::after { content: ''; position: absolute; left: -16rpx; top: 1rpx; border-top: 10rpx solid transparent; border-bottom: 10rpx solid transparent; border-left: 16rpx solid rgba(201, 164, 92, .5); }
+  }
+}
