@@ -1,6 +1,0 @@
-{
-  "component": true,
-  "usingComponents": {
-    "reach-bottom": "/components/reach-bottom/reach-bottom"
-  }
-}

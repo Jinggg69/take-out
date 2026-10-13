@@ -1,1 +1,0 @@
-.bottom-box{width:100%;padding-bottom:env(safe-area-inset-bottom)}.bottom-item{width:100%;min-height:88rpx;line-height:88rpx;text-align:center}.bottom-item .title{color:#756b62;font-size:24rpx}
