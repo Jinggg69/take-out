@@ -47,7 +47,16 @@ public class PayNotifyController {
         log.info("商户平台订单号：{}", outTradeNo);
         log.info("微信支付交易号：{}", transactionId);
 
-        orderService.paySuccess(outTradeNo);
+        try {
+            orderService.paySuccess(outTradeNo);
+        } catch (Exception ex) {
+            // 回调处理失败必须返回非 2xx，避免全局业务异常处理器返回 HTTP 200。
+            log.error("支付通知处理失败，订单号：{}", outTradeNo, ex);
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"code\":\"FAIL\",\"message\":\"处理失败，请稍后重试\"}");
+            return;
+        }
         responseToWeixin(response);
     }
 

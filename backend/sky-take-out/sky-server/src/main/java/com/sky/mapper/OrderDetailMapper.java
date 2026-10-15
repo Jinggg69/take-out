@@ -12,4 +12,7 @@ public interface OrderDetailMapper {
      * @param orderDetailList 订单明细数据列表
      */
     void insertBatch(List<OrderDetail> orderDetailList);
+
+    @org.apache.ibatis.annotations.Select("select * from order_detail where order_id = #{orderId} order by id")
+    List<OrderDetail> getByOrderId(Long orderId);
 }

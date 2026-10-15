@@ -37,6 +37,11 @@ logging:
         controller: info
 
 sky:
+  shop:
+    # 实际门店完整地址，例如：北京市海淀区上地十街10号
+    address: ${SHOP_ADDRESS:}
+    # 百度地图服务端应用 AK，需开通地理编码与骑行路线规划权限
+    baidu-ak: ${BAIDU_MAP_AK:}
   alioss:
     endpoint: ${ALI_OSS_ENDPOINT:}
     region: ${ALI_OSS_REGION:}

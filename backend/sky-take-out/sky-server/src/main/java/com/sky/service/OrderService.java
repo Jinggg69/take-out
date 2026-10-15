@@ -4,6 +4,13 @@ import com.sky.dto.OrdersPaymentDTO;
 import com.sky.dto.OrdersSubmitDTO;
 import com.sky.vo.OrderPaymentVO;
 import com.sky.vo.OrderSubmitVO;
+import com.sky.dto.OrdersPageQueryDTO;
+import com.sky.dto.OrdersConfirmDTO;
+import com.sky.dto.OrdersRejectionDTO;
+import com.sky.dto.OrdersCancelDTO;
+import com.sky.result.PageResult;
+import com.sky.vo.OrderVO;
+import com.sky.vo.OrderStatisticsVO;
 
 public interface OrderService {
 
@@ -24,4 +31,28 @@ public interface OrderService {
      * @param outTradeNo 商户订单号
      */
     void paySuccess(String outTradeNo);
+
+    PageResult historyOrders(int page, int pageSize, Integer status);
+
+    OrderVO userOrderDetail(Long id);
+
+    void userCancelById(Long id);
+
+    void repetition(Long id);
+
+    PageResult conditionSearch(OrdersPageQueryDTO query);
+
+    OrderStatisticsVO statistics();
+
+    OrderVO details(Long id);
+
+    void confirm(OrdersConfirmDTO dto);
+
+    void rejection(OrdersRejectionDTO dto);
+
+    void cancel(OrdersCancelDTO dto);
+
+    void delivery(Long id);
+
+    void complete(Long id);
 }
