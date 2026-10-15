@@ -18,6 +18,12 @@ public interface UserMapper {
     User getByOpenid(String openid);
 
     /**
+     * 根据用户 ID 查询微信支付所需的 openid。
+     */
+    @Select("select * from user where id = #{id}")
+    User getById(Long id);
+
+    /**
      * 插入数据
      * @param user
      */
