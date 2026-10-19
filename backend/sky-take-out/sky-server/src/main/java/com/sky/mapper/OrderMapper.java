@@ -5,6 +5,10 @@ import com.sky.dto.OrdersPageQueryDTO;
 import com.github.pagehelper.Page;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Mapper
 public interface OrderMapper {
@@ -41,7 +45,16 @@ public interface OrderMapper {
     @Select("select count(*) from orders where status = #{status}")
     Integer countByStatus(Integer status);
 
-    @org.apache.ibatis.annotations.Update("update orders set status = 2, pay_status = 1, "
+    @Update("update orders set status = 2, pay_status = 1, "
             + "checkout_time = current_timestamp where number = #{number} and status = 1 and pay_status = 0")
     int markPaid(String number);
+
+    /**
+     * 查询指定状态且下单时间小于指定时间的订单。
+     * @param status 订单状态
+     * @param orderTime 下单时间
+     * @return 订单列表
+     */
+    @Select("select * from orders where status = #{status} and order_time < #{orderTime}")
+    List<Orders> getByStausAndOrderTimeLT(Integer status, LocalDateTime orderTime);
 }
