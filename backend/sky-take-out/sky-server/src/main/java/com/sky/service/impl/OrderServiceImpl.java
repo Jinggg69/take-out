@@ -1,5 +1,6 @@
 package com.sky.service.impl;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
@@ -33,15 +34,14 @@ import com.sky.vo.OrderStatisticsVO;
 import com.sky.utils.WeChatPayUtil;
 import com.sky.vo.OrderPaymentVO;
 import com.sky.vo.OrderSubmitVO;
+import com.sky.websocket.WebSocketServer;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -60,7 +60,8 @@ public class OrderServiceImpl implements OrderService {
     private WeChatPayUtil weChatPayUtil;
     @Autowired
     private DeliveryRangeService deliveryRangeService;
-
+    @Autowired
+    private WebSocketServer webSocketServer;
     /**
      * 用户端订单提交
      * @param ordersSubmitDTO 订单提交信息
@@ -178,6 +179,14 @@ public class OrderServiceImpl implements OrderService {
             // 重复通知不能将后续业务状态改回待接单。
             orderMapper.markPaid(outTradeNo);
         }
+
+        //通过websocket向客户端浏览器发送消息
+        Map map = new HashMap<>();
+        map.put("type", 1); //1表示来电提醒，2表示客户催单
+        map.put("orderId", order.getId());
+        map.put("content", "订单号:" + outTradeNo);
+        String json = JSON.toJSONString(map);
+        webSocketServer.sendToAllClient(json);
     }
 
     @Override
@@ -408,5 +417,18 @@ public class OrderServiceImpl implements OrderService {
             }
         }
         return address.toString();
+    }
+
+    public void reminder(Long id) {
+        Orders order = orderMapper.getById(id);
+        if (order == null) {
+            throw new OrderBusinessException(MessageConstant.ORDER_STATUS_ERROR);
+        }
+        Map map = new HashMap<>();
+        map.put("type", 2); //1表示来电提醒，2表示客户催单
+        map.put("orderId", id);
+        map.put("content", "订单号:" + order.getNumber());
+        String json = JSON.toJSONString(map);
+        webSocketServer.sendToAllClient(json);
     }
 }
