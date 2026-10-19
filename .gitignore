@@ -26,3 +26,10 @@ tools/redis/
 /brand-review/
 /tools/
 **/unpackage/
+
+# Local delivery notes and verification reports
+/backend/ADDRESS_SAVE_FIX.md
+/backend/sky-take-out/sky-server/ADDRESS_BOOK_TEST_REPORT.md
+/backend/sky-take-out/sky-server/ORDER_MODULE.md
+/backend/sky-take-out/sky-server/ORDER_MODULE_TEST_REPORT.md
+/local-reports/

@@ -162,7 +162,6 @@ export const presentFormat = () => {
 	//秒 getSeconds()：(0 ~ 59)
 	var second = date.getSeconds()
 	var time = + year + '-' + addZero(month) + '-' + addZero(day) + ' ' + addZero(hour) + ':' + addZero(minute) + ':' + addZero(second);
-	debugger
 	return time;
 }
 function addZero(s) {

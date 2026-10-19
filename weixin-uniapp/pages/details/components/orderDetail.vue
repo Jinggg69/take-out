@@ -41,7 +41,7 @@
           <view class="orderInfo">
             <text class="text">配送费</text>
             <text class="may">￥</text>
-            {{ orderDetailsData.deliveryFee }}
+            {{ deliveryFee }}
           </view>
           <view class="totalMoney">
             合计
@@ -56,7 +56,13 @@
   </view>
 </template>
 <script>
+import { DELIVERY_FEE } from "../../../utils/order-pricing";
 export default {
+  computed: {
+    deliveryFee() {
+      return DELIVERY_FEE;
+    },
+  },
   // 获取父级传的数据
   props: {
     // 菜品数据

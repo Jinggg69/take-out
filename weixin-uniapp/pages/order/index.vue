@@ -21,6 +21,7 @@
           :tagLabel="tagLabel"
           :addressLabel="addressLabel"
           :nickName="nickName"
+          :gender="gender"
           :phoneNumber="phoneNumber"
           :arrivalTime="arrivalTime"
           :popleft="popleft"
@@ -43,6 +44,7 @@
             :orderDishNumber="orderDishNumber"
             :orderListDataes="orderListDataes"
             :orderDishPrice="orderDishPrice"
+            :deliveryFee="orderDeliveryFee"
           ></dish-detail>
           <!-- end -->
           <view class="boxPad">

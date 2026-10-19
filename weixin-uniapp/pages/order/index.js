@@ -24,11 +24,13 @@ import AddressPop from "./components/address.vue" //地址
 import DishDetail from "./components/dishDetail.vue" //菜品详情
 import DishInfo from "./components/dishInfo.vue" //菜品信息
 import dayjs from "@/utils/lib/dayjs.min.js";
+import { DELIVERY_FEE } from '../../utils/order-pricing'
 export default {
 	data() {
 		return {
 			platform: 'ios',
 			orderDishPrice: 0,
+			orderPriceError: '',
 			openPayType: false,
 			psersonUrl: '../../static/btn_waiter_sel.png',
 			nickName: '',//名字
@@ -88,9 +90,13 @@ export default {
 		}
 	},
 	computed: {
+		orderDeliveryFee() {
+			return DELIVERY_FEE
+		},
 		// 菜品数据
 		orderListDataes: function () {
-			return this.orderListData()
+			const list = this.orderListData()
+			return Array.isArray(list) ? list : []
 		},
 		// 菜品数据
 		orderDataes: function () {
@@ -182,28 +188,32 @@ export default {
 		},
 		// 获取用户送餐期望时间
 		async getEstimatedDeliveryTime() {
-			const result = await getEstimatedDeliveryTime({ shopId: this.shopInfo().shopId, customerAddress: this.address });
-			this.arrivalTime = dayjs(result.data).format('HH:mm')
-			this.orderTime = result.data
+			this.arrivalTime = '立即派送'
+			this.orderTime = ''
+			const shop = this.shopInfo()
+			if (!shop || !shop.shopId || !this.address) return
+			try {
+				const result = await getEstimatedDeliveryTime({ shopId: shop.shopId, customerAddress: this.address })
+				if (result && result.data && dayjs(result.data).isValid()) {
+					this.arrivalTime = dayjs(result.data).format('HH:mm')
+					this.orderTime = result.data
+				}
+			} catch (error) {
+				// 预计时间不可用时保留立即派送，不阻断时间选择器初始化。
+				this.arrivalTime = '立即派送'
+				this.orderTime = ''
+			}
 		},
 		// 根据系统派送时间 格式化时间  [16:00,16:30]
 		getDateDate() {
-			let currentDayjs = dayjs(this.orderTime);
+			let currentDayjs = dayjs(this.orderTime)
+			if (!currentDayjs.isValid()) currentDayjs = dayjs()
 			const list = ['立即派送']
-			if (!(currentDayjs.hour() >= 22 && currentDayjs.minute() > 30)) {
-				if (currentDayjs.minute() > 30) {
-					currentDayjs = currentDayjs.add(1, 'hour').set('minute', 0)
-				} else {
-					currentDayjs = currentDayjs.set('minute', 30)
-				}
-				while (true) {
-					if (currentDayjs.hour() === 23 && currentDayjs.minute() === 30) {
-						break
-					}
-					const start = `${currentDayjs.format("HH")}:${currentDayjs.format('mm')}`;
-					list.push(`${start}`)
-					currentDayjs = currentDayjs.add(30, 'minute')
-				}
+			const firstSlot = Math.floor((currentDayjs.hour() * 60 + currentDayjs.minute()) / 30) + 1
+			// 一天只有 48 个半小时时段，使用有限范围避免无效日期造成死循环。
+			for (let slot = firstSlot; slot < 47; slot++) {
+				const hour = String(Math.floor(slot / 2)).padStart(2, '0')
+				list.push(`${hour}:${slot % 2 === 0 ? '00' : '30'}`)
 			}
 			this.newDateData = list
 		},
@@ -220,7 +230,7 @@ export default {
 		// 默认地址查询
 		getAddressBookDefault() {
 			return getAddressBookDefault().then(res => {
-				if (res.code === 1) {
+				if (res.code === 1 && res.data) {
 					this.addressBookId = ''
 					this.address = res.data.provinceName + res.data.cityName + res.data.districtName + res.data
 						.detail
@@ -230,6 +240,10 @@ export default {
 					this.addressBookId = res.data.id
 					this.addressLabel = getLableVal(res.data.label)
 					this.tagLabel = res.data.label
+				}
+			}).catch((error) => {
+				if (!error || error.msg !== '没有查询到默认地址') {
+					uni.showToast({ title: '地址加载失败，请重新选择', icon: 'none' })
 				}
 			})
 		},
@@ -253,16 +267,24 @@ export default {
 		},
 		// 订单里和总订单价格计算
 		computOrderInfo() {
-			let oriData = this.orderListDataes
-			this.orderDishNumber = this.orderDishPrice = 0
+			this.orderDishNumber = 0
 			this.orderDishPrice = 0
-			oriData.map((n, i) => {
-				// this.orderDishPrice += n.number * n.price
-				this.orderDishPrice += n.number * n.amount
-				this.orderDishNumber += n.number
-				console.log(n);
-			})
-			this.orderDishPrice = this.orderDishPrice + this.deliveryFee() + this.orderDishNumber
+			this.orderPriceError = ''
+			let goodsCents = 0
+			for (const item of this.orderListDataes) {
+				const count = Number(item.number)
+				const amount = Number(item.amount)
+				if (!Number.isInteger(count) || count <= 0 || !Number.isFinite(amount) || amount < 0) {
+					this.orderDishNumber = 0
+					this.orderPriceError = '商品信息异常，请返回购物车重试'
+					return
+				}
+				goodsCents += Math.round(amount * 100) * count
+				this.orderDishNumber += count
+			}
+			if (this.orderDishNumber > 0) {
+				this.orderDishPrice = (goodsCents + this.orderDishNumber * 100 + this.orderDeliveryFee * 100) / 100
+			}
 		},
 		// 返回上一级
 		goBack() {
@@ -272,9 +294,8 @@ export default {
 			this.openPayType = false
 		},
 		// 支付下单
-		payOrderHandle() {
-			this.isHandlePy = true
-
+		async payOrderHandle() {
+			if (this.isHandlePy) return
 			if (!this.address) {
 				uni.showToast({
 					title: '请选择收货地址',
@@ -282,25 +303,29 @@ export default {
 				})
 				return false
 			}
-			const params = {
-				payMethod: 1,
-				addressBookId: this.addressBookId,
-				remark: this.remark,
-				estimatedDeliveryTime: this.arrivalTime === '立即派送' ? presentFormat() : dateFormat(this.isTomorrow,
-					this.arrivalTime),
-				deliveryStatus: this.arrivalTime === '立即派送' ? 1 : 0,
-				remark: this.remark,
-				tablewareStatus: this.status,
-				tablewareNumber: this.num,
-				packAmount: this.orderDishNumber,
-				amount: this.orderDishPrice,
-				shopId: this.shopInfo().shopId,
-				deliveryFee: this.deliveryFee()
+			this.computOrderInfo()
+			if (this.orderPriceError || !Number.isFinite(this.orderDishPrice) || this.orderDishNumber <= 0) {
+				uni.showToast({ title: this.orderPriceError || '购物车为空，请先选择菜品', icon: 'none' })
+				return false
 			}
-
-			submitOrderSubmit(params).then(res => {
-				if (res.code === 1) {
-					this.isHandlePy = false
+			this.isHandlePy = true
+			try {
+				const params = {
+					payMethod: 1,
+					addressBookId: this.addressBookId,
+					remark: this.remark,
+					estimatedDeliveryTime: this.arrivalTime === '立即派送' ? presentFormat() : dateFormat(this.isTomorrow,
+						this.arrivalTime),
+					deliveryStatus: this.arrivalTime === '立即派送' ? 1 : 0,
+					tablewareStatus: this.status,
+					tablewareNumber: this.num,
+					packAmount: this.orderDishNumber,
+					amount: this.orderDishPrice,
+					shopId: this.shopInfo().shopId,
+					deliveryFee: this.orderDeliveryFee
+				}
+				const res = await submitOrderSubmit(params)
+				if (res.code === 1 || res.code === 200) {
 					this.setOrderData(res.data)
 					this.setRemark('')
 
@@ -308,12 +333,13 @@ export default {
 						url: '/pages/pay/index?orderId=' + res.data.id
 					})
 				} else {
-					uni.showToast({
-						title: res.msg || '操作失败',
-						icon: 'none',
-					})
+					throw res
 				}
-			})
+			} catch (error) {
+				uni.showToast({ title: (error && error.msg) || '下单失败，请稍后重试', icon: 'none' })
+			} finally {
+				this.isHandlePy = false
+			}
 		},
 		// 拨打电话
 		call() {
@@ -418,11 +444,7 @@ export default {
 		},
 		// 设置时间
 		setTime(val) {
-			if (val === '立即派送') {
-				this.arrivalTime = dayjs(this.orderTime).format('HH:mm')
-			} else {
-				this.arrivalTime = val
-			}
+			this.arrivalTime = val
 
 			this.setArrivalTime(this.arrivalTime)
 

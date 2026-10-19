@@ -1,5 +1,6 @@
 import Vue from 'vue'
 import Vuex from 'vuex'
+import { DELIVERY_FEE } from '../utils/order-pricing'
 
 Vue.use(Vuex)
 
@@ -20,7 +21,7 @@ const store = new Vuex.Store({
 		arrivals: '',
 		remarkData: '',//备注
 		addressData: {}, //地址选择
-		deliveryFee: 0,// 配送费
+		deliveryFee: DELIVERY_FEE,// 配送费
 		gender: 0 // 收货地址对应的 性别  0 先生  1 女士
 	},
 	mutations: {
@@ -74,7 +75,7 @@ const store = new Vuex.Store({
 		},
 		// 保存配送费
 		setDeliveryFee(state, deliveryFee) {
-			state.deliveryFee = deliveryFee
+			state.deliveryFee = DELIVERY_FEE
 		},
 		// 设置性别
 		setGender(state, gender) {

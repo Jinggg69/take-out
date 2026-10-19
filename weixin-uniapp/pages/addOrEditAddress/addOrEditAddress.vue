@@ -98,13 +98,16 @@
       </form>
 
       <view class="add_address">
+        <text v-if="saveError" class="save-error">{{ saveError }}</text>
         <button
           class="add_btn"
           type="primary"
           plain="true"
+          :loading="saving"
+          :disabled="saving"
           @click="addAddressFun()"
         >
-          保存地址
+          {{ saving ? '保存中...' : '保存地址' }}
         </button>
         <button
           v-if="showDel"
@@ -143,6 +146,8 @@ export default {
   data () {
     return {
       platform: "ios",
+      saving: false,
+      saveError: "",
       showDel: false,
       showInput: true,
       valueMan: true,
@@ -291,59 +296,37 @@ export default {
     sexChangeHandle (val) {
       this.form.sex = val
     },
+    showSaveError (title) {
+      this.saveError = title
+      uni.showToast({ title, duration: 2500, icon: "none" })
+    },
     // 保存地址
-    addAddressFun () {
+    async addAddressFun () {
+      if (this.saving) return
+      this.saveError = ""
       if (this.form.name === "") {
-        return uni.showToast({
-          title: "联系人不能为空",
-          duration: 1000,
-          icon: "none",
-        })
+        return this.showSaveError("联系人不能为空")
       } else if (this.form.phone === "") {
-        return uni.showToast({
-          title: "手机号不能为空",
-          duration: 1000,
-          icon: "none",
-        })
+        return this.showSaveError("手机号不能为空")
       } else if (this.form.type === "") {
-        return uni.showToast({
-          title: "所属标签不能为空",
-          duration: 1000,
-          icon: "none",
-        })
+        return this.showSaveError("所属标签不能为空")
       } else if (this.address === "") {
-        return uni.showToast({
-          title: "所在地区不能为空",
-          duration: 1000,
-          icon: "none",
-        })
+        return this.showSaveError("所在地区不能为空")
       } else if (this.form.detail === "") {
-        return uni.showToast({
-          title: "详细地址不能为空不能为空",
-          duration: 1000,
-          icon: "none",
-        })
+        return this.showSaveError("详细地址不能为空")
       }
 
       if (this.form.phone) {
         const reg =
           /^(13[0-9]|14[01456879]|15[0-35-9]|16[2567]|17[0-8]|18[0-9]|19[0-35-9])\d{8}$/
         if (!reg.test(this.form.phone)) {
-          return uni.showToast({
-            title: "手机号输入有误",
-            duration: 1000,
-            icon: "none",
-          })
+          return this.showSaveError("手机号输入有误")
         }
       }
       if (this.form.name) {
         const reg = /^[\u0391-\uFFE5A-Za-z0-9]{2,12}$/
         if (!reg.test(this.form.name)) {
-          return uni.showToast({
-            title: "请输入合法的2-12个字符",
-            duration: 1000,
-            icon: "none",
-          })
+          return this.showSaveError("联系人姓名请输入合法的2-12个字符")
         }
       }
       const params = {
@@ -354,24 +337,20 @@ export default {
         cityName: this.address.split("/")[1],
         districtName: this.address.split("/")[2],
       }
-      // 编辑
-      if (this.showDel) {
-        editAddressBook(params).then((res) => {
-          if (res.code === 1) {
-            uni.redirectTo({
-              url: "/pages/address/address",
-            })
-          }
-        })
-      } else {
-        delete params.id
-        addAddressBook(params).then((res) => {
-          if (res.code === 1) {
-            uni.redirectTo({
-              url: "/pages/address/address",
-            })
-          }
-        })
+      this.saving = true
+      try {
+        if (!this.showDel) delete params.id
+        const res = await (this.showDel ? editAddressBook(params) : addAddressBook(params))
+        if (res.code === 1 || res.code === 200) {
+          uni.redirectTo({ url: "/pages/address/address" })
+        }
+      } catch (error) {
+        this.showSaveError(
+          (error && (error.msg || (error.data && error.data.msg))) ||
+          "地址保存失败，请检查网络后重试"
+        )
+      } finally {
+        this.saving = false
       }
     },
     // 删除地址
@@ -632,6 +611,7 @@ export default {
 .add_edit .form_address .form_item .tag_text.active, .add_edit .form_address .form_item .tag_text:nth-child(3).active, .add_edit .form_address .form_item .tag_text:nth-child(4).active { background: #FFF8EE; color: #9E2026; border-color: #9E2026; }
 .add_edit .add_address button { width: 100%; min-height: 88rpx; border-radius: 16rpx; margin: 24rpx 0 0; }
 .add_edit .add_address .add_btn { background: #9E2026; color: #FFF8EE; }
+.add_edit .add_address .save-error { display: block; padding-top: 16rpx; color: #9E2026; font-size: 26rpx; line-height: 1.6; }
 .add_edit .add_address .del_btn { background: #fff; color: #9E2026; border: 1rpx solid #EADFD1; }
 ::v-deep .uni-easyinput__content-input { color: #302824; font-size: 28rpx; min-height: 72rpx; }
 ::v-deep .simple-address-content { border-radius: 24rpx 24rpx 0 0; overflow: hidden; padding-bottom: env(safe-area-inset-bottom); }

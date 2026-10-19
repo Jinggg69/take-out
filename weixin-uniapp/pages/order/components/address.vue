@@ -32,7 +32,7 @@
       <div class="bottomTime" @click="openTimePopuo('bottom')">
         <text class="time_name_disabled">立即送出</text>
         <view class="address_image">
-          <text class="">{{ arrivalTime }}送达</text>
+          <text class="">{{ arrivalTime === '立即派送' ? '选择送达时间' : arrivalTime + '送达' }}</text>
           <view class="to_right"></view>
         </view>
       </div>
@@ -118,7 +118,7 @@ export default {
       default: "",
     },
     gender: {
-      type: Number,
+      type: [Number, String],
       default: -1,
     },
     // 电话
@@ -187,13 +187,9 @@ export default {
   computed: {
     // 万先生
     cryptoName() {
-      if (this.$store.state.gender === 0) {
-        // 男
-        return this.nickName.charAt(0) + "先生";
-      } else {
-        // 女
-        return this.nickName.charAt(0) + "女士";
-      }
+      if (String(this.gender) === "0") return this.nickName.charAt(0) + "先生";
+      if (String(this.gender) === "1") return this.nickName.charAt(0) + "女士";
+      return this.nickName;
     },
   },
 };

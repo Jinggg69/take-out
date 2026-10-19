@@ -47,9 +47,14 @@
 </template>
 <script>
 import { mapState } from "vuex";
+import { DELIVERY_FEE } from "../../../utils/order-pricing";
 export default {
   // 获取父级传的数据
   props: {
+    deliveryFee: {
+      type: Number,
+      default: DELIVERY_FEE,
+    },
     // 菜品数据
     orderDataes: {
       type: Array,
@@ -77,7 +82,7 @@ export default {
     },
   },
   computed: {
-    ...mapState(["deliveryFee", "shopInfo"]),
+    ...mapState(["shopInfo"]),
   },
 };
 </script>
