@@ -31,7 +31,10 @@ public class PayNotifyController {
     private WeChatProperties weChatProperties;
 
     /**
-     * 支付成功回调。
+     * 接收微信支付成功通知，处理订单后向微信返回结果
+     * @param request 支付通知请求
+     * @param response 支付通知应答
+     * @throws Exception 通知读取、解密或应答异常
      */
     @RequestMapping("/paySuccess")
     public void paySuccessNotify(HttpServletRequest request, HttpServletResponse response) throws Exception {
@@ -60,6 +63,12 @@ public class PayNotifyController {
         responseToWeixin(response);
     }
 
+    /**
+     * 读取微信支付通知请求体
+     * @param request 支付通知请求
+     * @return 通知请求体JSON字符串
+     * @throws Exception 请求体读取异常
+     */
     private String readData(HttpServletRequest request) throws Exception {
         BufferedReader reader = request.getReader();
         StringBuilder result = new StringBuilder();
@@ -73,6 +82,12 @@ public class PayNotifyController {
         return result.toString();
     }
 
+    /**
+     * 使用微信API v3密钥解密支付通知中的业务数据
+     * @param body 通知请求体JSON字符串
+     * @return 解密后的业务数据
+     * @throws Exception 通知数据解密异常
+     */
     private String decryptData(String body) throws Exception {
         JSONObject resultObject = JSON.parseObject(body);
         JSONObject resource = resultObject.getJSONObject("resource");
@@ -85,6 +100,11 @@ public class PayNotifyController {
                 nonce.getBytes(StandardCharsets.UTF_8), ciphertext);
     }
 
+    /**
+     * 向微信返回支付通知处理成功的应答
+     * @param response 支付通知应答
+     * @throws Exception 应答写入异常
+     */
     private void responseToWeixin(HttpServletResponse response) throws Exception {
         response.setStatus(HttpServletResponse.SC_OK);
         Map<String, String> result = new HashMap<>();

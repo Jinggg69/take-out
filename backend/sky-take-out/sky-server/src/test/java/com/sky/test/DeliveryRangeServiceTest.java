@@ -3,6 +3,7 @@ package com.sky.test;
 import com.sky.exception.OrderBusinessException;
 import com.sky.properties.ShopProperties;
 import com.sky.service.DeliveryRangeService;
+import com.sky.service.impl.DeliveryRangeServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -27,7 +28,7 @@ class DeliveryRangeServiceTest {
         properties.setBaiduAk("test-ak");
         RestTemplate client = new RestTemplate();
         server = MockRestServiceServer.bindTo(client).build();
-        service = new DeliveryRangeService(properties, client);
+        service = new DeliveryRangeServiceImpl(properties, client);
     }
 
     @Test

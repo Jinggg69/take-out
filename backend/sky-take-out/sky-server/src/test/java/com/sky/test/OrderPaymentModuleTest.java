@@ -16,10 +16,12 @@ import com.sky.properties.JwtProperties;
 import com.sky.properties.WeChatProperties;
 import com.sky.service.OrderService;
 import com.sky.service.DeliveryRangeService;
+import com.sky.service.impl.DeliveryRangeServiceImpl;
 import com.sky.properties.ShopProperties;
 import com.sky.service.impl.OrderServiceImpl;
 import com.sky.utils.JwtUtil;
 import com.sky.utils.WeChatPayUtil;
+import com.sky.websocket.WebSocketServer;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.annotations.Mapper;
 import org.h2.jdbcx.JdbcDataSource;
@@ -78,7 +80,7 @@ class OrderPaymentModuleTest {
         context.setServletContext(new MockServletContext());
         context.register(WebMvcConfiguration.class, OrderController.class, OrderServiceImpl.class,
                 GlobalExceptionHandler.class, JwtTokenUserInterceptor.class, JwtTokenAdminInterceptor.class,
-                PaymentTestConfiguration.class);
+                PaymentTestConfiguration.class, WebSocketServer.class);
         context.refresh();
         mapServer = MockRestServiceServer.bindTo(context.getBean(RestTemplate.class)).build();
         mapServer.expect(ExpectedCount.between(0, Integer.MAX_VALUE),
@@ -596,7 +598,7 @@ class OrderPaymentModuleTest {
             ShopProperties properties = new ShopProperties();
             properties.setAddress("北京市海淀区上地十街10号");
             properties.setBaiduAk("test-ak");
-            return new DeliveryRangeService(properties, client);
+            return new DeliveryRangeServiceImpl(properties, client);
         }
 
         @Bean
