@@ -22,7 +22,7 @@ const router = useRouter()
       </p>
       <ElButton
         type="primary"
-        @click="router.replace({ name: 'welcome' })"
+        @click="router.replace('/')"
       >
         返回首页
       </ElButton>

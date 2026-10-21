@@ -4,5 +4,7 @@ declare module 'vue-router' {
   interface RouteMeta {
     title: string
     notNeedAuth?: boolean
+    pageTitle?: string
+    activeMenu?: string
   }
 }
