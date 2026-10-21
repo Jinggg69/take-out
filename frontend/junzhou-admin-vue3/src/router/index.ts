@@ -24,7 +24,9 @@ export const router = createRouter({
           path: item.path.slice(1), name: item.icon,
           component: item.path === '/employee'
             ? () => import('@/views/employee/EmployeeListView.vue')
-            : () => import('@/views/ModulePendingView.vue'),
+            : item.path === '/category'
+              ? () => import('@/views/category/CategoryListView.vue')
+              : () => import('@/views/ModulePendingView.vue'),
           meta: { title: `${item.label} · 均州鱼庄管理系统`, pageTitle: item.label, activeMenu: item.path },
         })),
         ...[
