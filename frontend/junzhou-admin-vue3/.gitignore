@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.npm-cache/
+.verification/
+# Local stage delivery and acceptance reports
+/docs/phase-*.md
+/docs/*交付*.md
+/docs/*验收*.md
+*.tsbuildinfo
+.env.local
+.env.*.local
+!.env.development
+!.env.production
+!.env.production.uat
+!.env.example

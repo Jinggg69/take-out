@@ -1,0 +1,51 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--jz-font-family);
+  font-size: 16px;
+  line-height: 1.5;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--jz-text-primary);
+  background: var(--jz-page-background);
+}
+
+body,
+#app {
+  min-width: 0;
+  min-height: 100dvh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--jz-brand-primary);
+  outline-offset: 3px;
+}
+
+::selection {
+  color: var(--jz-surface);
+  background: var(--jz-brand-primary);
+}
+
+a {
+  color: var(--jz-brand-primary);
+  text-underline-offset: 3px;
+}
+
+input,
+textarea {
+  caret-color: var(--jz-brand-primary);
+}

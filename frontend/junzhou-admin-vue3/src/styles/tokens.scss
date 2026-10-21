@@ -1,0 +1,38 @@
+:root {
+  color-scheme: light;
+  --jz-brand-primary: #8f2d32;
+  --jz-brand-gold: #d7b36a;
+  --jz-nav-background: #282c33;
+  --jz-page-background: #f5f6f7;
+  --jz-surface: #fff;
+  --jz-text-primary: #252931;
+  --jz-text-secondary: #5e6673;
+  --jz-border: #dde1e6;
+  --jz-control-border: #858d99;
+  --jz-success: #237a57;
+  --jz-warning: #9a650f;
+  --jz-danger: #c33f3f;
+  --jz-info: #416e9a;
+  --jz-font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --jz-font-caption: 0.75rem;
+  --jz-font-control: 0.875rem;
+  --jz-font-body: 1rem;
+  --jz-font-section: 1.125rem;
+  --jz-font-title: 1.375rem;
+  --jz-font-metric: 2rem;
+  --jz-space-1: 4px;
+  --jz-space-2: 8px;
+  --jz-space-3: 12px;
+  --jz-space-4: 16px;
+  --jz-space-6: 24px;
+  --jz-space-8: 32px;
+  --jz-radius-control: 4px;
+  --jz-radius-panel: 6px;
+  --jz-radius-dialog: 8px;
+  --jz-sidebar-width: 224px;
+  --jz-sidebar-collapsed-width: 64px;
+  --jz-toolbar-height: 60px;
+  --jz-control-height: 36px;
+  --jz-table-row-height: 48px;
+  --jz-duration-feedback: 160ms;
+}

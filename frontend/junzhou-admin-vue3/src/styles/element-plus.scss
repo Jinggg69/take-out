@@ -1,0 +1,41 @@
+// Component theme values derive from the same semantic CSS tokens as page styles.
+$semantic-colors: (
+  'primary': '--jz-brand-primary',
+  'success': '--jz-success',
+  'warning': '--jz-warning',
+  'danger': '--jz-danger',
+  'error': '--jz-danger',
+  'info': '--jz-info',
+);
+
+:root {
+  @each $name, $token in $semantic-colors {
+    --el-color-#{$name}: var(#{$token});
+    @each $level in 3, 5, 7, 8, 9 {
+      --el-color-#{$name}-light-#{$level}: color-mix(in srgb, var(#{$token}), white #{$level * 10%});
+    }
+    --el-color-#{$name}-dark-2: color-mix(in srgb, var(#{$token}), black 20%);
+  }
+
+  --el-font-family: var(--jz-font-family);
+  --el-font-size-base: var(--jz-font-control);
+  --el-color-white: var(--jz-surface);
+  --el-bg-color: var(--jz-surface);
+  --el-bg-color-page: var(--jz-page-background);
+  --el-bg-color-overlay: var(--jz-surface);
+  --el-fill-color-blank: var(--jz-surface);
+  --el-text-color-primary: var(--jz-text-primary);
+  --el-text-color-regular: var(--jz-text-primary);
+  --el-text-color-secondary: var(--jz-text-secondary);
+  --el-text-color-placeholder: var(--jz-text-secondary);
+  --el-border-color: var(--jz-control-border);
+  --el-border-color-light: var(--jz-border);
+  --el-border-radius-base: var(--jz-radius-control);
+  --el-border-radius-small: var(--jz-radius-control);
+  --el-component-size: var(--jz-control-height);
+}
+
+.el-button:focus-visible {
+  outline: 2px solid var(--jz-brand-primary);
+  outline-offset: 3px;
+}

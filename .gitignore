@@ -16,6 +16,9 @@
 frontend/nginx-1.20.2/logs/
 frontend/nginx-1.20.2/temp/
 
+# Original frontend reference source (local only)
+/frontend/苍穹外卖前端源码/
+
 # Database backups
 database/backups/
 
