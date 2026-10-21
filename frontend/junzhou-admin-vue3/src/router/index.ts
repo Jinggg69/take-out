@@ -22,18 +22,24 @@ export const router = createRouter({
       children: [
         ...primaryNavigation.map(item => ({
           path: item.path.slice(1), name: item.icon,
-          component: () => import('@/views/ModulePendingView.vue'),
+          component: item.path === '/employee'
+            ? () => import('@/views/employee/EmployeeListView.vue')
+            : () => import('@/views/ModulePendingView.vue'),
           meta: { title: `${item.label} · 均州鱼庄管理系统`, pageTitle: item.label, activeMenu: item.path },
         })),
         ...[
           { path: 'dish/add', title: '添加菜品', menu: '/dish' },
           { path: 'setmeal/add', title: '添加套餐', menu: '/setmeal' },
-          { path: 'employee/add', title: '添加员工', menu: '/employee' },
         ].map(item => ({
           path: item.path,
           component: () => import('@/views/ModulePendingView.vue'),
           meta: { title: `${item.title} · 均州鱼庄管理系统`, pageTitle: item.title, activeMenu: item.menu },
         })),
+        {
+          path: 'employee/add', name: 'employee-form',
+          component: () => import('@/views/employee/EmployeeFormView.vue'),
+          meta: { title: '添加员工 · 均州鱼庄管理系统', pageTitle: '添加员工', activeMenu: '/employee' },
+        },
       ],
     },
     {
@@ -47,6 +53,13 @@ export const router = createRouter({
 })
 
 const authGuard = createAuthGuard(sessionCookies.getToken)
-router.beforeEach(to => { routePending.value = true; return authGuard(to) })
+router.beforeEach(to => {
+  routePending.value = true
+  if (to.name === 'employee-form') {
+    to.meta.pageTitle = to.query.id ? '修改员工信息' : '添加员工'
+    to.meta.title = `${to.meta.pageTitle} · 均州鱼庄管理系统`
+  }
+  return authGuard(to)
+})
 router.afterEach(to => { document.title = to.meta.title; routePending.value = false })
 router.onError(() => { routePending.value = false; ElMessage.error('页面加载失败，请刷新后重试') })

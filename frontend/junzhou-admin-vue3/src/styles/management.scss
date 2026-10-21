@@ -1,0 +1,26 @@
+.management-panel { min-width: 0; padding: var(--jz-space-6); border: 1px solid var(--jz-border); border-radius: var(--jz-radius-panel); background: var(--jz-surface); }
+.management-filter { display: flex; align-items: flex-end; flex-wrap: wrap; gap: var(--jz-space-3); padding-bottom: var(--jz-space-6); }
+.management-filter-field { display: grid; gap: var(--jz-space-2); width: min(280px, 100%); font-size: var(--jz-font-control); }
+.management-table-region { min-width: 0; }
+.management-table-region .el-table { --el-table-border-color: var(--jz-border); --el-table-header-bg-color: var(--jz-page-background); --el-table-header-text-color: var(--jz-text-secondary); --el-table-row-hover-bg-color: var(--jz-page-background); }
+.management-table-region .el-table th.el-table__cell,
+.management-table-region .el-table td.el-table__cell { height: var(--jz-table-row-height); }
+.management-table-region .el-table .cell { overflow-wrap: anywhere; }
+.management-row-actions { display: flex; align-items: center; gap: var(--jz-space-2); }
+.management-row-actions .el-button { min-height: 32px; margin-left: 0; padding-inline: var(--jz-space-2); }
+.management-status { display: inline-flex; align-items: center; min-height: 24px; gap: var(--jz-space-2); color: var(--jz-text-secondary); }
+.management-status::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ''; }
+.management-status[data-enabled='true'] { color: var(--jz-success); }
+.management-form-panel { max-width: 880px; }
+.management-form { max-width: 560px; }
+.management-form .el-form-item { margin-bottom: var(--jz-space-6); }
+.management-form-hint { margin: var(--jz-space-2) 0 0; color: var(--jz-text-secondary); font-size: var(--jz-font-caption); line-height: 1.5; }
+.management-form-actions { display: flex; flex-wrap: wrap; gap: var(--jz-space-3); margin-top: var(--jz-space-8); padding-top: var(--jz-space-6); border-top: 1px solid var(--jz-border); }
+.management-form-actions .el-button { margin-left: 0; }
+@media (max-width: 767px) {
+  .management-panel { padding: var(--jz-space-4); }
+  .management-filter-field { width: 100%; }
+  .management-panel .el-button,
+  .management-panel .el-input__wrapper,
+  .management-form .el-radio { min-height: var(--jz-control-height-large); }
+}

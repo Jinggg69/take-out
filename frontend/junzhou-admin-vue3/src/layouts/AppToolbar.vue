@@ -53,7 +53,10 @@ async function accountCommand(command: string) {
       >
         <AppIcon :name="app.isMobile ? 'menu' : 'collapse'" />
       </ElButton>
-      <span class="current-location">{{ route.meta.pageTitle || '管理系统' }}</span>
+      <span
+        class="current-location"
+        :title="route.meta.pageTitle || '管理系统'"
+      >{{ route.meta.pageTitle || '管理系统' }}</span>
     </div>
     <div class="toolbar-actions">
       <span
@@ -110,7 +113,9 @@ async function accountCommand(command: string) {
 <style scoped lang="scss">
 .toolbar { display: flex; position: sticky; top: 0; z-index: 20; align-items: center; justify-content: space-between; gap: var(--jz-space-3); min-height: var(--jz-toolbar-height); padding-inline: var(--jz-space-6); border-bottom: 1px solid var(--jz-border); background: var(--jz-surface); }
 .toolbar-location, .toolbar-actions { display: flex; align-items: center; gap: var(--jz-space-3); min-width: 0; }
-.current-location { color: var(--jz-text-secondary); font-size: var(--jz-font-control); white-space: nowrap; }
+.toolbar-location { flex: 1; }
+.toolbar-actions { flex-shrink: 0; }
+.current-location { min-width: 0; overflow: hidden; color: var(--jz-text-secondary); font-size: var(--jz-font-control); text-overflow: ellipsis; white-space: nowrap; }
 .toolbar-icon { flex: none; min-width: 36px; min-height: 36px; }
 .toolbar-actions > .el-button { margin-left: 0; }
 .business-status { flex: none; padding: var(--jz-space-1) var(--jz-space-2); border-radius: var(--jz-radius-control); color: var(--jz-text-secondary); background: var(--jz-page-background); font-size: var(--jz-font-caption); white-space: nowrap; }
