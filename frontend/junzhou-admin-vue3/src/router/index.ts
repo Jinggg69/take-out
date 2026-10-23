@@ -28,16 +28,18 @@ export const router = createRouter({
               ? () => import('@/views/category/CategoryListView.vue')
               : item.path === '/dish'
                 ? () => import('@/views/dish/DishListView.vue')
-                : () => import('@/views/ModulePendingView.vue'),
+                : item.path === '/setmeal'
+                  ? () => import('@/views/setmeal/SetmealListView.vue')
+                  : item.path === '/order'
+                    ? () => import('@/views/order/OrderListView.vue')
+                    : () => import('@/views/ModulePendingView.vue'),
           meta: { title: `${item.label} · 均州鱼庄管理系统`, pageTitle: item.label, activeMenu: item.path },
         })),
-        ...[
-          { path: 'setmeal/add', title: '添加套餐', menu: '/setmeal' },
-        ].map(item => ({
-          path: item.path,
-          component: () => import('@/views/ModulePendingView.vue'),
-          meta: { title: `${item.title} · 均州鱼庄管理系统`, pageTitle: item.title, activeMenu: item.menu },
-        })),
+        {
+          path: 'setmeal/add', name: 'setmeal-form',
+          component: () => import('@/views/setmeal/SetmealFormView.vue'),
+          meta: { title: '新建套餐 · 均州鱼庄管理系统', pageTitle: '新建套餐', activeMenu: '/setmeal' },
+        },
         {
           path: 'dish/add', name: 'dish-form',
           component: () => import('@/views/dish/DishFormView.vue'),
@@ -69,6 +71,10 @@ router.beforeEach(to => {
   }
   if (to.name === 'dish-form') {
     to.meta.pageTitle = to.query.id ? '修改菜品' : '新建菜品'
+    to.meta.title = `${to.meta.pageTitle} · 均州鱼庄管理系统`
+  }
+  if (to.name === 'setmeal-form') {
+    to.meta.pageTitle = to.query.id ? '修改套餐' : '新建套餐'
     to.meta.title = `${to.meta.pageTitle} · 均州鱼庄管理系统`
   }
   return authGuard(to)
