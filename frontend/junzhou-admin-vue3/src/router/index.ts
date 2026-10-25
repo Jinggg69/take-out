@@ -32,7 +32,9 @@ export const router = createRouter({
                   ? () => import('@/views/setmeal/SetmealListView.vue')
                   : item.path === '/order'
                     ? () => import('@/views/order/OrderListView.vue')
-                    : () => import('@/views/ModulePendingView.vue'),
+                    : item.path === '/dashboard'
+                      ? () => import('@/views/dashboard/DashboardView.vue')
+                      : () => import('@/views/statistics/StatisticsView.vue'),
           meta: { title: `${item.label} · 均州鱼庄管理系统`, pageTitle: item.label, activeMenu: item.path },
         })),
         {
