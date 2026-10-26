@@ -1,7 +1,9 @@
 package com.sky.service.impl;
 
+import com.sky.constant.MessageConstant;
 import com.sky.context.BaseContext;
 import com.sky.entity.AddressBook;
+import com.sky.exception.AddressBookBusinessException;
 import com.sky.mapper.AddressBookMapper;
 import com.sky.service.AddressBookService;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +25,7 @@ public class AddressBookServiceImpl implements AddressBookService {
      * @return
      */
     public List<AddressBook> list(AddressBook addressBook) {
+        addressBook.setUserId(currentUserId());
         return addressBookMapper.list(addressBook);
     }
 
@@ -32,7 +35,7 @@ public class AddressBookServiceImpl implements AddressBookService {
      * @param addressBook
      */
     public void save(AddressBook addressBook) {
-        addressBook.setUserId(BaseContext.getCurrentId());
+        addressBook.setUserId(currentUserId());
         addressBook.setIsDefault(0);
         addressBookMapper.insert(addressBook);
     }
@@ -44,7 +47,10 @@ public class AddressBookServiceImpl implements AddressBookService {
      * @return
      */
     public AddressBook getById(Long id) {
-        AddressBook addressBook = addressBookMapper.getById(id);
+        AddressBook addressBook = addressBookMapper.getByIdAndUserId(id, currentUserId());
+        if (addressBook == null) {
+            throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_NOT_ACCESSIBLE);
+        }
         return addressBook;
     }
 
@@ -54,7 +60,12 @@ public class AddressBookServiceImpl implements AddressBookService {
      * @param addressBook
      */
     public void update(AddressBook addressBook) {
-        addressBookMapper.update(addressBook);
+        getById(addressBook.getId());
+        addressBook.setUserId(currentUserId());
+        addressBook.setIsDefault(null);
+        if (hasEditableFields(addressBook) && addressBookMapper.update(addressBook) != 1) {
+            throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_NOT_ACCESSIBLE);
+        }
     }
 
     /**
@@ -64,14 +75,12 @@ public class AddressBookServiceImpl implements AddressBookService {
      */
     @Transactional
     public void setDefault(AddressBook addressBook) {
-        //1、将当前用户的所有地址修改为非默认地址 update address_book set is_default = ? where user_id = ?
-        addressBook.setIsDefault(0);
-        addressBook.setUserId(BaseContext.getCurrentId());
-        addressBookMapper.updateIsDefaultByUserId(addressBook);
-
-        //2、将当前地址改为默认地址 update address_book set is_default = ? where id = ?
-        addressBook.setIsDefault(1);
-        addressBookMapper.update(addressBook);
+        AddressBook target = getById(addressBook.getId());
+        AddressBook reset = AddressBook.builder().userId(target.getUserId()).isDefault(0).build();
+        addressBookMapper.updateIsDefaultByUserId(reset);
+        if (addressBookMapper.setDefaultByIdAndUserId(target.getId(), target.getUserId()) != 1) {
+            throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_NOT_ACCESSIBLE);
+        }
     }
 
     /**
@@ -80,7 +89,26 @@ public class AddressBookServiceImpl implements AddressBookService {
      * @param id
      */
     public void deleteById(Long id) {
-        addressBookMapper.deleteById(id);
+        AddressBook target = getById(id);
+        if (addressBookMapper.deleteByIdAndUserId(id, target.getUserId()) != 1) {
+            throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_NOT_ACCESSIBLE);
+        }
     }
 
+    private Long currentUserId() {
+        Long userId = BaseContext.getCurrentId();
+        if (userId == null) {
+            throw new AddressBookBusinessException(MessageConstant.USER_NOT_LOGIN);
+        }
+        return userId;
+    }
+
+    private boolean hasEditableFields(AddressBook addressBook) {
+        return addressBook.getConsignee() != null || addressBook.getSex() != null
+                || addressBook.getPhone() != null || addressBook.getProvinceCode() != null
+                || addressBook.getProvinceName() != null || addressBook.getCityCode() != null
+                || addressBook.getCityName() != null || addressBook.getDistrictCode() != null
+                || addressBook.getDistrictName() != null || addressBook.getDetail() != null
+                || addressBook.getLabel() != null;
+    }
 }

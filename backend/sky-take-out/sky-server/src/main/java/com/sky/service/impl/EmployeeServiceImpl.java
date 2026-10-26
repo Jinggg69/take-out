@@ -5,13 +5,16 @@ import com.github.pagehelper.PageHelper;
 import com.sky.constant.MessageConstant;
 import com.sky.constant.PasswordConstant;
 import com.sky.constant.StatusConstant;
+import com.sky.context.BaseContext;
 import com.sky.dto.EmployeeDTO;
 import com.sky.dto.EmployeeLoginDTO;
 import com.sky.dto.EmployeePageQueryDTO;
+import com.sky.dto.PasswordEditDTO;
 import com.sky.entity.Employee;
 import com.sky.exception.AccountLockedException;
 import com.sky.exception.AccountNotFoundException;
 import com.sky.exception.PasswordErrorException;
+import com.sky.exception.PasswordEditFailedException;
 import com.sky.mapper.EmployeeMapper;
 import com.sky.result.PageResult;
 import com.sky.service.EmployeeService;
@@ -21,12 +24,32 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
 import java.util.List;
+import java.nio.charset.StandardCharsets;
 
 @Service
 public class EmployeeServiceImpl implements EmployeeService {
 
     @Autowired
     private EmployeeMapper employeeMapper;
+
+    @Override
+    public void editPassword(PasswordEditDTO input) {
+        Long employeeId = BaseContext.getCurrentId();
+        if (employeeId == null || input == null
+                || (input.getEmpId() != null && !employeeId.equals(input.getEmpId()))) {
+            throw new PasswordEditFailedException("只能修改当前登录员工的密码");
+        }
+        if (input.getOldPassword() == null || input.getOldPassword().isEmpty()
+                || input.getNewPassword() == null || !input.getNewPassword().matches("[0-9A-Za-z]{6,20}")) {
+            throw new PasswordEditFailedException("请提供原密码和6至20位数字或字母的新密码");
+        }
+        String oldHash = DigestUtils.md5DigestAsHex(input.getOldPassword().getBytes(StandardCharsets.UTF_8));
+        String newHash = DigestUtils.md5DigestAsHex(input.getNewPassword().getBytes(StandardCharsets.UTF_8));
+        // Compare-and-set prevents an old password from overwriting a concurrent password change.
+        if (employeeMapper.updatePassword(employeeId, oldHash, newHash) != 1) {
+            throw new PasswordEditFailedException("原密码错误或账号不可用，请重试");
+        }
+    }
 
     /**
      * 员工登录

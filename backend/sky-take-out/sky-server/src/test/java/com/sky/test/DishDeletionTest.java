@@ -18,6 +18,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
@@ -30,6 +31,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -39,6 +41,7 @@ class DishDeletionTest {
     private JdbcTemplate jdbc;
     private DishServiceImpl service;
     private MockMvc mvc;
+    private RedisTemplate<String, Object> redisTemplate;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -71,6 +74,9 @@ class DishDeletionTest {
         ReflectionTestUtils.setField(service, "setmealDishMapper", session.getMapper(SetmealDishMapper.class));
         DishController controller = new DishController();
         ReflectionTestUtils.setField(controller, "dishService", service);
+        redisTemplate = mock(RedisTemplate.class);
+        when(redisTemplate.keys("dish_*")).thenReturn(Collections.singleton("dish_2"));
+        ReflectionTestUtils.setField(controller, "redisTemplate", redisTemplate);
         mvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
@@ -90,6 +96,7 @@ class DishDeletionTest {
         assertEquals(0, count("dish_flavor", "dish_id in (1, 2)"));
         assertEquals(1, count("dish", "id = 5"));
         assertEquals(1, count("dish_flavor", "dish_id = 5"));
+        verify(redisTemplate).delete(Collections.singleton("dish_2"));
     }
 
     @Test

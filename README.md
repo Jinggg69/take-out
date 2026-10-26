@@ -17,7 +17,7 @@
 
 ## 当前进展
 
-下表的「已有实现」指当前源码中存在相关页面或业务逻辑，不代表本次已重新执行测试或完成生产验证。
+下表的「已有实现」指当前源码中存在相关页面或业务逻辑，不等于完成生产验证。2026-10-26 已执行阶段 1 前四步的基线与接口加固，证据及验证范围见 [阶段记录](docs/stage1/baseline.md)。
 
 | 范围 | 当前进展 | 仍需完成 |
 | --- | --- | --- |
@@ -26,9 +26,9 @@
 | 菜品、套餐管理 | 查询、分页、新增编辑、上下架、删除、图片上传、菜品口味及套餐组成配置 | 门店销售关系、沽清状态和统一可售判断 |
 | 订单管理 | 前端状态筛选、详情及接单、拒单、取消、派送、完成操作；后端已有对应业务 | 服务端重新计价、下单幂等、多门店和多履约类型支持 |
 | 工作台、数据统计 | 工作台页面、统计图表、日期筛选、导出调用及异常反馈已迁移 | 当前后端源码未找到 `/admin/workspace/*`、`/admin/report/*` 对应实现 |
-| 修改密码 | 管理端弹窗及 API 调用已迁移 | 当前员工 Controller 未找到 `/admin/employee/editPassword` 实现 |
+| 修改密码 | 前后端接口已接通；当前员工身份、旧密码、输入及原子更新已有回归测试，并完成隔离 MySQL 的 HTTP 验证 | 密码哈希升级和旧 Token 失效策略仍待后续认证加固 |
 | 微信小程序 | Vue 2 uni-app 工程，已有菜单、购物车、地址、外卖结算、支付及历史订单页面；已做品牌样式调整 | 选店、扫码场景、堂食、自取及与新后端的联合重构 |
-| 登录与用户归属 | 员工登录、微信用户登录、JWT；订单详情、取消等已有用户归属校验 | 地址簿归属保护、令牌失效策略、租户和门店上下文 |
+| 登录与用户归属 | 员工登录、微信用户登录、JWT；订单及地址簿归属检查已有实现与回归证据 | 令牌失效策略、租户和门店上下文 |
 | 支付与退款 | 微信预支付、支付通知、取消退款、固定退款单号及迟到支付处理 | 通知完整核验、退款处理中与完成状态、支付退款结果闭环 |
 | Redis | 菜品缓存、套餐缓存、营业状态 | 租户及门店命名空间、细化失效范围 |
 | 多租户、多门店、RBAC | 已明确重构方向 | 数据模型、授权和隔离链路尚未落地 |
@@ -69,7 +69,7 @@
 | 测试 | JUnit、Spring Test、部分 H2 集成测试、Node.js 测试 |
 | 部署配套 | 仓库内保留 Nginx 配置与旧管理端静态资源 |
 
-后端父 POM 声明 Java 8 / `release=8`，`sky-server` 又声明 `source/target=9`，编译级别尚需统一。不能将这些声明直接视为任意 JDK 环境下都已验证可构建。
+后端已统一为 Java 8 字节码目标，移除子模块 `source/target=9` 覆盖。本次在 JDK 25.0.3、Maven 3.9.11 上完成测试和打包，并核对 class major version 为 52；其他 JDK 环境尚未逐一验证。
 
 ## 项目结构
 
@@ -99,11 +99,11 @@ take-out/
 
 ## 本地开发
 
-以下命令以仓库根目录为起点，每组命令在独立终端中执行。启动前需要准备本地配置和外部服务；本 README 编写时未重新执行启动、构建或业务测试。
+以下命令以仓库根目录为起点，每组命令在独立终端中执行。启动前需要准备本地配置和外部服务；详细命令与已执行范围见 [本地开发说明](docs/stage1/development.md) 和 [验证记录](docs/stage1/verification.md)。
 
 ### 1. 准备环境与数据库
 
-- 安装 JDK、Maven 和 MySQL，先核对上述 Java 编译级别问题。
+- 安装 JDK、Maven 和 MySQL；本机已验证版本见上述说明。
 - 新管理端要求 Node.js `>=22.18.0`，具体依赖以其 `package.json` 和锁文件为准。
 - 准备 Redis；小程序使用 HBuilderX 与微信开发者工具。
 - 支付、图片上传和配送范围校验分别需要微信支付、OSS、百度地图配置。
@@ -116,6 +116,8 @@ take-out/
 
 在同目录准备被 Git 忽略的 `application-dev.yml`，配置至少包括：
 
+无敏感值的示例为 `application-dev.example.yml`；仅在本地文件不存在时复制，已有配置不要覆盖。打包会排除本机 `application-dev.yml`。
+
 | 配置范围 | 配置项或环境变量 |
 | --- | --- |
 | MySQL | `sky.datasource.driver-class-name`、`host`、`port`、`database`、`username`、`password` |
@@ -123,7 +125,7 @@ take-out/
 | 配送范围 | `SHOP_ADDRESS`、`BAIDU_MAP_AK` |
 | OSS | `ALI_OSS_ENDPOINT`、`ALI_OSS_REGION`、`ALI_OSS_ACCESS_KEY_ID`、`ALI_OSS_ACCESS_KEY_SECRET`、`ALI_OSS_BUCKET_NAME` |
 | 微信登录与支付 | `sky.wechat` 下的应用、商户、证书、密钥和通知地址，具体环境变量见主配置 |
-| JWT | 为实际部署覆盖管理端与用户端签名密钥 |
+| JWT | `JWT_ADMIN_SECRET`、`JWT_USER_SECRET`，主配置不再提供固定签名密钥 |
 
 不要把本机密码、支付私钥或第三方密钥写入 README。配送地址或地图 AK 缺失时，当前配送范围校验会拒绝下单；支付与上传也需要相应配置才能联调。
 
@@ -138,15 +140,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\redis.ps1 status
 
 该脚本依赖被忽略的本地 Redis 安装，并非全新检出后的自动安装器。也可以使用自行安装的 Redis，保持连接配置一致。
 
-后端参考启动命令：
+在仓库根目录运行后端检查与启动命令。JWT 密钥需要先通过环境或自己的外部配置提供：
 
 ```powershell
-cd backend/sky-take-out
-mvn -pl sky-server -am package -DskipTests
-java -jar sky-server/target/sky-server-1.0-SNAPSHOT.jar
+.\scripts\backend.ps1 -Goal package
+java -jar backend/sky-take-out/sky-server/target/sky-server-1.0-SNAPSHOT.jar --spring.config.additional-location=optional:file:backend/sky-take-out/sky-server/src/main/resources/
 ```
 
-默认端口为 `8080`，Knife4j 接口文档入口为 `http://localhost:8080/doc.html`。上述打包命令跳过测试，不表示测试已通过。
+默认端口为 `8080`，Knife4j 接口文档入口为 `http://localhost:8080/doc.html`。上述构建入口会运行测试；已有缓存且不需下载时可追加 `-Offline`。它支持 PATH、MAVEN_HOME、IntelliJ 自带 Maven 或显式 `-MavenPath`，详见开发说明。
 
 ### 4. 启动 Vue 3 管理端
 
@@ -181,7 +182,7 @@ npm run dev
 
 ## 检查与测试
 
-本节列出已有检查入口，不报告本次未执行的测试结果。
+2026-10-26 的检查记录为：后端初始 103 项通过，新增 12 项改密回归后全量 115 项通过并成功打包；Vue 3 完整检查通过（110 项单元/契约测试、2 项代理测试及类型检查、构建）；小程序 23 项通过。另完成独立 MySQL 下的 DDL、启动和改密 HTTP 验证，真实支付等外部链路尚未验证。完整证据见 [验证记录](docs/stage1/verification.md)。
 
 | 范围 | 已有测试内容 |
 | --- | --- |
@@ -201,13 +202,13 @@ npm run build
 npm run check
 ```
 
-后端测试，在 Maven 聚合工程目录执行：
+后端测试，在仓库根目录执行：
 
 ```powershell
-mvn -pl sky-server -am test
+.\scripts\backend.ps1 -Goal test
 ```
 
-部分后端测试使用自行建表的 H2 数据库，Redis 或外部 HTTP 相关测试需要另外检查各自前置条件；不能把整套测试都当作完全离线测试。H2 与模拟支付测试不能替代真实 MySQL、微信支付和部署验证。
+部分后端测试使用自行建表的 H2 数据库；`HttpClientTest` 使用 MockMvc 离线验证店铺状态和员工登录，不需要预先启动 8080 服务。Redis 集成测试仍需要启动并配置 Redis，不能把整套测试都当作完全离线测试。H2 与模拟支付测试不能替代真实 MySQL、微信支付和部署验证。
 
 小程序测试，在 `weixin-uniapp` 目录执行：
 
@@ -222,11 +223,10 @@ node --test tests/address-save.test.cjs tests/order-checkout.test.cjs tests/orde
 - 数据表与业务查询没有租户、门店边界；分类、菜品、套餐名称和员工用户名仍使用全局唯一约束。
 - 订单提交直接复制客户端金额，未在服务端重新计算费用并复核商品可售状态；订单号使用毫秒时间戳，初始化脚本未提供订单号唯一约束。
 - 购物车同款查询忽略口味，读写与清空仅按用户划分；需要修正不同口味及并发操作行为。
-- 地址簿详情、修改、删除、默认地址操作缺少完整用户归属校验；修改 SQL 未覆盖省市区字段。已有测试预期与这些实现存在差异。
 - 超时任务用支付状态 `UN_PAID=0` 查询订单业务状态，正常待付款状态为 `1`，查询条件不匹配。
 - 支付通知缺少完整签名及交易信息一致性核验；退款受理中和完成状态未分开建模。
 - 用户催单 Controller 当前只返回成功，未调用催单业务；已有 WebSocket 采用全局连接广播，未按门店隔离。
-- `/workspace/*`、`/report/*` 和修改密码的前端适配已存在，但相应后端接口尚待补齐。
+- `/workspace/*`、`/report/*` 的前端适配已存在，但相应后端接口尚待补齐；小程序商户信息、预计时间及退款标签等缺口见接口对照。
 - 小程序中的桌台接口定义和店铺字段不代表已经实现堂食或多门店业务。
 
 上述问题需要专项验证和修复后再扩大业务范围。实际运行库是否与 `sky.sql` 一致，也需要在迁移前核对。
@@ -248,6 +248,8 @@ node --test tests/address-save.test.cjs tests/order-checkout.test.cjs tests/orde
 优先沿用当前单体应用逐步拆分业务边界。租户数据隔离应覆盖读取、写入、关联表、批量操作、缓存与消息，不能仅通过列表参数或隐藏菜单实现。
 
 ## 文档入口与项目来源
+
+- 阶段 1 前四步：[基线](docs/stage1/baseline.md)、[本地构建配置](docs/stage1/development.md)、[接口对照](docs/stage1/api-contracts.md)、[验证结果](docs/stage1/verification.md)。这四步完成不代表整个阶段 1 已完成。
 
 - 新管理端的运行方式与迁移边界：`frontend/junzhou-admin-vue3/README.md`、`PRODUCT.md`、`DESIGN.md`。
 - 数据库结构：`database/sky.sql`、`database/数据库设计文档.md`。

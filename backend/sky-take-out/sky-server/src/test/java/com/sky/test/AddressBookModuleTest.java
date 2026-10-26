@@ -225,9 +225,10 @@ class AddressBookModuleTest {
 
     @Test
     void rollsBackDefaultChangeWhenSecondUpdateFails() {
+        jdbc.execute("alter table address_book add constraint reject_new_default "
+                + "check (id <> 102 or is_default = 0)");
         AddressBook invalid = new AddressBook();
         invalid.setId(102L);
-        invalid.setPhone("123456789012"); // Exceeds the real schema's varchar(11).
         assertThrows(RuntimeException.class, () -> service.setDefault(invalid));
         assertEquals(1, defaultFlag(101L));
         assertEquals(0, defaultFlag(102L));
@@ -300,6 +301,71 @@ class AddressBookModuleTest {
         assertEquals(1, jdbc.queryForObject(
                 "select count(*) from address_book where user_id = 42 and is_default = 1", Integer.class),
                 "普通修改接口也必须保持每个用户最多一个默认地址");
+    }
+
+    @Test
+    void ordinaryUpdateIgnoresSpoofedOwnerAndDefaultFlag() throws Exception {
+        businessMvc.perform(put(API).contentType(MediaType.APPLICATION_JSON).content(
+                "{\"id\":101,\"userId\":84,\"isDefault\":0,\"detail\":\"新地址\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(1));
+        AddressBook saved = service.getById(101L);
+        assertEquals(42L, saved.getUserId());
+        assertEquals(1, saved.getIsDefault());
+        assertEquals("新地址", saved.getDetail());
+        assertEquals(1, defaultFlag(201L));
+    }
+
+    @Test
+    void ordinaryUpdateWithOnlyProtectedFieldsIsASuccessfulNoOp() throws Exception {
+        businessMvc.perform(put(API).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"id\":102,\"userId\":84,\"isDefault\":1}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(1));
+        assertEquals(0, defaultFlag(102L));
+        assertEquals(1, defaultFlag(101L));
+        assertEquals(42L, jdbc.queryForObject(
+                "select user_id from address_book where id = 102", Long.class));
+    }
+
+    @Test
+    void settingDefaultDoesNotEditContactOrRegionFields() throws Exception {
+        businessMvc.perform(put(API + "/default").contentType(MediaType.APPLICATION_JSON).content(
+                "{\"id\":102,\"userId\":84,\"phone\":\"13900000000\",\"cityName\":\"深圳市\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(1));
+        AddressBook saved = service.getById(102L);
+        assertEquals("13800000002", saved.getPhone());
+        assertEquals("杭州市", saved.getCityName());
+        assertEquals(42L, saved.getUserId());
+        assertEquals(1, saved.getIsDefault());
+        assertEquals(0, defaultFlag(101L));
+        assertEquals(1, defaultFlag(201L));
+    }
+
+    @Test
+    void signedRequestsCannotAccessAnotherUsersAddress() throws Exception {
+        BaseContext.removeCurrentId();
+        webMvc.perform(get(API + "/201").header("authentication", token(SECRET, 60000)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0));
+        assertNull(BaseContext.getCurrentId());
+        webMvc.perform(put(API).header("authentication", token(SECRET, 60000))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"id\":201,\"userId\":42,\"detail\":\"越权修改\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0));
+        assertNull(BaseContext.getCurrentId());
+        assertEquals("其他用户的地址", jdbc.queryForObject(
+                "select detail from address_book where id = 201", String.class));
+    }
+
+    @Test
+    void missingAddressCannotBeReadUpdatedOrDeleted() throws Exception {
+        businessMvc.perform(get(API + "/999"))
+                .andExpect(jsonPath("$.code").value(0));
+        businessMvc.perform(put(API).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"id\":999,\"detail\":\"不存在的地址\"}"))
+                .andExpect(jsonPath("$.code").value(0));
+        businessMvc.perform(delete(API).param("id", "999"))
+                .andExpect(jsonPath("$.code").value(0));
+        assertEquals(1, defaultFlag(101L));
+        assertEquals(1, defaultFlag(201L));
     }
 
     @Test

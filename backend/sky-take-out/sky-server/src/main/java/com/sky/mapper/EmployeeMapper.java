@@ -9,9 +9,16 @@ import com.sky.result.PageResult;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 
 @Mapper
 public interface EmployeeMapper {
+
+    @Update("update employee set password=#{newPassword}, update_time=current_timestamp, update_user=#{empId} "
+            + "where id=#{empId} and password=#{oldPassword} and status=1")
+    int updatePassword(@Param("empId") Long empId, @Param("oldPassword") String oldPassword,
+                       @Param("newPassword") String newPassword);
 
     /**
      * 根据用户名查询员工

@@ -20,7 +20,7 @@
     <properties>
         <!-- Build with JDK 25 while retaining the bytecode level of this Spring Boot 2.7 project. -->
         <java.version>8</java.version>
-        <maven.compiler.release>8</maven.compiler.release>
+        <maven.compiler.release>${java.version}</maven.compiler.release>
         <mybatis.spring>2.2.0</mybatis.spring>
         <lombok>1.18.40</lombok>
         <fastjson>1.2.76</fastjson>

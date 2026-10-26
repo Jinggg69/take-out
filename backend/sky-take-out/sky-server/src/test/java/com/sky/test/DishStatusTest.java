@@ -15,16 +15,19 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.io.InputStream;
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -33,6 +36,7 @@ class DishStatusTest {
     private SqlSession session;
     private JdbcTemplate jdbc;
     private MockMvc mvc;
+    private RedisTemplate<String, Object> redisTemplate;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -61,6 +65,9 @@ class DishStatusTest {
         ReflectionTestUtils.setField(service, "dishMapper", session.getMapper(DishMapper.class));
         DishController controller = new DishController();
         ReflectionTestUtils.setField(controller, "dishService", service);
+        redisTemplate = mock(RedisTemplate.class);
+        when(redisTemplate.keys("dish_*")).thenReturn(Collections.singleton("dish_2"));
+        ReflectionTestUtils.setField(controller, "redisTemplate", redisTemplate);
         mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
     }
@@ -88,6 +95,7 @@ class DishStatusTest {
         original.put("STATUS", 1);
         assertEquals(original, row(1));
         assertEquals(other, row(2));
+        verify(redisTemplate, times(2)).delete(Collections.singleton("dish_2"));
     }
 
     @Test
@@ -99,6 +107,7 @@ class DishStatusTest {
         mvc.perform(post("/admin/dish/status/0").param("id", "999"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0));
         assertEquals(original, row(1));
+        verifyNoInteractions(redisTemplate);
     }
 
     private Map<String, Object> row(long id) {

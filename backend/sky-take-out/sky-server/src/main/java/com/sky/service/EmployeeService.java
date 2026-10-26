@@ -3,10 +3,14 @@ package com.sky.service;
 import com.sky.dto.EmployeeDTO;
 import com.sky.dto.EmployeeLoginDTO;
 import com.sky.dto.EmployeePageQueryDTO;
+import com.sky.dto.PasswordEditDTO;
 import com.sky.entity.Employee;
 import com.sky.result.PageResult;
 
 public interface EmployeeService {
+
+    /** 修改当前认证员工密码，客户端不能选择其他员工。 */
+    void editPassword(PasswordEditDTO passwordEditDTO);
 
     /**
      * 员工登录

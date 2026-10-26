@@ -31,6 +31,7 @@ tools/redis/
 **/unpackage/
 
 # Local delivery notes and verification reports
+/docs/
 /backend/ADDRESS_SAVE_FIX.md
 /backend/ADDRESS_BOOK_TEST_REPORT.md
 /backend/ORDER_MODULE.md

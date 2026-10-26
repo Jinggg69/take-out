@@ -1,0 +1,34 @@
+# Copy to application-dev.yml only if that local file does not already exist.
+# Values below are environment references, never real credentials.
+sky:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    host: ${DB_HOST:127.0.0.1}
+    port: ${DB_PORT:3306}
+    database: ${DB_NAME:sky_take_out}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  redis:
+    password: ${REDIS_PASSWORD:}
+  jwt:
+    admin-secret-key: ${JWT_ADMIN_SECRET}
+    user-secret-key: ${JWT_USER_SECRET}
+  shop:
+    address: ${SHOP_ADDRESS:}
+    baidu-ak: ${BAIDU_MAP_AK:}
+  alioss:
+    endpoint: ${ALI_OSS_ENDPOINT:}
+    region: ${ALI_OSS_REGION:}
+    access-key-id: ${ALI_OSS_ACCESS_KEY_ID:}
+    access-key-secret: ${ALI_OSS_ACCESS_KEY_SECRET:}
+    bucket-name: ${ALI_OSS_BUCKET_NAME:}
+  wechat:
+    appid: ${WECHAT_APPID:}
+    secret: ${WECHAT_SECRET:}
+    mchid: ${WECHAT_MCHID:}
+    mch-serial-no: ${WECHAT_MCH_SERIAL_NO:}
+    private-key-file-path: ${WECHAT_PRIVATE_KEY_FILE_PATH:}
+    api-v3-key: ${WECHAT_API_V3_KEY:}
+    we-chat-pay-cert-file-path: ${WECHAT_PAY_CERT_FILE_PATH:}
+    notify-url: ${WECHAT_NOTIFY_URL:}
+    refund-notify-url: ${WECHAT_REFUND_NOTIFY_URL:}
