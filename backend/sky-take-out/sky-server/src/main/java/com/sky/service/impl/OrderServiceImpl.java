@@ -29,11 +29,13 @@ import com.sky.mapper.UserMapper;
 import com.sky.result.PageResult;
 import com.sky.service.DeliveryRangeService;
 import com.sky.service.OrderService;
+import com.sky.service.OrderPricingService;
 import com.sky.utils.WeChatPayUtil;
 import com.sky.vo.OrderPaymentVO;
 import com.sky.vo.OrderStatisticsVO;
 import com.sky.vo.OrderSubmitVO;
 import com.sky.vo.OrderVO;
+import com.sky.vo.OrderQuoteVO;
 import com.sky.websocket.WebSocketServer;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,6 +55,8 @@ import java.util.Objects;
 @Service
 public class OrderServiceImpl implements OrderService {
     @Autowired
+    private OrderPricingService orderPricingService;
+    @Autowired
     private OrderMapper orderMapper;
     @Autowired
     private OrderDetailMapper orderDetailMapper;
@@ -69,6 +73,11 @@ public class OrderServiceImpl implements OrderService {
     @Autowired
     private WebSocketServer webSocketServer;
 
+    @Override
+    public OrderQuoteVO quote() {
+        return orderPricingService.quote();
+    }
+
     /**
      * 用户下单
      * @param ordersSubmitDTO 订单提交信息
@@ -77,6 +86,10 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderSubmitVO orderSubmit(OrdersSubmitDTO ordersSubmitDTO) {
+        if (ordersSubmitDTO == null || ordersSubmitDTO.getAmount() == null
+                || ordersSubmitDTO.getAmount().signum() < 0) {
+            throw new OrderBusinessException("请确认有效的订单金额后重新提交");
+        }
         //处理各种业务异常（地址簿为空，购物车数据为空）
         AddressBook addressBook = addressBookMapper.getById(ordersSubmitDTO.getAddressBookId());
         Long userId = BaseContext.getCurrentId();
@@ -84,11 +97,9 @@ public class OrderServiceImpl implements OrderService {
             throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_IS_NULL);
         }
 
-        ShoppingCart shoppingCart = new ShoppingCart();
-        shoppingCart.setUserId(userId);
-        List<ShoppingCart> shoppingCartList = shoppingCartMapper.list(shoppingCart);
-        if (shoppingCartList == null || shoppingCartList.size() == 0) {
-            throw new ShoppingCartBusinessException(MessageConstant.SHOPPING_CART_IS_NULL);
+        OrderQuoteVO quote = orderPricingService.quote();
+        if (ordersSubmitDTO.getAmount().compareTo(quote.getAmount()) != 0) {
+            throw new OrderBusinessException("商品价格或数量已变化，请重新确认订单金额");
         }
 
         String address = fullAddress(addressBook);
@@ -96,7 +107,16 @@ public class OrderServiceImpl implements OrderService {
 
         //向订单表插入一条数据
         Orders order = new Orders();
-        BeanUtils.copyProperties(ordersSubmitDTO, order);
+        // Explicit client-owned fields only. Monetary values come exclusively from the server quotation.
+        order.setAddressBookId(ordersSubmitDTO.getAddressBookId());
+        order.setPayMethod(ordersSubmitDTO.getPayMethod());
+        order.setRemark(ordersSubmitDTO.getRemark());
+        order.setEstimatedDeliveryTime(ordersSubmitDTO.getEstimatedDeliveryTime());
+        order.setDeliveryStatus(ordersSubmitDTO.getDeliveryStatus());
+        order.setTablewareStatus(ordersSubmitDTO.getTablewareStatus());
+        if (ordersSubmitDTO.getTablewareNumber() != null) order.setTablewareNumber(ordersSubmitDTO.getTablewareNumber());
+        order.setAmount(quote.getAmount());
+        order.setPackAmount(quote.getPackAmount());
         order.setOrderTime(LocalDateTime.now());
         order.setPayStatus(Orders.UN_PAID);
         order.setStatus(Orders.PENDING_PAYMENT);
@@ -109,9 +129,10 @@ public class OrderServiceImpl implements OrderService {
         orderMapper.insert(order);
         //向订单明细表插入多条数据
         List<OrderDetail> orderDetailList = new ArrayList<>();
-        for (ShoppingCart cart : shoppingCartList) {
+        for (ShoppingCart cart : quote.getItems()) {
             OrderDetail orderDetail = new OrderDetail();
             BeanUtils.copyProperties(cart, orderDetail);
+            orderDetail.setId(null);
             orderDetail.setOrderId(order.getId());
             orderDetailList.add(orderDetail);
         }

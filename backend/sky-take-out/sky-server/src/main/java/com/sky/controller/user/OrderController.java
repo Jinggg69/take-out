@@ -8,6 +8,7 @@ import com.sky.service.OrderService;
 import com.sky.vo.OrderPaymentVO;
 import com.sky.vo.OrderSubmitVO;
 import com.sky.vo.OrderVO;
+import com.sky.vo.OrderQuoteVO;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,12 @@ public class OrderController {
 
     @Autowired
     private OrderService orderService;
+
+    @GetMapping("/quote")
+    @ApiOperation("获取当前用户购物车的结算报价")
+    public Result<OrderQuoteVO> quote() {
+        return Result.success(orderService.quote());
+    }
 
     /**
      * 分页查询当前用户的历史订单

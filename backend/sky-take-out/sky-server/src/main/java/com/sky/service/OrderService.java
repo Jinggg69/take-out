@@ -11,11 +11,14 @@ import com.sky.vo.OrderPaymentVO;
 import com.sky.vo.OrderStatisticsVO;
 import com.sky.vo.OrderSubmitVO;
 import com.sky.vo.OrderVO;
+import com.sky.vo.OrderQuoteVO;
 
 /**
  * 订单业务接口
  */
 public interface OrderService {
+    /** Read-only quotation for the authenticated user's cart. */
+    OrderQuoteVO quote();
 
     /**
      * 用户下单

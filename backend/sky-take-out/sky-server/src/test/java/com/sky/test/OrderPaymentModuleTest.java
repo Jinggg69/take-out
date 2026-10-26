@@ -18,6 +18,7 @@ import com.sky.mapper.*;
 import com.sky.properties.JwtProperties;
 import com.sky.properties.WeChatProperties;
 import com.sky.service.OrderService;
+import com.sky.service.OrderPricingService;
 import com.sky.service.DeliveryRangeService;
 import com.sky.service.impl.DeliveryRangeServiceImpl;
 import com.sky.properties.ShopProperties;
@@ -31,6 +32,8 @@ import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mybatis.spring.SqlSessionFactoryBean;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.mybatis.spring.mapper.ClassPathMapperScanner;
@@ -83,7 +86,7 @@ class OrderPaymentModuleTest {
         context.setServletContext(new MockServletContext());
         context.register(WebMvcConfiguration.class, OrderController.class, OrderServiceImpl.class,
                 GlobalExceptionHandler.class, JwtTokenUserInterceptor.class, JwtTokenAdminInterceptor.class,
-                PaymentTestConfiguration.class, WebSocketServer.class, AdminSessionService.class);
+                PaymentTestConfiguration.class, WebSocketServer.class, AdminSessionService.class, OrderPricingService.class);
         context.refresh();
         mapServer = MockRestServiceServer.bindTo(context.getBean(RestTemplate.class)).build();
         mapServer.expect(ExpectedCount.between(0, Integer.MAX_VALUE),
@@ -116,6 +119,12 @@ class OrderPaymentModuleTest {
                 + "amount decimal(10,2), image varchar(255))");
         jdbc.execute("alter table shopping_cart modify id bigint auto_increment");
         jdbc.execute("alter table shopping_cart add create_time timestamp");
+        jdbc.execute("create table dish (id bigint primary key, name varchar(100), price decimal(14,4), image varchar(255), status int)");
+        jdbc.execute("create table setmeal (id bigint primary key, name varchar(100), price decimal(14,4), image varchar(255), status int)");
+        jdbc.execute("create table setmeal_dish (id bigint auto_increment primary key, setmeal_id bigint, dish_id bigint, name varchar(100), price decimal(14,4), copies int)");
+        jdbc.execute("insert into dish values (5,'当前菜品',12.50,'current-dish.png',1),(6,'其他用户菜品',20.00,'other.png',1)");
+        jdbc.execute("insert into setmeal values (8,'当前套餐',30.00,'setmeal.png',1)");
+        jdbc.execute("insert into setmeal_dish (setmeal_id,dish_id,name,price,copies) values (8,5,'当前菜品',12.50,2)");
         jdbc.execute("create table `user` (id bigint primary key, openid varchar(64))");
         jdbc.update("insert into `user` values (42, 'openid-42')");
         jdbc.update("insert into address_book values (101, 42, '13800000000', '张三', '测试路1号')");
@@ -154,12 +163,154 @@ class OrderPaymentModuleTest {
     }
 
     @Test
+    void submissionUsesCurrentCatalogSnapshotAndServerFees() throws Exception {
+        jdbc.update("update dish set price=17.35,name='新菜名',image='new.png' where id=5");
+        submit("42.70", -99).andExpect(jsonPath("$.code").value(1))
+                .andExpect(jsonPath("$.data.orderAmount").value(42.70));
+        assertEquals(new BigDecimal("42.70"), jdbc.queryForObject("select amount from orders where id<>10", BigDecimal.class));
+        assertEquals(2, jdbc.queryForObject("select pack_amount from orders where id<>10", Integer.class));
+        assertEquals(new BigDecimal("17.35"), jdbc.queryForObject("select amount from order_detail", BigDecimal.class));
+        assertEquals("新菜名", jdbc.queryForObject("select name from order_detail", String.class));
+        assertEquals("new.png", jdbc.queryForObject("select image from order_detail", String.class));
+        assertEquals(0, jdbc.queryForObject("select count(*) from shopping_cart where user_id=42", Integer.class));
+        assertEquals(1, jdbc.queryForObject("select count(*) from shopping_cart where user_id=84", Integer.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings={"0", "-1", "0.001", "25.00", "33.001", "99999999.99"})
+    void forgedOrStaleConfirmedAmountCannotCreateAnOrder(String amount) throws Exception {
+        submit(amount, 0).andExpect(jsonPath("$.code").value(0));
+        assertSubmissionUntouched();
+    }
+
+    @Test
+    void missingConfirmedAmountIsABusinessRejection() {
+        OrdersSubmitDTO input = new OrdersSubmitDTO();
+        input.setAddressBookId(101L);
+        input.setTablewareNumber(2);
+        BaseContext.setCurrentId(42L);
+        assertThrows(com.sky.exception.OrderBusinessException.class,
+                () -> context.getBean(OrderService.class).orderSubmit(input));
+        assertSubmissionUntouched();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings={
+            "update dish set status=0 where id=5",
+            "delete from dish where id=5",
+            "update dish set price=null where id=5",
+            "update dish set price=-1 where id=5",
+            "update dish set price=12.501 where id=5",
+            "update dish set price=99999999.99 where id=5",
+            "update shopping_cart set number=0 where id=1",
+            "update shopping_cart set number=-1 where id=1",
+            "update shopping_cart set number=null where id=1",
+            "update shopping_cart set setmeal_id=8 where id=1",
+            "update shopping_cart set dish_id=null where id=1"})
+    void invalidCatalogOrCartCannotBeQuotedOrSubmitted(String mutation) throws Exception {
+        jdbc.execute(mutation);
+        assertDoesNotThrow(() -> submit("33.00", 2).andExpect(jsonPath("$.code").value(0)));
+        mvc.perform(get("/user/order/quote").header("authentication", token()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0));
+        assertSubmissionUntouched();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings={
+            "update setmeal set status=0 where id=8",
+            "delete from setmeal where id=8",
+            "update setmeal set price=-1 where id=8",
+            "update setmeal set price=null where id=8",
+            "update setmeal set price=30.001 where id=8",
+            "update dish set status=0 where id=5",
+            "delete from dish where id=5",
+            "delete from setmeal_dish where setmeal_id=8",
+            "update setmeal_dish set copies=0 where setmeal_id=8",
+            "update setmeal_dish set copies=null where setmeal_id=8"})
+    void invalidSetmealOrComponentCannotBeSold(String mutation) throws Exception {
+        jdbc.update("update shopping_cart set dish_id=null,setmeal_id=8 where id=1");
+        jdbc.execute(mutation);
+        submit("68.00", 2).andExpect(jsonPath("$.code").value(0));
+        mvc.perform(get("/user/order/quote").header("authentication", token()))
+                .andExpect(jsonPath("$.code").value(0));
+        assertSubmissionUntouched();
+    }
+
+    @Test
+    void quoteUsesOnlyAuthenticatedCartAndDoesNotWriteAnything() throws Exception {
+        jdbc.update("insert into shopping_cart (user_id,name,setmeal_id,number,amount) values (42,'过时套餐',8,1,0.01)");
+        mvc.perform(get("/user/order/quote").header("authentication", token()).param("userId", "84"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(1))
+                .andExpect(jsonPath("$.data.goodsAmount").value(55.00))
+                .andExpect(jsonPath("$.data.packAmount").value(3))
+                .andExpect(jsonPath("$.data.deliveryFee").value(6))
+                .andExpect(jsonPath("$.data.amount").value(64.00))
+                .andExpect(jsonPath("$.data.items.length()").value(2));
+        assertEquals(1, jdbc.queryForObject("select count(*) from orders", Integer.class));
+        assertEquals(3, jdbc.queryForObject("select count(*) from shopping_cart", Integer.class));
+        assertEquals(new BigDecimal("0.01"), jdbc.queryForObject("select amount from shopping_cart where user_id=42 and setmeal_id=8", BigDecimal.class));
+        mvc.perform(get("/user/order/quote")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void mixedOrderUsesSetmealPriceAndPackagingPerPurchasedUnit() throws Exception {
+        jdbc.update("insert into shopping_cart (user_id,name,setmeal_id,number,amount) values (42,'过时套餐',8,1,0.01)");
+        submit("64.00", 999).andExpect(jsonPath("$.code").value(1));
+        assertEquals(3, jdbc.queryForObject("select pack_amount from orders where id<>10", Integer.class));
+        assertEquals(new BigDecimal("30.00"), jdbc.queryForObject("select amount from order_detail where setmeal_id=8", BigDecimal.class));
+        assertEquals(2, jdbc.queryForObject("select count(*) from order_detail", Integer.class));
+    }
+
+    @Test
+    void pricesUseExactCentsAndExistingOrderSnapshotsStayFrozen() throws Exception {
+        jdbc.update("update dish set price=0.10 where id=5");
+        jdbc.update("update shopping_cart set number=3 where id=1");
+        submit("9.30", 0).andExpect(jsonPath("$.code").value(1));
+        jdbc.update("update dish set price=99.99 where id=5");
+        assertEquals(new BigDecimal("9.30"), jdbc.queryForObject("select amount from orders where id<>10", BigDecimal.class));
+        assertEquals(new BigDecimal("0.10"), jdbc.queryForObject("select amount from order_detail", BigDecimal.class));
+        assertEquals(new BigDecimal("25.00"), jdbc.queryForObject("select amount from orders where id=10", BigDecimal.class));
+    }
+
+    @Test
+    void changesAfterAQuoteRequireConfirmationAgain() throws Exception {
+        mvc.perform(get("/user/order/quote").header("authentication", token())).andExpect(jsonPath("$.data.amount").value(33.00));
+        jdbc.update("update dish set price=13.00 where id=5");
+        submit("33.00", 2).andExpect(jsonPath("$.code").value(0));
+        assertSubmissionUntouched();
+        mvc.perform(get("/user/order/quote").header("authentication", token())).andExpect(jsonPath("$.data.amount").value(34.00));
+        submit("34.00", 2).andExpect(jsonPath("$.code").value(1));
+    }
+
+    @Test
+    void emptyAuthenticatedCartCannotBeQuotedOrSubmitted() throws Exception {
+        jdbc.update("delete from shopping_cart where user_id=42");
+        mvc.perform(get("/user/order/quote").header("authentication", token())).andExpect(jsonPath("$.code").value(0));
+        submit("33.00", 2).andExpect(jsonPath("$.code").value(0));
+        assertEquals(1, jdbc.queryForObject("select count(*) from orders", Integer.class));
+        assertEquals(0, jdbc.queryForObject("select count(*) from order_detail", Integer.class));
+        assertEquals(1, jdbc.queryForObject("select count(*) from shopping_cart", Integer.class));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions submit(String amount, int pack) throws Exception {
+        return mvc.perform(post("/user/order/submit").header("authentication", token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"addressBookId\":101,\"payMethod\":1,\"tablewareNumber\":2,\"packAmount\":" + pack + ",\"amount\":" + amount + "}"))
+                .andExpect(status().isOk());
+    }
+
+    private void assertSubmissionUntouched() {
+        assertEquals(1, jdbc.queryForObject("select count(*) from orders", Integer.class));
+        assertEquals(0, jdbc.queryForObject("select count(*) from order_detail", Integer.class));
+        assertEquals(2, jdbc.queryForObject("select count(*) from shopping_cart", Integer.class));
+    }
+
+    @Test
     void signedSubmissionPersistsDetailsAndClearsOnlyCurrentUsersCart() throws Exception {
         mvc.perform(post("/user/order/submit").header("authentication", token())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"addressBookId\":101,"
-                                + "\"payMethod\":1,\"amount\":25.00,\"packAmount\":0,\"tablewareNumber\":2}"))
+                                + "\"payMethod\":1,\"amount\":33.00,\"packAmount\":0,\"tablewareNumber\":2}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(1))
-                .andExpect(jsonPath("$.data.orderAmount").value(25.00));
+                .andExpect(jsonPath("$.data.orderAmount").value(33.00));
         assertEquals(2, jdbc.queryForObject("select count(*) from orders", Integer.class));
         assertEquals("测试路1号", jdbc.queryForObject("select address from orders where id <> 10", String.class));
         assertEquals(42L, jdbc.queryForObject("select user_id from orders where id <> 10", Long.class));
@@ -172,11 +323,11 @@ class OrderPaymentModuleTest {
 
     @Test
     void detailInsertFailureRollsBackOrderAndPreservesCart() {
-        jdbc.update("update shopping_cart set name = ? where id = 1", String.join("", Collections.nCopies(33, "x")));
+        jdbc.update("update dish set name = ? where id = 5", String.join("", Collections.nCopies(33, "x")));
         OrdersSubmitDTO submit = new OrdersSubmitDTO();
         submit.setAddressBookId(101L);
         submit.setPayMethod(1);
-        submit.setAmount(new BigDecimal("25.00"));
+        submit.setAmount(new BigDecimal("33.00"));
         submit.setPackAmount(0);
         submit.setTablewareNumber(2);
         BaseContext.setCurrentId(42L);
@@ -456,7 +607,7 @@ class OrderPaymentModuleTest {
     void outsideDeliveryRangeLeavesOrdersAndCartUntouched() throws Exception {
         deliveryDistance = 5001;
         mvc.perform(post("/user/order/submit").header("authentication", token())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"addressBookId\":101,\"amount\":25,\"payMethod\":1,\"packAmount\":0,\"tablewareNumber\":2}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"addressBookId\":101,\"amount\":33,\"payMethod\":1,\"packAmount\":0,\"tablewareNumber\":2}"))
                 .andExpect(jsonPath("$.code").value(0));
         assertEquals(1, jdbc.queryForObject("select count(*) from orders", Integer.class));
         assertEquals(0, jdbc.queryForObject("select count(*) from order_detail", Integer.class));
@@ -468,7 +619,7 @@ class OrderPaymentModuleTest {
         deliveryDistance = 5000;
         jdbc.update("update address_book set province_name='北京市', city_name='北京市', district_name='海淀区' where id=101");
         mvc.perform(post("/user/order/submit").header("authentication", token())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"addressBookId\":101,\"amount\":25,\"payMethod\":1,\"packAmount\":0,\"tablewareNumber\":2}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"addressBookId\":101,\"amount\":33,\"payMethod\":1,\"packAmount\":0,\"tablewareNumber\":2}"))
                 .andExpect(jsonPath("$.code").value(1));
         assertEquals("北京市北京市海淀区测试路1号", jdbc.queryForObject("select address from orders where id<>10", String.class));
     }
@@ -587,10 +738,13 @@ class OrderPaymentModuleTest {
             config.addMapper(AddressBookMapper.class);
             config.addMapper(EmployeeMapper.class);
             config.addMapper(AdminSessionMapper.class);
+            config.addMapper(DishMapper.class);
+            config.addMapper(SetmealMapper.class);
             factory.setConfiguration(config);
             factory.setPlugins(new PageInterceptor());
             factory.setMapperLocations(new ClassPathResource("mapper/OrderMapper.xml"),
-                    new ClassPathResource("mapper/OrderDetailMapper.xml"), new ClassPathResource("mapper/ShoppingCartMapper.xml"));
+                    new ClassPathResource("mapper/OrderDetailMapper.xml"), new ClassPathResource("mapper/ShoppingCartMapper.xml"),
+                    new ClassPathResource("mapper/SetmealDishMapper.xml"));
             return factory.getObject();
         }
 
@@ -601,6 +755,9 @@ class OrderPaymentModuleTest {
         @Bean UserMapper userMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(UserMapper.class); }
         @Bean EmployeeMapper employeeMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(EmployeeMapper.class); }
         @Bean AdminSessionMapper adminSessionMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(AdminSessionMapper.class); }
+        @Bean DishMapper dishMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(DishMapper.class); }
+        @Bean SetmealMapper setmealMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(SetmealMapper.class); }
+        @Bean SetmealDishMapper setmealDishMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(SetmealDishMapper.class); }
         @Bean TestWeChatPayUtil weChatPayUtil() { return new TestWeChatPayUtil(); }
         @Bean RestTemplate mapRestTemplate() { return new RestTemplate(); }
         @Bean DeliveryRangeService deliveryRangeService(RestTemplate client) {
