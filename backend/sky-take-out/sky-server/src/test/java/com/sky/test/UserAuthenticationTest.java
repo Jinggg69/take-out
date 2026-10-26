@@ -10,6 +10,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Import;
+import com.sky.test.support.UserOnlyAdminConfiguration;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.mock.web.MockServletContext;
 import org.springframework.test.web.servlet.MockMvc;
@@ -102,6 +104,7 @@ class UserAuthenticationTest {
 
     @TestConfiguration
     @ComponentScan("com.sky.interceptor")
+    @Import(UserOnlyAdminConfiguration.class)
     static class AuthenticationConfiguration {
         @Bean
         JwtProperties jwtProperties() {

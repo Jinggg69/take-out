@@ -453,6 +453,7 @@ class AddressBookModuleTest {
 
     @TestConfiguration
     @EnableTransactionManagement
+    @org.springframework.context.annotation.Import(com.sky.test.support.UserOnlyAdminConfiguration.class)
     static class AddressBookTestConfiguration {
         @Bean
         DataSource dataSource() {

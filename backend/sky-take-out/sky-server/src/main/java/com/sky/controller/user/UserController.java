@@ -37,9 +37,9 @@ public class UserController {
     @PostMapping("/login")
     @ApiOperation("微信登录")
     public Result<UserLoginVO> login(@RequestBody UserLoginDTO userLoginDTO) {
-        log.info("微信用户登录：{}",userLoginDTO);
         //微信登录
         User user = userService.wxLogin(userLoginDTO);
+        log.info("微信用户登录成功，userId={}", user.getId());
         //为微信用户生成JWT令牌
         Map<String,Object> claims = new HashMap<>();
         claims.put(JwtClaimsConstant.USER_ID,user.getId());

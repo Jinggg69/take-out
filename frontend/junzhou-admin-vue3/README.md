@@ -57,7 +57,7 @@ WebSocket代理：`/ws/{clientId}` → `http://localhost:8080/ws/{clientId}`，�
 `src/utils/request.ts` 创建请求单例，使用Cookie的token和401跳转回调；`src/api`集中定义本阶段接口。
 Pinia管理用户及导航状态，保留原token/username/user_info Cookie和sidebar_status偏好。
 登录成功进入工作台；退出请求成功后清理认证Cookie。401跳转登录，沿用原版不主动删除Cookie的行为。
-修改密码不自动注销；营业状态仍使用原PUT路径和标量请求体；订单提醒沿用原Socket协议及音频。
+修改密码成功后清除本地认证Cookie并跳转登录；退出仅在后端业务成功后清除认证。后端禁用、改密会撤销员工全部旧会话，旧版Token也需要重新登录；升级前先执行根目录`database/migrations`中的迁移。营业状态仍使用原PUT路径和标量请求体；订单提醒沿用原Socket协议及音频。
 单元测试和浏览器夹具验收不能替代真实后端联调，实际账号、营业状态持久化、改密和订单推送需连后端复验。
 
 员工接口见 `src/api/employee.ts`，沿用原 `/employee/page`、`/employee/{id}`、`/employee` 和 `/employee/status/{status}?id=...`。

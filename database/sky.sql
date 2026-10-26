@@ -1,6 +1,16 @@
 CREATE DATABASE  IF NOT EXISTS `sky_take_out` ;
 USE `sky_take_out`;
 
+-- Initialization only. Existing databases use migrations/20261026_01_admin_session.sql.
+DROP TABLE IF EXISTS `admin_session`;
+CREATE TABLE `admin_session` (
+  `session_id` varchar(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `employee_id` bigint NOT NULL,
+  `expires_at` bigint NOT NULL COMMENT 'JWT expiry in Unix epoch milliseconds',
+  PRIMARY KEY (`session_id`),
+  KEY `idx_admin_session_employee_expiry` (`employee_id`, `expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 DROP TABLE IF EXISTS `address_book`;
 CREATE TABLE `address_book` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',

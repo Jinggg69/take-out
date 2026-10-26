@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { AuthApi } from '../api/auth.ts'
-import type { LoginPayload } from '../api/types.ts'
+import type { LoginPayload, PasswordPayload } from '../api/types.ts'
 import type { SessionStorage } from '../utils/cookies.ts'
 
 export function createUserStore(api: AuthApi, storage: SessionStorage) {
@@ -27,15 +27,27 @@ export function createUserStore(api: AuthApi, storage: SessionStorage) {
       return result
     }
 
-    async function logout() {
-      // As before, only a completed HTTP request permits clearing the session.
-      await api.logout()
+    function clearSession() {
       storage.clearSession()
       token.value = ''
       username.value = ''
       userInfo.value = {}
       roles.value = []
     }
-    return { token, username, userInfo, roles, displayName, login, logout }
+
+    async function logout() {
+      const { data: result } = await api.logout()
+      if (String(result.code) !== '1') throw new Error(result.msg || '退出失败，请重试')
+      clearSession()
+    }
+
+    async function changePassword(payload: PasswordPayload) {
+      const { data: result } = await api.editPassword(payload)
+      if (String(result.code) !== '1') throw new Error(result.msg || '密码修改失败，请重试')
+      // The backend revokes every existing session after a successful password change.
+      clearSession()
+      return result
+    }
+    return { token, username, userInfo, roles, displayName, login, logout, changePassword, clearSession }
   })
 }

@@ -11,6 +11,8 @@ import { createUserStore } from '../src/stores/user.ts'
 const requests: { method: string; url: string; body: string; token?: string }[] = []
 let baseURL = ''
 let logoutFails = false
+let passwordFails = false
+let logoutBusinessFails = false
 const user = { id: 1, name: '张师傅', userName: 'admin', token: 'fixture-token' }
 const server = createServer(async (req, res) => {
   let body = ''
@@ -19,6 +21,12 @@ const server = createServer(async (req, res) => {
   res.setHeader('Content-Type', 'application/json')
   if (req.url === '/api/employee/logout' && logoutFails) {
     res.statusCode = 500; res.end('{"code":0,"msg":"退出失败"}'); return
+  }
+  if (req.url === '/api/employee/logout' && logoutBusinessFails) {
+    res.end('{"code":0,"msg":"会话撤销失败"}'); return
+  }
+  if (req.url === '/api/employee/editPassword' && passwordFails) {
+    res.end('{"code":0,"msg":"原密码错误"}'); return
   }
   if (req.url === '/api/employee/login') {
     const payload = JSON.parse(body)
@@ -107,4 +115,36 @@ test('shop and password endpoints keep scalar status and the original password f
   await api.editPassword({ oldPassword: 'abc123', newPassword: 'def456' })
   assert.equal(requests.at(-1)?.url, '/api/employee/editPassword')
   assert.deepEqual(JSON.parse(requests.at(-1)?.body ?? ''), { oldPassword: 'abc123', newPassword: 'def456' })
+})
+
+test('password change clears revoked credentials and user state after confirmed success', async () => {
+  const { store, values } = setup({ token: 'old-session-token', username: 'employee', user_info: JSON.stringify(user), sidebar_status: 'closed' })
+  await store.changePassword({ oldPassword: 'abc123', newPassword: 'def456' })
+  assert.equal(requests.at(-1)?.url, '/api/employee/editPassword')
+  assert.deepEqual(JSON.parse(requests.at(-1)?.body ?? ''), { oldPassword: 'abc123', newPassword: 'def456' })
+  assert.equal(store.token, '')
+  assert.equal(store.username, '')
+  assert.deepEqual(store.userInfo, {})
+  for (const key of ['token', 'username', 'user_info', 'userInfo']) assert.equal(values.has(key), false)
+  assert.equal(values.get('sidebar_status'), 'closed')
+})
+
+test('rejected password change preserves the still-valid session for retry', async () => {
+  const { store, values } = setup({ token: 'old-session-token', username: 'employee' })
+  passwordFails = true
+  try {
+    await assert.rejects(store.changePassword({ oldPassword: 'wrong123', newPassword: 'def456' }), /原密码错误/)
+    assert.equal(store.token, 'old-session-token')
+    assert.equal(values.get('token'), 'old-session-token')
+  } finally { passwordFails = false }
+})
+
+test('business failure to revoke logout does not report a cleared session', async () => {
+  const { store, values } = setup({ token: 'old-session-token', username: 'employee' })
+  logoutBusinessFails = true
+  try {
+    await assert.rejects(store.logout(), /会话撤销失败/)
+    assert.equal(store.token, 'old-session-token')
+    assert.equal(values.get('token'), 'old-session-token')
+  } finally { logoutBusinessFails = false }
 })

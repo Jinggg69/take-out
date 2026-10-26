@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.io.Serializable;
 
@@ -26,6 +27,7 @@ public class EmployeeLoginVO implements Serializable {
     private String name;
 
     @ApiModelProperty("jwt令牌")
+    @ToString.Exclude
     private String token;
 
 }

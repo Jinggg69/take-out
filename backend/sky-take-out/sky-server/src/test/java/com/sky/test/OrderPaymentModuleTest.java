@@ -10,6 +10,9 @@ import com.sky.controller.user.OrderController;
 import com.sky.dto.OrdersSubmitDTO;
 import com.sky.handler.GlobalExceptionHandler;
 import com.sky.interceptor.JwtTokenAdminInterceptor;
+import com.sky.mapper.AdminSessionMapper;
+import com.sky.mapper.EmployeeMapper;
+import com.sky.service.AdminSessionService;
 import com.sky.interceptor.JwtTokenUserInterceptor;
 import com.sky.mapper.*;
 import com.sky.properties.JwtProperties;
@@ -80,7 +83,7 @@ class OrderPaymentModuleTest {
         context.setServletContext(new MockServletContext());
         context.register(WebMvcConfiguration.class, OrderController.class, OrderServiceImpl.class,
                 GlobalExceptionHandler.class, JwtTokenUserInterceptor.class, JwtTokenAdminInterceptor.class,
-                PaymentTestConfiguration.class, WebSocketServer.class);
+                PaymentTestConfiguration.class, WebSocketServer.class, AdminSessionService.class);
         context.refresh();
         mapServer = MockRestServiceServer.bindTo(context.getBean(RestTemplate.class)).build();
         mapServer.expect(ExpectedCount.between(0, Integer.MAX_VALUE),
@@ -92,6 +95,9 @@ class OrderPaymentModuleTest {
                     .withSuccess(response, MediaType.APPLICATION_JSON).createResponse(request);
         });
         jdbc = new JdbcTemplate(context.getBean(DataSource.class));
+        jdbc.execute("create table employee (id bigint primary key, username varchar(32), password varchar(64), status int)");
+        jdbc.execute("insert into employee values (1,'order-test-admin','fixture-hash',1)");
+        jdbc.execute("create table admin_session (session_id varchar(36) primary key, employee_id bigint, expires_at bigint)");
         jdbc.execute("create table orders (id bigint auto_increment primary key, number varchar(50), "
                 + "status int not null, user_id bigint not null, address_book_id bigint not null, "
                 + "order_time timestamp not null, checkout_time timestamp, pay_method int not null, "
@@ -483,8 +489,7 @@ class OrderPaymentModuleTest {
     }
 
     private String adminToken() {
-        return JwtUtil.createJWT(JWT_SECRET, 60000,
-                new HashMap<>(Collections.singletonMap(JwtClaimsConstant.EMP_ID, 1L)));
+        return context.getBean(AdminSessionService.class).issue(context.getBean(EmployeeMapper.class).getById(1L));
     }
 
     @Test
@@ -580,6 +585,8 @@ class OrderPaymentModuleTest {
             config.setCacheEnabled(false);
             config.addMapper(UserMapper.class);
             config.addMapper(AddressBookMapper.class);
+            config.addMapper(EmployeeMapper.class);
+            config.addMapper(AdminSessionMapper.class);
             factory.setConfiguration(config);
             factory.setPlugins(new PageInterceptor());
             factory.setMapperLocations(new ClassPathResource("mapper/OrderMapper.xml"),
@@ -592,6 +599,8 @@ class OrderPaymentModuleTest {
         @Bean ShoppingCartMapper shoppingCartMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(ShoppingCartMapper.class); }
         @Bean AddressBookMapper addressBookMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(AddressBookMapper.class); }
         @Bean UserMapper userMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(UserMapper.class); }
+        @Bean EmployeeMapper employeeMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(EmployeeMapper.class); }
+        @Bean AdminSessionMapper adminSessionMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(AdminSessionMapper.class); }
         @Bean TestWeChatPayUtil weChatPayUtil() { return new TestWeChatPayUtil(); }
         @Bean RestTemplate mapRestTemplate() { return new RestTemplate(); }
         @Bean DeliveryRangeService deliveryRangeService(RestTemplate client) {
@@ -615,6 +624,7 @@ class OrderPaymentModuleTest {
             properties.setUserTokenName("authentication");
             properties.setAdminSecretKey(JWT_SECRET);
             properties.setAdminTokenName("token");
+            properties.setAdminTtl(60000L);
             return properties;
         }
     }

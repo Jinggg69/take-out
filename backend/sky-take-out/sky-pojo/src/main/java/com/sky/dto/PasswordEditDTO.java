@@ -1,6 +1,7 @@
 package com.sky.dto;
 
 import lombok.Data;
+import lombok.ToString;
 
 import java.io.Serializable;
 
@@ -11,9 +12,11 @@ public class PasswordEditDTO implements Serializable {
     private Long empId;
 
     //旧密码
+    @ToString.Exclude
     private String oldPassword;
 
     //新密码
+    @ToString.Exclude
     private String newPassword;
 
 }

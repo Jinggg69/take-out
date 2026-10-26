@@ -35,6 +35,9 @@ logging:
         mapper: debug
         service: info
         controller: info
+    # Do not expose credential hashes or session identifiers as SQL parameters.
+    com.sky.mapper.EmployeeMapper: info
+    com.sky.mapper.AdminSessionMapper: info
 
 sky:
   shop:

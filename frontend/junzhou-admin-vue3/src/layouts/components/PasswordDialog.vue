@@ -2,12 +2,15 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElMessage } from 'element-plus'
 import FormFeedback from '@/components/FormFeedback.vue'
-import { authApi } from '@/api'
+import { useUserStore } from '@/stores'
+import { useRouter } from 'vue-router'
 import { validatePasswordChange } from '@/utils/auth-validation'
 import type { FieldErrors, PasswordForm } from '@/utils/auth-validation'
 import { errorMessage } from '@/utils/error-message'
 
 const visible = defineModel<boolean>({ required: true })
+const user = useUserStore()
+const router = useRouter()
 const form = reactive<PasswordForm>({ oldPassword: '', newPassword: '', affirmPassword: '' })
 const errors = ref<FieldErrors<PasswordForm>>({})
 const saving = ref(false)
@@ -31,10 +34,11 @@ async function save() {
   if (Object.keys(errors.value).length) { await nextTick(); feedback.value?.focus(); return }
   saving.value = true
   try {
-    const { data } = await authApi.editPassword({ oldPassword: form.oldPassword, newPassword: form.newPassword })
-    if (String(data.code) !== '1') throw new Error(data.msg || '密码修改失败，请重试')
-    ElMessage.success('密码修改成功')
+    await user.changePassword({ oldPassword: form.oldPassword, newPassword: form.newPassword })
+    Object.assign(form, { oldPassword: '', newPassword: '', affirmPassword: '' })
+    ElMessage.success('密码修改成功，请重新登录')
     visible.value = false
+    await router.replace('/login')
   } catch (error) {
     message.value = errorMessage(error, '密码修改失败，请检查网络后重试')
     await nextTick(); feedback.value?.focus()

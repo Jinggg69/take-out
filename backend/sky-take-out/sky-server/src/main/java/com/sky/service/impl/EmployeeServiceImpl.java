@@ -16,12 +16,14 @@ import com.sky.exception.AccountNotFoundException;
 import com.sky.exception.PasswordErrorException;
 import com.sky.exception.PasswordEditFailedException;
 import com.sky.mapper.EmployeeMapper;
+import com.sky.mapper.AdminSessionMapper;
 import com.sky.result.PageResult;
 import com.sky.service.EmployeeService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.nio.charset.StandardCharsets;
@@ -32,7 +34,11 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Autowired
     private EmployeeMapper employeeMapper;
 
+    @Autowired
+    private AdminSessionMapper adminSessionMapper;
+
     @Override
+    @Transactional
     public void editPassword(PasswordEditDTO input) {
         Long employeeId = BaseContext.getCurrentId();
         if (employeeId == null || input == null
@@ -49,6 +55,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (employeeMapper.updatePassword(employeeId, oldHash, newHash) != 1) {
             throw new PasswordEditFailedException("原密码错误或账号不可用，请重试");
         }
+        adminSessionMapper.deleteByEmployeeId(employeeId);
     }
 
     /**
@@ -137,6 +144,7 @@ public class EmployeeServiceImpl implements EmployeeService {
      * @param id
      */
     @Override
+    @Transactional
     public void startOrStop(Integer status, Long id){
         // update employee set status = ? where id = ?
         Employee employee = Employee.builder()
@@ -144,6 +152,9 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .status(status)
                 .build();
         employeeMapper.update(employee);
+        if (StatusConstant.DISABLE.equals(status)) {
+            adminSessionMapper.deleteByEmployeeId(id);
+        }
     }
 
     /**

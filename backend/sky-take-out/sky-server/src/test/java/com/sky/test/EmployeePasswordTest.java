@@ -8,6 +8,8 @@ import com.sky.exception.PasswordErrorException;
 import com.sky.handler.GlobalExceptionHandler;
 import com.sky.interceptor.JwtTokenAdminInterceptor;
 import com.sky.mapper.EmployeeMapper;
+import com.sky.mapper.AdminSessionMapper;
+import com.sky.service.AdminSessionService;
 import com.sky.properties.JwtProperties;
 import com.sky.service.impl.EmployeeServiceImpl;
 import com.sky.utils.JwtUtil;
@@ -28,6 +30,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.util.DigestUtils;
 
@@ -58,6 +61,7 @@ class EmployeePasswordTest {
         source.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL");
         Configuration config = new Configuration(new Environment("test", new JdbcTransactionFactory(), source));
         config.setMapUnderscoreToCamelCase(true);
+        config.addMapper(AdminSessionMapper.class);
         try (InputStream xml = new ClassPathResource("mapper/EmployeeMapper.xml").getInputStream()) {
             new XMLMapperBuilder(xml, config, "mapper/EmployeeMapper.xml", config.getSqlFragments()).parse();
         }
@@ -67,12 +71,14 @@ class EmployeePasswordTest {
         jdbc.execute("create table employee (id bigint primary key, username varchar(32), name varchar(32), "
                 + "password varchar(64), phone varchar(32), sex varchar(2), id_number varchar(32), status int, "
                 + "create_time timestamp, update_time timestamp, create_user bigint, update_user bigint)");
+        jdbc.execute("create table admin_session (session_id varchar(36) primary key, employee_id bigint, expires_at bigint)");
         for (long id : new long[]{42, 84}) {
             jdbc.update("insert into employee (id, username, name, password, status, create_user, update_user) "
                     + "values (?, ?, ?, ?, 1, 99, 99)", id, "employee" + id, "Employee " + id, hash("Old123"));
         }
         service = new EmployeeServiceImpl();
         ReflectionTestUtils.setField(service, "employeeMapper", session.getMapper(EmployeeMapper.class));
+        ReflectionTestUtils.setField(service, "adminSessionMapper", session.getMapper(AdminSessionMapper.class));
         EmployeeController controller = new EmployeeController();
         ReflectionTestUtils.setField(controller, "employeeService", service);
         JwtProperties properties = new JwtProperties();
@@ -80,6 +86,9 @@ class EmployeePasswordTest {
         properties.setAdminSecretKey(SECRET);
         JwtTokenAdminInterceptor interceptor = new JwtTokenAdminInterceptor();
         ReflectionTestUtils.setField(interceptor, "jwtProperties", properties);
+        AdminSessionService sessions = new AdminSessionService();
+        ReflectionTestUtils.setField(sessions, "adminSessionMapper", session.getMapper(AdminSessionMapper.class));
+        ReflectionTestUtils.setField(interceptor, "adminSessionService", sessions);
         mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler())
                 .addInterceptors(interceptor).build();
     }
@@ -138,8 +147,8 @@ class EmployeePasswordTest {
     @Test
     void disabledOrMissingEmployeeCannotChangePassword() throws Exception {
         jdbc.update("update employee set status=0 where id=42");
-        change(42, "{\"oldPassword\":\"Old123\",\"newPassword\":\"New456\"}", 0);
-        change(999, "{\"oldPassword\":\"Old123\",\"newPassword\":\"New456\"}", 0);
+        request(42, "{\"oldPassword\":\"Old123\",\"newPassword\":\"New456\"}").andExpect(status().isUnauthorized());
+        request(999, "{\"oldPassword\":\"Old123\",\"newPassword\":\"New456\"}").andExpect(status().isUnauthorized());
         assertEquals(hash("Old123"), password(42));
     }
 
@@ -159,10 +168,18 @@ class EmployeePasswordTest {
     }
 
     private void change(long id, String body, int code) throws Exception {
-        String token = JwtUtil.createJWT(SECRET, 60000L,
-                new HashMap<>(Collections.<String, Object>singletonMap(JwtClaimsConstant.EMP_ID, id)));
-        mvc.perform(put(PATH).header("token", token).contentType(MediaType.APPLICATION_JSON).content(body))
+        request(id, body)
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(code));
+    }
+
+    private ResultActions request(long id, String body) throws Exception {
+        Map<String,Object> claims = new HashMap<>();
+        claims.put(JwtClaimsConstant.EMP_ID, id);
+        String sessionId = UUID.randomUUID().toString();
+        claims.put("jti", sessionId);
+        String token = JwtUtil.createJWT(SECRET, 60000L, claims);
+        jdbc.update("insert into admin_session values (?,?,?)", sessionId, id, System.currentTimeMillis()+60000);
+        return mvc.perform(put(PATH).header("token", token).contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
     private String password(long id) {

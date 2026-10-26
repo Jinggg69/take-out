@@ -9,6 +9,9 @@ import com.sky.handler.GlobalExceptionHandler;
 import com.sky.json.JacksonObjectMapper;
 import com.sky.properties.JwtProperties;
 import com.sky.service.EmployeeService;
+import com.sky.service.AdminSessionService;
+import java.util.HashMap;
+import java.util.Collections;
 import com.sky.utils.JwtUtil;
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.Test;
@@ -65,7 +68,10 @@ public class HttpClientTest {
         jwt.setAdminTtl(60000L);
         EmployeeController controller = new EmployeeController();
         ReflectionTestUtils.setField(controller, "employeeService", employees);
-        ReflectionTestUtils.setField(controller, "jwtProperties", jwt);
+        AdminSessionService sessions = mock(AdminSessionService.class);
+        when(sessions.issue(employee)).thenReturn(JwtUtil.createJWT(SECRET, 60000L,
+                new HashMap<>(Collections.singletonMap(JwtClaimsConstant.EMP_ID, 42L))));
+        ReflectionTestUtils.setField(controller, "adminSessionService", sessions);
 
         MvcResult result = mvc(controller).perform(post("/admin/employee/login")
                 .contentType(MediaType.APPLICATION_JSON)

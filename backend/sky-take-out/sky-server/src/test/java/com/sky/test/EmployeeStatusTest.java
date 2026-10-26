@@ -5,6 +5,7 @@ import com.sky.dto.EmployeeLoginDTO;
 import com.sky.entity.Employee;
 import com.sky.exception.AccountLockedException;
 import com.sky.mapper.EmployeeMapper;
+import com.sky.mapper.AdminSessionMapper;
 import com.sky.service.impl.EmployeeServiceImpl;
 import org.apache.ibatis.builder.xml.XMLMapperBuilder;
 import org.apache.ibatis.mapping.Environment;
@@ -47,6 +48,7 @@ class EmployeeStatusTest {
         Configuration configuration = new Configuration(new Environment(
                 "test", new JdbcTransactionFactory(), dataSource));
         configuration.setMapUnderscoreToCamelCase(true);
+        configuration.addMapper(AdminSessionMapper.class);
         try (InputStream xml = new ClassPathResource("mapper/EmployeeMapper.xml").getInputStream()) {
             new XMLMapperBuilder(xml, configuration, "mapper/EmployeeMapper.xml",
                     configuration.getSqlFragments()).parse();
@@ -59,6 +61,7 @@ class EmployeeStatusTest {
                 + "name varchar(32), password varchar(64), phone varchar(32), sex varchar(2), "
                 + "id_number varchar(32), status int, create_time timestamp, update_time timestamp, "
                 + "create_user bigint, update_user bigint)");
+        jdbc.execute("create table admin_session (session_id varchar(36) primary key, employee_id bigint, expires_at bigint)");
         String password = DigestUtils.md5DigestAsHex("123456".getBytes(StandardCharsets.UTF_8));
         for (long id = 1; id <= 2; id++) {
             jdbc.update("insert into employee values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -69,6 +72,7 @@ class EmployeeStatusTest {
         mapper = session.getMapper(EmployeeMapper.class);
         service = new EmployeeServiceImpl();
         ReflectionTestUtils.setField(service, "employeeMapper", mapper);
+        ReflectionTestUtils.setField(service, "adminSessionMapper", session.getMapper(AdminSessionMapper.class));
         EmployeeController controller = new EmployeeController();
         ReflectionTestUtils.setField(controller, "employeeService", service);
         mvc = MockMvcBuilders.standaloneSetup(controller).build();
