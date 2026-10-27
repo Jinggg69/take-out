@@ -29,11 +29,13 @@ public class Orders implements Serializable {
     public static final Integer CANCELLED = 6;
 
     /**
-     * 支付状态 0未支付 1已支付 2退款
+     * 支付状态 0未支付 1已支付 2已确认退款 3退款处理中 4退款异常/关闭
      */
     public static final Integer UN_PAID = 0;
     public static final Integer PAID = 1;
     public static final Integer REFUND = 2;
+    public static final Integer REFUND_PROCESSING = 3;
+    public static final Integer REFUND_FAILED = 4;
 
     private static final long serialVersionUID = 1L;
 
@@ -42,7 +44,7 @@ public class Orders implements Serializable {
     //订单号
     private String number;
 
-    //订单状态 1待付款 2待接单 3已接单 4派送中 5已完成 6已取消 7退款
+    //订单状态 1待付款 2待接单 3已接单 4派送中 5已完成 6已取消
     private Integer status;
 
     //下单用户id
@@ -60,7 +62,7 @@ public class Orders implements Serializable {
     //支付方式 1微信，2支付宝
     private Integer payMethod;
 
-    //支付状态 0未支付 1已支付 2退款
+    //支付状态 0未支付 1已支付 2已确认退款 3退款处理中 4退款异常/关闭
     private Integer payStatus;
 
     //实收金额
@@ -98,6 +100,14 @@ public class Orders implements Serializable {
 
     //送达时间
     private LocalDateTime deliveryTime;
+    // Actual start of dispatch; old orders without this value are never automatically completed.
+    private LocalDateTime dispatchTime;
+    private String wechatTransactionId;
+    private String refundStatus;
+    private LocalDateTime paymentCheckTime;
+    private String wechatTradeState;
+    private String clientRequestId;
+    private String submitFingerprint;
 
     //打包费
     private int packAmount;

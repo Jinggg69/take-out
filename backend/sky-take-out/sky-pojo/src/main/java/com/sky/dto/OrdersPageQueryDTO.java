@@ -26,5 +26,6 @@ public class OrdersPageQueryDTO implements Serializable {
     private LocalDateTime endTime;
 
     private Long userId;
+    private Boolean refundOnly;
 
 }

@@ -8,7 +8,7 @@ import DataState from '@/components/DataState.vue'
 import FormFeedback from '@/components/FormFeedback.vue'
 import { orderApi as api } from '@/api'
 import type { OrderAction, OrderId, OrderRecord, OrderStatistics } from '@/api/order'
-import { actionLabels, cancellationReasons, orderActions, orderMoney, orderReason, orderStatusLabel, orderTabs, rejectionReasons, shouldOpenNextOrder } from '@/utils/order'
+import { actionLabels, cancellationReasons, orderActions, orderMoney, orderReason, orderRefundLabel, orderStatusLabel, orderTabs, rejectionReasons, shouldOpenNextOrder } from '@/utils/order'
 import { errorMessage } from '@/utils/error-message'
 import { createOrderList } from './list-state'
 
@@ -257,14 +257,17 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
             min-width="190"
           />
           <ElTableColumn
-            v-if="state.status === 0"
+            v-if="[0, 5, 6].includes(state.status)"
             label="订单状态"
-            min-width="100"
+            min-width="160"
           >
             <template #default="{ row }">
               <ElTag :type="Number(row.status) === 6 ? 'danger' : Number(row.status) === 5 ? 'success' : 'warning'">
                 {{ orderStatusLabel(row.status) }}
               </ElTag>
+              <div v-if="orderRefundLabel(row)">
+                {{ orderRefundLabel(row) }}
+              </div>
             </template>
           </ElTableColumn>
           <ElTableColumn
@@ -432,6 +435,9 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
         </div>
         <dl class="order-detail-grid">
           <dt>下单时间</dt><dd>{{ detail.orderTime || '—' }}</dd>
+          <template v-if="orderRefundLabel(detail)">
+            <dt>退款状态</dt><dd>{{ orderRefundLabel(detail) }}</dd>
+          </template>
           <dt>用户名</dt><dd>{{ detail.consignee || detail.userName || '—' }}</dd>
           <dt>手机号</dt><dd>{{ detail.phone || '—' }}</dd>
           <dt>地址</dt><dd>{{ detail.address || '—' }}</dd>

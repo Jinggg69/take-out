@@ -1,6 +1,8 @@
 # Copy to application-dev.yml only if that local file does not already exist.
 # Values below are environment references, never real credentials.
 sky:
+  payment:
+    jobs-enabled: ${PAYMENT_JOBS_ENABLED:true}
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     host: ${DB_HOST:127.0.0.1}
@@ -30,5 +32,7 @@ sky:
     private-key-file-path: ${WECHAT_PRIVATE_KEY_FILE_PATH:}
     api-v3-key: ${WECHAT_API_V3_KEY:}
     we-chat-pay-cert-file-path: ${WECHAT_PAY_CERT_FILE_PATH:}
+    platform-public-key-id: ${WECHAT_PLATFORM_PUBLIC_KEY_ID:}
+    platform-public-key-file-path: ${WECHAT_PLATFORM_PUBLIC_KEY_FILE_PATH:}
     notify-url: ${WECHAT_NOTIFY_URL:}
     refund-notify-url: ${WECHAT_REFUND_NOTIFY_URL:}

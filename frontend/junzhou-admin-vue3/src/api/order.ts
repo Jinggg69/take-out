@@ -3,6 +3,7 @@ import type { ApiResult } from './types.ts'
 
 export type OrderId = string | number
 export type OrderAction = 'accept' | 'reject' | 'cancel' | 'delivery' | 'complete'
+export type RefundStatus = 'REQUESTED' | 'PROCESSING' | 'VERIFYING' | 'SUCCESS' | 'CLOSED' | 'ABNORMAL'
 export interface OrderItem { id?: OrderId; name: string; number: number; amount: number | string; dishFlavor?: string }
 export interface OrderRecord {
   id: OrderId; number: string; status: number | string; amount: number | string
@@ -11,6 +12,7 @@ export interface OrderRecord {
   cancelReason?: string; rejectionReason?: string; remark?: string; orderDishes?: string
   tablewareNumber?: number; tablewareStatus?: number; packAmount?: number | string; payMethod?: number
   orderDetailList?: OrderItem[]
+  payStatus?: number | string; refundStatus?: RefundStatus | string | null
 }
 export interface OrderQuery { page: number; pageSize: number; number?: string; phone?: string; beginTime?: string; endTime?: string; status?: number }
 export interface OrderPage { records: OrderRecord[]; total: number | string }

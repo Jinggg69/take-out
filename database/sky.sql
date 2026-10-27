@@ -1,7 +1,7 @@
 CREATE DATABASE  IF NOT EXISTS `sky_take_out` ;
 USE `sky_take_out`;
 
--- Initialization only. Existing databases use migrations/20261026_01_admin_session.sql.
+-- Initialization only. Existing databases use the additive scripts in migrations/.
 DROP TABLE IF EXISTS `admin_session`;
 CREATE TABLE `admin_session` (
   `session_id` varchar(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -192,8 +192,44 @@ CREATE TABLE `orders` (
   `pack_amount` int DEFAULT NULL COMMENT '打包费',
   `tableware_number` int DEFAULT NULL COMMENT '餐具数量',
   `tableware_status` tinyint(1) NOT NULL DEFAULT '1' COMMENT '餐具数量状态  1按餐量提供  0选择具体数量',
-  PRIMARY KEY (`id`)
+  `dispatch_time` datetime DEFAULT NULL COMMENT '开始配送时间',
+  `wechat_transaction_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `refund_status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `payment_check_time` datetime DEFAULT NULL,
+  `wechat_trade_state` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `client_request_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `submit_fingerprint` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_orders_number` (`number`),
+  UNIQUE KEY `uk_orders_wechat_transaction` (`wechat_transaction_id`),
+  UNIQUE KEY `uk_orders_user_request` (`user_id`, `client_request_id`),
+  KEY `idx_orders_payment_check` (`status`, `pay_status`, `payment_check_time`),
+  KEY `idx_orders_status_order_time` (`status`, `order_time`),
+  KEY `idx_orders_status_dispatch_time` (`status`, `dispatch_time`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb3 COLLATE=utf8_bin COMMENT='订单表';
+
+DROP TABLE IF EXISTS `refund_request`;
+CREATE TABLE `refund_request` (
+  `out_refund_no` varchar(64) NOT NULL,
+  `order_id` bigint NOT NULL,
+  `out_trade_no` varchar(50) NOT NULL,
+  `transaction_id` varchar(64) DEFAULT NULL,
+  `amount_fen` bigint NOT NULL,
+  `status` varchar(16) NOT NULL,
+  `query_only` tinyint NOT NULL DEFAULT '0',
+  `provider_refund_id` varchar(64) DEFAULT NULL,
+  `attempts` int NOT NULL DEFAULT '0',
+  `next_attempt_at` datetime NOT NULL,
+  `lease_until` datetime DEFAULT NULL,
+  `lease_token` varchar(36) DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `last_error` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`out_refund_no`),
+  UNIQUE KEY `uk_refund_request_order` (`order_id`),
+  UNIQUE KEY `uk_refund_request_provider` (`provider_refund_id`),
+  KEY `idx_refund_request_due` (`status`, `next_attempt_at`, `lease_until`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 DROP TABLE IF EXISTS `setmeal`;
 CREATE TABLE `setmeal` (
@@ -235,7 +271,8 @@ CREATE TABLE `shopping_cart` (
   `number` int NOT NULL DEFAULT '1' COMMENT '数量',
   `amount` decimal(10,2) NOT NULL COMMENT '金额',
   `create_time` datetime DEFAULT NULL COMMENT '创建时间',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `idx_shopping_cart_user` (`user_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb3 COLLATE=utf8_bin COMMENT='购物车';
 
 DROP TABLE IF EXISTS `user`;

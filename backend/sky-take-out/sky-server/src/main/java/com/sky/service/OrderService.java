@@ -36,10 +36,9 @@ public interface OrderService {
     OrderPaymentVO payment(OrdersPaymentDTO ordersPaymentDTO) throws Exception;
 
     /**
-     * 处理支付成功通知，更新支付状态或为已取消订单申请退款
-     * @param outTradeNo 商户订单号
+     * 分页查询当前用户退款相关订单（处理中、成功、异常及历史待核验）
      */
-    void paySuccess(String outTradeNo);
+    PageResult refundHistory(int page,int pageSize);
 
     /**
      * 分页查询当前用户的历史订单

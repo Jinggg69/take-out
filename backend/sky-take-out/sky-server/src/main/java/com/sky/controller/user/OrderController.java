@@ -34,6 +34,15 @@ public class OrderController {
     @Autowired
     private OrderService orderService;
 
+    @GetMapping("/queryOrdersCheckStatus")
+    @ApiOperation("查询当前用户的退款相关订单")
+    public Result<PageResult> refundHistory(@RequestParam(defaultValue="1") int page,
+                                          @RequestParam(defaultValue="10") int pageSize,
+                                          @RequestParam(defaultValue="2") Integer payStatus) {
+        if(!Integer.valueOf(2).equals(payStatus)) throw new com.sky.exception.OrderBusinessException("退款筛选参数错误");
+        return Result.success(orderService.refundHistory(page,pageSize));
+    }
+
     @GetMapping("/quote")
     @ApiOperation("获取当前用户购物车的结算报价")
     public Result<OrderQuoteVO> quote() {
@@ -120,7 +129,6 @@ public class OrderController {
     public Result<OrderPaymentVO> payment(@RequestBody OrdersPaymentDTO ordersPaymentDTO) throws Exception {
         log.info("订单支付：{}", ordersPaymentDTO);
         OrderPaymentVO orderPaymentVO = orderService.payment(ordersPaymentDTO);
-        log.info("生成预支付交易单：{}", orderPaymentVO);
         return Result.success(orderPaymentVO);
     }
 

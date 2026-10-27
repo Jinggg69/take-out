@@ -6,12 +6,27 @@ import com.sky.entity.Orders;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Mapper
 public interface OrderMapper {
+    @Select("select * from orders where user_id=#{userId} and client_request_id=#{requestId}")
+    Orders getBySubmission(@Param("userId") Long userId,@Param("requestId") String requestId);
+
+    @Select("select * from orders where status=6 and pay_status=0 "
+            + "and (wechat_trade_state is null or wechat_trade_state not in ('CLOSED','REVOKED','PAYERROR')) "
+            + "and (payment_check_time is null or payment_check_time<#{before}) "
+            + "order by coalesce(payment_check_time,order_time),id limit 20")
+    List<Orders> cancelledPaymentsToCheck(LocalDateTime before);
+
+    @Update("update orders set payment_check_time=#{now} where id=#{id}")
+    void recordPaymentCheck(@Param("id") Long id,@Param("now") LocalDateTime now);
+
+    @Update("update orders set wechat_trade_state=#{state},payment_check_time=#{now} where id=#{id} and status=6 and pay_status=0")
+    int markClosedPayment(@Param("id") Long id,@Param("state") String state,@Param("now") LocalDateTime now);
 
     /**
      * 插入订单数据

@@ -86,7 +86,7 @@
         <view class="order_but">
           <view v-if="isHandlePy" class="order_but_rit">正在处理…</view>
           <view v-else class="order_but_rit" @click="payOrderHandle()">
-            {{ quoteReady ? '去支付' : '刷新价格' }}
+            {{ pendingSubmission ? '重试确认订单' : quoteReady ? '去支付' : '刷新价格' }}
           </view>
         </view>
       </view>

@@ -27,7 +27,7 @@
                 <text class="time">{{ item.orderTime }}</text>
                 <!-- 支付状态 -->
                 <text class="type status" :class="{ status: item.status == 2 }">{{
-                  statusWord(item.status)
+                  statusWord(item)
                 }}</text>
               </view>
               <!-- 点菜的内容 -->
@@ -88,6 +88,7 @@ import {
 import { mapMutations } from "vuex";
 import Empty from "@/components/empty/empty";
 import { statusWord, getOvertime } from "@/utils/index.js";
+import { orderRefundLabel } from "@/utils/order-refund";
 export default {
   components: {
     Empty,
@@ -171,8 +172,8 @@ export default {
         });
       return { count: count, total: total };
     },
-    statusWord(status) {
-      return statusWord(status);
+    statusWord(order) {
+      return orderRefundLabel(order) || statusWord(order.status);
     },
     getOvertime(time) {
       return getOvertime(time);

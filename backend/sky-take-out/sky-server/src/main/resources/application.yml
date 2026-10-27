@@ -38,8 +38,14 @@ logging:
     # Do not expose credential hashes or session identifiers as SQL parameters.
     com.sky.mapper.EmployeeMapper: info
     com.sky.mapper.AdminSessionMapper: info
+    com.sky.mapper.OrderMapper: info
+    com.sky.mapper.RefundRequestMapper: info
+    org.apache.http.wire: 'OFF'
+    org.apache.http.headers: 'OFF'
 
 sky:
+  payment:
+    jobs-enabled: ${PAYMENT_JOBS_ENABLED:true}
   shop:
     # 实际门店完整地址，例如：北京市海淀区上地十街10号
     address: ${SHOP_ADDRESS:}
@@ -72,5 +78,7 @@ sky:
     private-key-file-path: ${WECHAT_PRIVATE_KEY_FILE_PATH:}
     api-v3-key: ${WECHAT_API_V3_KEY:}
     we-chat-pay-cert-file-path: ${WECHAT_PAY_CERT_FILE_PATH:}
+    platform-public-key-id: ${WECHAT_PLATFORM_PUBLIC_KEY_ID:}
+    platform-public-key-file-path: ${WECHAT_PLATFORM_PUBLIC_KEY_FILE_PATH:}
     notify-url: ${WECHAT_NOTIFY_URL:}
     refund-notify-url: ${WECHAT_REFUND_NOTIFY_URL:}

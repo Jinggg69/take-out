@@ -1,14 +1,13 @@
 package com.sky.task;
 
-import com.sky.entity.Orders;
-import com.sky.mapper.OrderMapper;
+import com.sky.mapper.OrderMaintenanceMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.List;
 
 /**
  * 定时任务类，定时处理订单状态
@@ -17,8 +16,18 @@ import java.util.List;
 @Slf4j
 public class OrderTask {
 
+    private final OrderMaintenanceMapper orderMaintenanceMapper;
+    private final Clock clock;
+
     @Autowired
-    private OrderMapper orderMapper;
+    public OrderTask(OrderMaintenanceMapper orderMaintenanceMapper) {
+        this(orderMaintenanceMapper, Clock.systemDefaultZone());
+    }
+
+    public OrderTask(OrderMaintenanceMapper orderMaintenanceMapper, Clock clock) {
+        this.orderMaintenanceMapper = orderMaintenanceMapper;
+        this.clock = clock;
+    }
 
     /**
      * 定时处理订单状态
@@ -26,15 +35,9 @@ public class OrderTask {
      */
     @Scheduled(cron = "0 * * * * ?") // 每分钟执行一次
     public void processTimeoutOrders() {
-        log.info("定时处理订单状态");
-        LocalDateTime time = LocalDateTime.now().minusMinutes(15);
-        List<Orders> ordersList = orderMapper.getByStausAndOrderTimeLT(Orders.UN_PAID, time);
-        for (Orders order : ordersList) {
-            order.setStatus(Orders.CANCELLED);
-            order.setCancelReason("订单超时未支付，系统自动取消");
-            order.setCancelTime(LocalDateTime.now());
-            orderMapper.update(order);
-        }
+        LocalDateTime now = LocalDateTime.now(clock);
+        int cancelled = orderMaintenanceMapper.cancelUnpaidBefore(now.minusMinutes(15), now);
+        log.info("定时取消超时未支付订单:{}", cancelled);
     }
 
     /**
@@ -43,12 +46,8 @@ public class OrderTask {
      */
     @Scheduled(cron = "0 0 1 * * ?") // 每天凌晨一点执行一次
     public void processDeliveryOrders() {
-        log.info("定时处理配送中的订单:{}", LocalDateTime.now());
-        LocalDateTime time = LocalDateTime.now().minusHours(1);
-        List<Orders> ordersList = orderMapper.getByStausAndOrderTimeLT(Orders.DELIVERY_IN_PROGRESS, time);
-        for (Orders order : ordersList) {
-            order.setStatus(Orders.COMPLETED);
-            orderMapper.update(order);
-        }
+        LocalDateTime now = LocalDateTime.now(clock);
+        int completed = orderMaintenanceMapper.completeDeliveriesBefore(now.minusHours(1), now);
+        log.info("定时完成配送订单:{}", completed);
     }
 }

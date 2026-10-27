@@ -26,6 +26,7 @@ import DishDetail from "./components/dishDetail.vue" //菜品详情
 import DishInfo from "./components/dishInfo.vue" //菜品信息
 import dayjs from "@/utils/lib/dayjs.min.js";
 import { DELIVERY_FEE } from '../../utils/order-pricing'
+import { createClientRequestId, isDefiniteSubmissionFailure } from '../../utils/order-submission'
 export default {
 	data() {
 		return {
@@ -90,7 +91,9 @@ export default {
 			weeks: [],
 			scrollTop: 0,
 			addressList: [],
-			isHandlePy: false
+			isHandlePy: false,
+			pendingSubmission: null,
+			submissionComplete: false
 		}
 	},
 	computed: {
@@ -341,15 +344,15 @@ export default {
 		},
 		// 支付下单
 		async payOrderHandle() {
-			if (this.isHandlePy) return
-			if (!this.address) {
+			if (this.isHandlePy || this.submissionComplete) return
+			if (!this.pendingSubmission && !this.address) {
 				uni.showToast({
 					title: '请选择收货地址',
 					icon: 'none',
 				})
 				return false
 			}
-			if (!this.quoteReady) {
+			if (!this.pendingSubmission && !this.quoteReady) {
 				this.isHandlePy = true
 				try {
 					const ready = await this.refreshQuote()
@@ -357,13 +360,14 @@ export default {
 				} finally { this.isHandlePy = false }
 				return false
 			}
-			if (this.orderPriceError || !Number.isFinite(this.orderDishPrice) || this.orderDishNumber <= 0) {
+			if (!this.pendingSubmission && (this.orderPriceError || !Number.isFinite(this.orderDishPrice) || this.orderDishNumber <= 0)) {
 				uni.showToast({ title: this.orderPriceError || '购物车为空，请先选择菜品', icon: 'none' })
 				return false
 			}
 			this.isHandlePy = true
 			try {
-				const params = {
+				const params = this.pendingSubmission || {
+					clientRequestId: createClientRequestId(),
 					payMethod: 1,
 					addressBookId: this.addressBookId,
 					remark: this.remark,
@@ -377,8 +381,11 @@ export default {
 					shopId: this.shopInfo().shopId,
 					deliveryFee: this.orderDeliveryFee
 				}
+				this.pendingSubmission = params
 				const res = await submitOrderSubmit(params)
-				if (res.code === 1 || res.code === 200) {
+				if (res && [1, 200].includes(Number(res.code)) && res.data && res.data.id) {
+					this.submissionComplete = true
+					this.pendingSubmission = null
 					this.setOrderData(res.data)
 					this.setRemark('')
 
@@ -389,9 +396,14 @@ export default {
 					throw res
 				}
 			} catch (error) {
-				// Refresh for a new user confirmation; never retry creating an order automatically.
-				await this.refreshQuote()
-				uni.showToast({ title: (error && error.msg) || '下单失败，请稍后重试', icon: 'none' })
+				if (isDefiniteSubmissionFailure(error)) {
+					this.pendingSubmission = null
+					await this.refreshQuote()
+					uni.showToast({ title: (error && error.msg) || '下单失败，请确认后重试', icon: 'none' })
+				} else {
+					// The server may already have created the order. Only an explicit click retries this exact body.
+					uni.showToast({ title: '下单结果待确认，请点击重试以查询原订单', icon: 'none' })
+				}
 			} finally {
 				this.isHandlePy = false
 			}

@@ -13,6 +13,8 @@ function load(file, dependencies = {}) {
   const context = vm.createContext({ module: { exports: {} }, ...dependencies })
   const pricing = path.join(root, 'utils/order-pricing.js')
   if (fs.existsSync(pricing)) vm.runInContext(fs.readFileSync(pricing, 'utf8').replace(/export /g, ''), context)
+  const submission = path.join(root, 'utils/order-submission.js')
+  if (fs.existsSync(submission)) vm.runInContext(fs.readFileSync(submission, 'utf8').replace(/export /g, ''), context)
   vm.runInContext(withoutImports(source).replace('export default', 'module.exports ='), context)
   return context.module.exports
 }
@@ -202,3 +204,105 @@ test('并发获取报价共享请求，完成后可再次刷新', async () => {
   await page.refreshQuote()
   assert.equal(quoteRequests.length, 2)
 })
+
+test('网络结果不明时显式重试复用首次请求，即使购物车已清空、地址备注价格已变', async () => {
+  let attempt = 0
+  const { page, store, requests, navigation, quoteRequests, toasts } = createCheckout(async () => {
+    if (++attempt === 1) throw { errMsg: 'request:fail timeout' }
+    return { code: 1, data: { id: 71 } }
+  })
+  await page.payOrderHandle()
+  assert.equal(requests.length, 1)
+  assert.match(requests[0].clientRequestId, /^[a-f0-9]{32}$|^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i)
+  const firstBody = JSON.stringify(requests[0])
+  assert.equal(quoteRequests.length, 0)
+  assert.ok(toasts.some(value => value.title.includes('重试')))
+  store.state.orderListData = []
+  page.computOrderInfo()
+  page.quoteReady = false
+  page.address = ''
+  page.remark = '重试不能修改已发送内容'
+  await page.payOrderHandle()
+  assert.equal(JSON.stringify(requests[1]), firstBody)
+  assert.equal(navigation.length, 1)
+  assert.equal(navigation[0].url, '/pages/pay/index?orderId=71')
+  assert.equal(page.pendingSubmission, null)
+  await page.payOrderHandle()
+  assert.equal(requests.length, 2)
+  assert.equal(navigation.length, 1)
+})
+
+test('HTTP 5xx即使携带code0也保留提交意图，不刷新报价、不自动重试', async () => {
+  const { page, requests, quoteRequests } = createCheckout(async () => { throw { statusCode: 503, code: 0, msg: '网关错误' } })
+  await page.payOrderHandle()
+  const firstBody = JSON.stringify(requests[0])
+  assert.equal(quoteRequests.length, 0)
+  await page.payOrderHandle()
+  assert.equal(JSON.stringify(requests[1]), firstBody)
+  assert.equal(requests.length, 2)
+})
+
+test('非2xx/4xx响应的code0不证明下单失败，继续保留相同提交意图', async () => {
+  const { page, requests, quoteRequests } = createCheckout(async () => { throw { statusCode: 302, code: 0 } })
+  await page.payOrderHandle()
+  assert.equal(quoteRequests.length, 0)
+  await page.payOrderHandle()
+  assert.equal(requests[0].clientRequestId, requests[1].clientRequestId)
+})
+
+test('价格变化明确失败后放弃旧key，确认新报价创建新提交意图', async () => {
+  let attempt = 0
+  const { page, requests, quoteRequests } = createCheckout(async () => {
+    if (++attempt === 1) return { code: 0, msg: '商品价格已变化' }
+    return { code: 1, data: { id: 72 } }
+  })
+  await page.payOrderHandle()
+  assert.equal(page.pendingSubmission, null)
+  assert.equal(quoteRequests.length, 1)
+  await page.payOrderHandle()
+  assert.notEqual(requests[1].clientRequestId, requests[0].clientRequestId)
+})
+
+test('快速双击只发送一次，成功后再次点击也不会重建或再次导航', async () => {
+  let complete
+  let attempt = 0
+  const { page, requests, navigation } = createCheckout(() => ++attempt === 1
+    ? new Promise(resolve => { complete = resolve }) : Promise.resolve({ code: 1, data: { id: 74 } }))
+  const first = page.payOrderHandle()
+  await page.payOrderHandle()
+  assert.equal(requests.length, 1)
+  complete({ code: 1, data: { id: 73 } })
+  await first
+  await page.payOrderHandle()
+  assert.equal(requests.length, 1)
+  assert.equal(navigation.length, 1)
+})
+
+test('格式异常的成功响应没有订单号时保留原请求，防止误导航或新建订单', async () => {
+  let attempt = 0
+  const { page, requests, navigation, quoteRequests } = createCheckout(async () => ++attempt === 1
+    ? { code: 1, data: null } : { code: 1, data: { id: 74 } })
+  await page.payOrderHandle()
+  assert.equal(navigation.length, 0)
+  assert.equal(quoteRequests.length, 0)
+  await page.payOrderHandle()
+  assert.equal(requests[0].clientRequestId, requests[1].clientRequestId)
+  assert.equal(navigation.length, 1)
+})
+
+for (const statusCode of [401, 422]) {
+  test(`HTTP${statusCode}明确拒绝后释放旧请求，可修正后新建意图`, async () => {
+    let attempt = 0
+    const { page, requests, quoteRequests } = createCheckout(async () => {
+      if (++attempt === 1) throw { statusCode, msg: '请求被拒绝' }
+      return { code: 1, data: { id: 75 } }
+    })
+    await page.payOrderHandle()
+    assert.equal(page.pendingSubmission, null)
+    assert.equal(quoteRequests.length, 1)
+    page.remark = '修正后提交'
+    await page.payOrderHandle()
+    assert.notEqual(requests[0].clientRequestId, requests[1].clientRequestId)
+    assert.equal(requests[1].remark, '修正后提交')
+  })
+}

@@ -24,16 +24,22 @@ export function request({url='', params={}, method='GET'}) {
 			method: method,
 			success: (res) => {
 				const { data } = res
-				if (data.code == 200 || data.code === 1) {
+				if (res.statusCode >= 400) {
+					reject({ ...(data && typeof data === 'object' ? data : {}), statusCode: res.statusCode,
+						msg: (data && data.msg) || (res.statusCode === 401 ? '请重新登录' : '请求失败，请稍后重试') })
+					return
+				}
+				if (data && (data.code == 200 || data.code === 1)) {
 					// store.commit('setLodding', false)
 					resolve(res.data)
 				}else{
 					// store.commit('setLodding', true)
-					reject(res.data)
+					reject({ ...(data && typeof data === 'object' ? data : {}), statusCode: res.statusCode,
+						msg: (data && data.msg) || '响应数据异常，请稍后重试' })
 				}
 			},
 			fail: (err) => {
-				const error = {data:{msg:err.data}}
+				const error = { msg: '网络请求失败，请稍后重试', errMsg: err.errMsg, data: { msg: err.data } }
 				// store.commit('setLodding', true)
 				reject(error)
 			}

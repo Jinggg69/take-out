@@ -7,6 +7,7 @@ import com.sky.dto.OrdersRejectionDTO;
 import com.sky.result.PageResult;
 import com.sky.result.Result;
 import com.sky.service.OrderService;
+import com.sky.service.RefundWorker;
 import com.sky.vo.OrderStatisticsVO;
 import com.sky.vo.OrderVO;
 import io.swagger.annotations.Api;
@@ -25,6 +26,14 @@ import org.springframework.web.bind.annotation.*;
 public class OrderController {
     @Autowired
     private OrderService orderService;
+    @Autowired private RefundWorker refundWorker;
+
+    @PostMapping("/{id}/refund/retry")
+    @ApiOperation("按原退款单号核验或重试已有退款")
+    public Result<Void> retryRefund(@PathVariable Long id) {
+        refundWorker.retry(id);
+        return Result.success();
+    }
 
     /**
      * 订单条件分页查询

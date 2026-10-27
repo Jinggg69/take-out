@@ -3,11 +3,10 @@
   <view>
     <view class="box">
       <view class="orderInfoTip">
-        <view class="tit">{{ statusWord(orderDetailsData.status) }} <text class="smw"
+        <view class="tit">{{ statusWord(orderDetailsData) }} <text class="smw"
             v-if="timeout && orderDetailsData.status === 1"> ( 已经超时)</text></view>
-        <view class="rejectionReason" v-if="orderDetailsData.status === 7">
-          <text v-if="orderDetailsData.payStatus === 1 || orderDetailsData.payStatus === 2">退款成功</text>
-          <text v-else-if="orderDetailsData.cancelReason">{{ orderDetailsData.cancelReason }}</text>
+        <view class="rejectionReason" v-if="orderDetailsData.status === 6">
+          <text v-if="orderDetailsData.cancelReason">{{ orderDetailsData.cancelReason }}</text>
           <text v-else-if="orderDetailsData.rejectionReason">{{ orderDetailsData.rejectionReason }}</text>
         </view>
         <view v-if="!timeout && orderDetailsData.status === 1">
@@ -37,8 +36,7 @@
           <button class="new_btn" type="default" @click="handleRefund('center')" v-if="orderDetailsData.status == 5">
             申请退款
           </button>
-          <button class="new_btn" type="default" @click="oneMoreOrder(orderDetailsData.id)"
-            v-if="orderDetailsData.status !== 7">
+          <button class="new_btn" type="default" @click="oneMoreOrder(orderDetailsData.id)">
             再来一单
           </button>
         </view>
@@ -48,16 +46,15 @@
       <view class="icon newIcon"></view>
       请在15分钟内完成支付，超时将自动取消。
     </view>
-    <view class="box timeTip" v-if="orderDetailsData.status === 6 && orderDetailsData.payStatus === 2">
+    <view class="box timeTip" v-if="refundLabel">
       <view class="icon moneyIcon"></view>
-      您的订单已
-      <text>退款成功</text>
-      。
+      <text>{{ refundLabel }}</text>
     </view>
   </view>
 </template>
 <script>
 import { statusWord } from "@/utils/index";
+import { orderRefundLabel } from "@/utils/order-refund";
 export default {
   // 获取父级传的数据
   props: {
@@ -77,12 +74,14 @@ export default {
       default: "",
     },
   },
+  computed: {
+    refundLabel() { return orderRefundLabel(this.orderDetailsData); },
+  },
   methods: {
     // 地址选择
-    statusWord(status) {
-      this.$emit("statusWord", status);
-      // return errr;
-      return statusWord(status);
+    statusWord(order) {
+      this.$emit("statusWord", order.status);
+      return orderRefundLabel(order) || statusWord(order.status);
     },
     //取消订单
     handleCancel(type, obj) {

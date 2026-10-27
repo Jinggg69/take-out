@@ -28,4 +28,6 @@ public class OrdersSubmitDTO implements Serializable {
     private Integer packAmount;
     //用户确认的总金额；服务端重新计价，金额变化时拒绝提交并要求重新确认
     private BigDecimal amount;
+    // Stable identifier for one checkout intent; optional for legacy clients.
+    private String clientRequestId;
 }

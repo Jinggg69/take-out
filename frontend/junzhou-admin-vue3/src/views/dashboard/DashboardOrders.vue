@@ -7,7 +7,7 @@ import DataState from '@/components/DataState.vue'
 import FormFeedback from '@/components/FormFeedback.vue'
 import { orderApi as api } from '@/api'
 import type { OrderAction, OrderId, OrderRecord, OrderStatistics } from '@/api/order'
-import { actionLabels, cancellationReasons, orderActions, orderMoney, orderReason, orderStatusLabel, rejectionReasons, shouldOpenNextOrder } from '@/utils/order'
+import { actionLabels, cancellationReasons, orderActions, orderMoney, orderReason, orderRefundLabel, orderStatusLabel, rejectionReasons, shouldOpenNextOrder } from '@/utils/order'
 import { errorMessage } from '@/utils/error-message'
 import { createOrderList } from '../order/list-state'
 
@@ -312,6 +312,9 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
         </div>
         <dl class="order-detail-grid">
           <dt>下单时间</dt><dd>{{ detail.orderTime || '—' }}</dd>
+          <template v-if="orderRefundLabel(detail)">
+            <dt>退款状态</dt><dd>{{ orderRefundLabel(detail) }}</dd>
+          </template>
           <dt>用户名</dt><dd>{{ detail.consignee || detail.userName || '—' }}</dd>
           <dt>手机号</dt><dd>{{ detail.phone || '—' }}</dd>
           <dt>地址</dt><dd>{{ detail.address || '—' }}</dd>

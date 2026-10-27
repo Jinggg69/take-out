@@ -1,117 +1,68 @@
 package com.sky.controller.notify;
 
 import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
-import com.sky.properties.WeChatProperties;
-import com.sky.service.OrderService;
-import com.wechat.pay.contrib.apache.httpclient.util.AesUtil;
+import com.sky.exception.OrderBusinessException;
+import com.sky.payment.VerifiedNotification;
+import com.sky.service.PaymentLifecycleService;
+import com.sky.service.RefundTransactionService;
+import com.sky.service.WeChatNotificationService;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.http.entity.ContentType;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Collections;
 
-/**
- * 支付回调相关接口。
- */
 @RestController
 @RequestMapping("/notify")
 @Slf4j
 public class PayNotifyController {
-    @Autowired
-    private OrderService orderService;
-    @Autowired
-    private WeChatProperties weChatProperties;
+    @Autowired private WeChatNotificationService notifications;
+    @Autowired private PaymentLifecycleService payments;
+    @Autowired private RefundTransactionService refunds;
 
-    /**
-     * 接收微信支付成功通知，处理订单后向微信返回结果
-     * @param request 支付通知请求
-     * @param response 支付通知应答
-     * @throws Exception 通知读取、解密或应答异常
-     */
-    @RequestMapping("/paySuccess")
-    public void paySuccessNotify(HttpServletRequest request, HttpServletResponse response) throws Exception {
-        String body = readData(request);
-        log.info("支付成功回调：{}", body);
-
-        String plainText = decryptData(body);
-        log.info("解密后的文本：{}", plainText);
-
-        JSONObject jsonObject = JSON.parseObject(plainText);
-        String outTradeNo = jsonObject.getString("out_trade_no");
-        String transactionId = jsonObject.getString("transaction_id");
-        log.info("商户平台订单号：{}", outTradeNo);
-        log.info("微信支付交易号：{}", transactionId);
-
+    @PostMapping("/paySuccess")
+    public void paySuccessNotify(HttpServletRequest request,HttpServletResponse response) throws Exception {
+        handle(request,response,false);
+    }
+    @PostMapping("/refundSuccess")
+    public void refundNotify(HttpServletRequest request,HttpServletResponse response) throws Exception {
+        handle(request,response,true);
+    }
+    private void handle(HttpServletRequest request,HttpServletResponse response,boolean refund) throws Exception {
         try {
-            orderService.paySuccess(outTradeNo);
-        } catch (Exception ex) {
-            // 回调处理失败必须返回非 2xx，避免全局业务异常处理器返回 HTTP 200。
-            log.error("支付通知处理失败，订单号：{}", outTradeNo, ex);
-            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"code\":\"FAIL\",\"message\":\"处理失败，请稍后重试\"}");
-            return;
-        }
-        responseToWeixin(response);
-    }
-
-    /**
-     * 读取微信支付通知请求体
-     * @param request 支付通知请求
-     * @return 通知请求体JSON字符串
-     * @throws Exception 请求体读取异常
-     */
-    private String readData(HttpServletRequest request) throws Exception {
-        BufferedReader reader = request.getReader();
-        StringBuilder result = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            if (result.length() > 0) {
-                result.append("\n");
+            ByteArrayOutputStream buffer=new ByteArrayOutputStream(); byte[] part=new byte[4096]; int count;
+            while((count=request.getInputStream().read(part))!=-1) {
+                if(buffer.size()+count>1024*1024) throw new IllegalArgumentException("Notification is too large");
+                buffer.write(part,0,count);
             }
-            result.append(line);
-        }
-        return result.toString();
+            VerifiedNotification notice=notifications.verify(new String(buffer.toByteArray(),StandardCharsets.UTF_8),
+                    request.getHeader("Wechatpay-Timestamp"),request.getHeader("Wechatpay-Nonce"),
+                    request.getHeader("Wechatpay-Serial"),request.getHeader("Wechatpay-Signature"));
+            if(refund) {
+                String event=notice.getEventType();
+                if(!("REFUND.SUCCESS".equals(event)||"REFUND.CLOSED".equals(event)||"REFUND.ABNORMAL".equals(event))
+                        || !event.substring(7).equals(notice.getResource().getString("refund_status"))) throw new IllegalArgumentException("Unexpected refund event");
+                refunds.notifyResult(notice.getResource());
+            } else {
+                if(!"TRANSACTION.SUCCESS".equals(notice.getEventType())) throw new IllegalArgumentException("Unexpected payment event");
+                payments.confirmPayment(notice.getResource());
+            }
+            response.setStatus(200); response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write(JSON.toJSONString(Collections.singletonMap("code","SUCCESS")));
+        } catch(SecurityException ex) { failure(response,401); }
+        catch(IllegalStateException ex) { log.warn("支付通知配置未就绪"); failure(response,503); }
+        catch(DataAccessException ex) { log.warn("支付通知存储暂不可用"); failure(response,503); }
+        catch(OrderBusinessException | IllegalArgumentException ex) { failure(response,400); }
+        catch(Exception ex) { log.warn("支付通知处理暂不可用"); failure(response,500); }
     }
-
-    /**
-     * 使用微信API v3密钥解密支付通知中的业务数据
-     * @param body 通知请求体JSON字符串
-     * @return 解密后的业务数据
-     * @throws Exception 通知数据解密异常
-     */
-    private String decryptData(String body) throws Exception {
-        JSONObject resultObject = JSON.parseObject(body);
-        JSONObject resource = resultObject.getJSONObject("resource");
-        String ciphertext = resource.getString("ciphertext");
-        String nonce = resource.getString("nonce");
-        String associatedData = resource.getString("associated_data");
-
-        AesUtil aesUtil = new AesUtil(weChatProperties.getApiV3Key().getBytes(StandardCharsets.UTF_8));
-        return aesUtil.decryptToString(associatedData.getBytes(StandardCharsets.UTF_8),
-                nonce.getBytes(StandardCharsets.UTF_8), ciphertext);
-    }
-
-    /**
-     * 向微信返回支付通知处理成功的应答
-     * @param response 支付通知应答
-     * @throws Exception 应答写入异常
-     */
-    private void responseToWeixin(HttpServletResponse response) throws Exception {
-        response.setStatus(HttpServletResponse.SC_OK);
-        Map<String, String> result = new HashMap<>();
-        result.put("code", "SUCCESS");
-        result.put("message", "SUCCESS");
-        response.setHeader("Content-type", ContentType.APPLICATION_JSON.toString());
-        response.getOutputStream().write(JSON.toJSONString(result).getBytes(StandardCharsets.UTF_8));
-        response.flushBuffer();
+    private void failure(HttpServletResponse response,int status) throws Exception {
+        response.setStatus(status); response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"code\":\"FAIL\",\"message\":\"通知未完成处理\"}");
     }
 }

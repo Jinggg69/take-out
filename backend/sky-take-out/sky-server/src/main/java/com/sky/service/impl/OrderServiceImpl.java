@@ -20,8 +20,6 @@ import com.sky.entity.ShoppingCart;
 import com.sky.entity.User;
 import com.sky.exception.AddressBookBusinessException;
 import com.sky.exception.OrderBusinessException;
-import com.sky.exception.RefundPendingException;
-import com.sky.exception.ShoppingCartBusinessException;
 import com.sky.mapper.AddressBookMapper;
 import com.sky.mapper.OrderDetailMapper;
 import com.sky.mapper.OrderMapper;
@@ -33,6 +31,8 @@ import com.sky.service.OrderService;
 import com.sky.service.OrderPricingService;
 import com.sky.service.CartAccessService;
 import com.sky.service.ShoppingCartService;
+import com.sky.service.RefundTransactionService;
+import com.sky.service.OrderSubmissionIdentity;
 import com.sky.utils.WeChatPayUtil;
 import com.sky.vo.OrderPaymentVO;
 import com.sky.vo.OrderStatisticsVO;
@@ -51,6 +51,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * 订单业务实现类
@@ -59,6 +60,7 @@ import java.util.Objects;
 public class OrderServiceImpl implements OrderService {
     @Autowired private CartAccessService cartAccessService;
     @Autowired private ShoppingCartService shoppingCartService;
+    @Autowired private RefundTransactionService refundTransactions;
     @Autowired
     private OrderPricingService orderPricingService;
     @Autowired
@@ -95,8 +97,18 @@ public class OrderServiceImpl implements OrderService {
                 || ordersSubmitDTO.getAmount().signum() < 0) {
             throw new OrderBusinessException("请确认有效的订单金额后重新提交");
         }
+        if(ordersSubmitDTO.getPayMethod()!=1) throw new OrderBusinessException("当前仅支持微信支付");
+        String fingerprint=OrderSubmissionIdentity.fingerprint(ordersSubmitDTO);
         //处理各种业务异常（地址簿为空，购物车数据为空）
         Long userId = cartAccessService.lockCurrentCart();
+        if(ordersSubmitDTO.getClientRequestId()!=null) {
+            Orders existing=orderMapper.getBySubmission(userId,ordersSubmitDTO.getClientRequestId());
+            if(existing!=null) {
+                if(!fingerprint.equals(existing.getSubmitFingerprint())) throw new OrderBusinessException("该请求标识已用于不同订单内容");
+                return OrderSubmitVO.builder().id(existing.getId()).orderTime(existing.getOrderTime())
+                        .orderNumber(existing.getNumber()).orderAmount(existing.getAmount()).build();
+            }
+        }
         AddressBook addressBook = addressBookMapper.getById(ordersSubmitDTO.getAddressBookId());
         if (addressBook == null || userId == null || !userId.equals(addressBook.getUserId())) {
             throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_IS_NULL);
@@ -125,7 +137,9 @@ public class OrderServiceImpl implements OrderService {
         order.setOrderTime(LocalDateTime.now());
         order.setPayStatus(Orders.UN_PAID);
         order.setStatus(Orders.PENDING_PAYMENT);
-        order.setNumber(String.valueOf(System.currentTimeMillis()));
+        order.setNumber(UUID.randomUUID().toString().replace("-",""));
+        order.setClientRequestId(ordersSubmitDTO.getClientRequestId());
+        order.setSubmitFingerprint(fingerprint);
         order.setPhone(addressBook.getPhone());
         order.setAddress(address);
         order.setConsignee(addressBook.getConsignee());
@@ -187,43 +201,6 @@ public class OrderServiceImpl implements OrderService {
         OrderPaymentVO vo = jsonObject.toJavaObject(OrderPaymentVO.class);
         vo.setPackageStr(jsonObject.getString("package"));
         return vo;
-    }
-
-    /**
-     * 处理支付成功通知，更新支付状态或为已取消订单申请退款
-     * @param outTradeNo 商户订单号
-     */
-    @Override
-    @Transactional(noRollbackFor = RefundPendingException.class)
-    public void paySuccess(String outTradeNo) {
-        Orders order = orderMapper.getByNumberForUpdate(outTradeNo);
-        if (order == null) {
-            throw new OrderBusinessException(MessageConstant.ORDER_NOT_FOUND);
-        }
-        if (Orders.CANCELLED.equals(order.getStatus()) && !Orders.REFUND.equals(order.getPayStatus())) {
-            // 已取消订单的支付通知仍需记账和退款，不能直接忽略。
-            Orders update = Orders.builder().id(order.getId()).checkoutTime(LocalDateTime.now()).build();
-            try {
-                requestRefund(order);
-                update.setPayStatus(Orders.REFUND);
-            } catch (RefundPendingException ex) {
-                update.setPayStatus(Orders.PAID);
-                orderMapper.update(update);
-                throw ex;
-            }
-            orderMapper.update(update);
-        } else {
-            // 重复通知不能将后续业务状态改回待接单。
-            orderMapper.markPaid(outTradeNo);
-        }
-
-        //通过websocket向客户端浏览器发送消息
-        Map<String, Object> map = new HashMap<>();
-        map.put("type", 1); //1表示来电提醒，2表示客户催单
-        map.put("orderId", order.getId());
-        map.put("content", "订单号:" + outTradeNo);
-        String json = JSON.toJSONString(map);
-        webSocketServer.sendToAllClient(json);
     }
 
     /**
@@ -338,7 +315,7 @@ public class OrderServiceImpl implements OrderService {
      * @param id 订单id
      */
     @Override
-    @Transactional(noRollbackFor = RefundPendingException.class)
+    @Transactional
     public void userCancelById(Long id) {
         Orders order = requireOrder(id, true);
         requireUserOrder(order);
@@ -392,7 +369,7 @@ public class OrderServiceImpl implements OrderService {
      * @param ordersRejectionDTO 拒单信息
      */
     @Override
-    @Transactional(noRollbackFor = RefundPendingException.class)
+    @Transactional
     public void rejection(OrdersRejectionDTO ordersRejectionDTO) {
         requireReason(ordersRejectionDTO.getRejectionReason());
         Orders order = requireOrder(ordersRejectionDTO.getId(), true);
@@ -407,7 +384,7 @@ public class OrderServiceImpl implements OrderService {
      * @param ordersCancelDTO 订单取消信息
      */
     @Override
-    @Transactional(noRollbackFor = RefundPendingException.class)
+    @Transactional
     public void cancel(OrdersCancelDTO ordersCancelDTO) {
         requireReason(ordersCancelDTO.getCancelReason());
         Orders order = requireOrder(ordersCancelDTO.getId(), true);
@@ -425,58 +402,27 @@ public class OrderServiceImpl implements OrderService {
      * @param rejectionReason 拒单原因
      */
     private void cancelOrder(Orders order, String cancelReason, String rejectionReason) {
-        boolean retry = isRefundPending(order);
-        Orders update = Orders.builder().id(order.getId()).status(Orders.CANCELLED)
+        boolean retry=Orders.CANCELLED.equals(order.getStatus());
+        Orders update=Orders.builder().id(order.getId()).status(Orders.CANCELLED)
                 .cancelReason(retry ? order.getCancelReason() : cancelReason)
                 .rejectionReason(retry ? order.getRejectionReason() : rejectionReason)
                 .cancelTime(retry ? order.getCancelTime() : LocalDateTime.now()).build();
-        if (Orders.PAID.equals(order.getPayStatus())) {
-            try {
-                requestRefund(order);
-                update.setPayStatus(Orders.REFUND);
-            } catch (RefundPendingException ex) {
-                // 网络超时不代表退款未受理；提交取消意图，阻止后续接单派送。
-                orderMapper.update(update);
-                throw ex;
-            }
-        }
         orderMapper.update(update);
+        order.setStatus(Orders.CANCELLED);
+        if(!Orders.UN_PAID.equals(order.getPayStatus())) refundTransactions.request(order);
     }
 
-    /**
-     * 判断订单是否已取消但退款结果仍待确认
-     * @param order 订单信息
-     * @return 是否需要继续确认退款结果
-     */
     private boolean isRefundPending(Orders order) {
-        return Orders.CANCELLED.equals(order.getStatus()) && Orders.PAID.equals(order.getPayStatus());
+        return Orders.CANCELLED.equals(order.getStatus());
     }
 
-    /**
-     * 使用固定退款单号申请全额退款，区分受理成功、明确失败和结果待确认
-     * @param order 订单信息
-     */
-    private void requestRefund(Orders order) {
-        JSONObject response;
-        try {
-            // 固定退款单号，使结果不确定时的重试仍对应同一笔退款。
-            response = JSONObject.parseObject(weChatPayUtil.refund(order.getNumber(),
-                    order.getNumber(), order.getAmount(), order.getAmount()));
-        } catch (Exception ex) {
-            throw new RefundPendingException("订单已取消，退款结果待确认，请稍后重试取消退款");
-        }
-        String status = response == null ? null : response.getString("status");
-        if ("SUCCESS".equals(status) || "PROCESSING".equals(status)) {
-            return;
-        }
-        String code = response == null ? null : response.getString("code");
-        if ("CLOSED".equals(status) || "ABNORMAL".equals(status)
-                || (code != null && !code.trim().isEmpty())) {
-            throw new OrderBusinessException("退款申请失败，请稍后重试");
-        }
-        throw new RefundPendingException("订单已取消，退款结果待确认，请稍后重试取消退款");
+    @Override
+    public PageResult refundHistory(int page,int pageSize) {
+        if(BaseContext.getCurrentId()==null) throw new OrderBusinessException(MessageConstant.USER_NOT_LOGIN);
+        OrdersPageQueryDTO query=new OrdersPageQueryDTO();
+        query.setPage(page); query.setPageSize(pageSize); query.setUserId(BaseContext.getCurrentId()); query.setRefundOnly(true);
+        return conditionSearch(query);
     }
-
     /**
      * 派送订单
      * @param id 订单id
@@ -486,7 +432,7 @@ public class OrderServiceImpl implements OrderService {
     public void delivery(Long id) {
         Orders order = requireOrder(id, true);
         requireStatus(order, Orders.CONFIRMED);
-        orderMapper.update(Orders.builder().id(id).status(Orders.DELIVERY_IN_PROGRESS).build());
+        orderMapper.update(Orders.builder().id(id).status(Orders.DELIVERY_IN_PROGRESS).dispatchTime(LocalDateTime.now()).build());
     }
 
     /**

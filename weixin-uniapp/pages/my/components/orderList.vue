@@ -10,7 +10,7 @@
           <text class="time">{{ item.orderTime }} {{ item.id }}</text>
           <!-- 支付状态 -->
           <text class="type status" :class="{ status: item.status == 2 }">{{
-            statusWord(item.status)
+            statusWord(item)
           }}</text>
         </view>
         <!-- 点菜的内容 -->
@@ -49,6 +49,7 @@
 <script>
 import ReachBottom from "@/components/reach-bottom/reach-bottom.vue";
 import { statusWord } from "@/utils/index";
+import { orderRefundLabel } from "@/utils/order-refund";
 export default {
   // 获取父级传的数据
   props: {
@@ -83,7 +84,7 @@ export default {
     goDetail(id) {
       this.$emit("goDetail", id);
     },
-    //  1待付款 2待接单 3 已接单 4 派送中 5 已完成 6 已取消 7 退款 
+    //  1待付款 2待接单 3 已接单 4 派送中 5 已完成 6 已取消
     numes(list) {
       let count = 0;
       let total = 0;
@@ -103,9 +104,9 @@ export default {
       this.$emit("getOvertime", time);
     },
     // 支付状态
-    statusWord(status, time) {
-      this.$emit("statusWord", { status: status, time: time });
-      return statusWord(status, time);
+    statusWord(order, time) {
+      this.$emit("statusWord", { status: order.status, time: time });
+      return orderRefundLabel(order) || statusWord(order.status, time);
     },
   },
 };
