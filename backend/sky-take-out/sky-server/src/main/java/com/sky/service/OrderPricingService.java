@@ -50,43 +50,48 @@ public class OrderPricingService {
                     || (row.getDishId() == null) == (row.getSetmealId() == null)) {
                 throw new OrderBusinessException("购物车商品或数量异常，请返回菜单检查");
             }
-            ShoppingCart item = new ShoppingCart();
-            BeanUtils.copyProperties(row, item);
-            if (row.getDishId() != null) {
-                Dish dish = requireAvailableDish(row.getDishId());
-                item.setAmount(requirePrice(dish.getPrice()));
-                item.setName(dish.getName());
-                item.setImage(dish.getImage());
-            } else {
-                Setmeal setmeal = setmealMapper.getById(row.getSetmealId());
-                if (setmeal == null || !StatusConstant.ENABLE.equals(setmeal.getStatus())) {
-                    throw new OrderBusinessException("购物车中的套餐已停售或删除，请返回菜单检查");
-                }
-                List<SetmealDish> components = setmealDishMapper.getBySetmealId(setmeal.getId());
-                if (components == null || components.isEmpty()) {
-                    throw new OrderBusinessException("套餐组成异常，请返回菜单检查");
-                }
-                for (SetmealDish component : components) {
-                    if (component == null || component.getDishId() == null
-                            || component.getCopies() == null || component.getCopies() <= 0) {
-                        throw new OrderBusinessException("套餐组成异常，请返回菜单检查");
-                    }
-                    requireAvailableDish(component.getDishId());
-                }
-                item.setAmount(requirePrice(setmeal.getPrice()));
-                item.setName(setmeal.getName());
-                item.setImage(setmeal.getImage());
-            }
+            ShoppingCart item = refreshItem(row);
             goods = goods.add(item.getAmount().multiply(BigDecimal.valueOf(item.getNumber())));
             count += item.getNumber();
             items.add(item);
         }
-        // Existing mini-program policy: one yuan per purchased unit, including one setmeal unit.
         BigDecimal total = goods.add(BigDecimal.valueOf(count)).add(DELIVERY_FEE);
         if (total.compareTo(MAX_ORDER_AMOUNT) > 0) {
             throw new OrderBusinessException("订单金额超出允许范围，请减少商品数量");
         }
         return new OrderQuoteVO(items, goods, (int) count, DELIVERY_FEE, total);
+    }
+
+    /** Refresh current catalog details for checkout and cart additions. */
+    public ShoppingCart refreshItem(ShoppingCart row) {
+        ShoppingCart item = new ShoppingCart();
+        BeanUtils.copyProperties(row, item);
+        if (row.getDishId() != null) {
+            Dish dish = requireAvailableDish(row.getDishId());
+            item.setAmount(requirePrice(dish.getPrice()));
+            item.setName(dish.getName());
+            item.setImage(dish.getImage());
+        } else {
+            Setmeal setmeal = setmealMapper.getById(row.getSetmealId());
+            if (setmeal == null || !StatusConstant.ENABLE.equals(setmeal.getStatus())) {
+                throw new OrderBusinessException("购物车中的套餐已停售或删除，请返回菜单检查");
+            }
+            List<SetmealDish> components = setmealDishMapper.getBySetmealId(setmeal.getId());
+            if (components == null || components.isEmpty()) {
+                throw new OrderBusinessException("套餐组成异常，请返回菜单检查");
+            }
+            for (SetmealDish component : components) {
+                if (component == null || component.getDishId() == null
+                        || component.getCopies() == null || component.getCopies() <= 0) {
+                    throw new OrderBusinessException("套餐组成异常，请返回菜单检查");
+                }
+                requireAvailableDish(component.getDishId());
+            }
+            item.setAmount(requirePrice(setmeal.getPrice()));
+            item.setName(setmeal.getName());
+            item.setImage(setmeal.getImage());
+        }
+        return item;
     }
 
     private Dish requireAvailableDish(Long id) {

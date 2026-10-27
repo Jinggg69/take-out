@@ -19,6 +19,8 @@ import com.sky.properties.JwtProperties;
 import com.sky.properties.WeChatProperties;
 import com.sky.service.OrderService;
 import com.sky.service.OrderPricingService;
+import com.sky.service.CartAccessService;
+import com.sky.service.impl.ShoppingCartServiceImpl;
 import com.sky.service.DeliveryRangeService;
 import com.sky.service.impl.DeliveryRangeServiceImpl;
 import com.sky.properties.ShopProperties;
@@ -64,6 +66,11 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.UUID;
+import java.util.concurrent.*;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import com.sky.dto.ShoppingCartDTO;
+import com.sky.service.ShoppingCartService;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -78,6 +85,8 @@ class OrderPaymentModuleTest {
     private MockMvc mvc;
     private int deliveryDistance = 1000;
     private MockRestServiceServer mapServer;
+    private CountDownLatch deliveryEntered;
+    private CountDownLatch deliveryContinue;
 
     @BeforeEach
     void setUp() {
@@ -86,11 +95,18 @@ class OrderPaymentModuleTest {
         context.setServletContext(new MockServletContext());
         context.register(WebMvcConfiguration.class, OrderController.class, OrderServiceImpl.class,
                 GlobalExceptionHandler.class, JwtTokenUserInterceptor.class, JwtTokenAdminInterceptor.class,
-                PaymentTestConfiguration.class, WebSocketServer.class, AdminSessionService.class, OrderPricingService.class);
+                PaymentTestConfiguration.class, WebSocketServer.class, AdminSessionService.class, OrderPricingService.class,
+                CartAccessService.class, ShoppingCartServiceImpl.class);
         context.refresh();
         mapServer = MockRestServiceServer.bindTo(context.getBean(RestTemplate.class)).build();
         mapServer.expect(ExpectedCount.between(0, Integer.MAX_VALUE),
                 org.springframework.test.web.client.match.MockRestRequestMatchers.anything()).andRespond(request -> {
+            if (!request.getURI().getPath().contains("geocoding") && deliveryEntered != null) {
+                deliveryEntered.countDown();
+                try {
+                    if (!deliveryContinue.await(15, TimeUnit.SECONDS)) throw new java.io.IOException("Delivery test gate timed out");
+                } catch (InterruptedException ex) { Thread.currentThread().interrupt(); throw new java.io.IOException(ex); }
+            }
             String response = request.getURI().getPath().contains("geocoding")
                     ? "{\"status\":0,\"result\":{\"location\":{\"lat\":40,\"lng\":116}}}"
                     : "{\"status\":0,\"result\":{\"routes\":[{\"distance\":" + deliveryDistance + "}]}}";
@@ -421,12 +437,12 @@ class OrderPaymentModuleTest {
         jdbc.update("insert into order_detail (id, name, order_id, dish_id, dish_flavor, number, amount) "
                 + "values (100, '历史菜品', 10, 5, '微辣', 3, 12.50)");
         jdbc.update("insert into order_detail (id, name, order_id, setmeal_id, number, amount) "
-                + "values (101, '历史套餐', 10, 7, 1, 30.00)");
+                  + "values (101, '历史套餐', 10, 8, 1, 30.00)");
         mvc.perform(post("/user/order/repetition/10").header("authentication", token()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(1));
         assertEquals(4, jdbc.queryForObject("select count(*) from shopping_cart", Integer.class));
         assertEquals(3, jdbc.queryForObject("select number from shopping_cart where dish_flavor='微辣'", Integer.class));
-        assertEquals(42L, jdbc.queryForObject("select user_id from shopping_cart where setmeal_id=7", Long.class));
+        assertEquals(42L, jdbc.queryForObject("select user_id from shopping_cart where setmeal_id=8", Long.class));
         assertEquals(0, jdbc.queryForObject("select count(*) from shopping_cart where id in (100,101)", Integer.class));
         assertEquals(1, jdbc.queryForObject("select count(*) from orders", Integer.class));
     }
@@ -437,6 +453,92 @@ class OrderPaymentModuleTest {
         mvc.perform(post("/user/order/repetition/11").header("authentication", token()))
                 .andExpect(jsonPath("$.code").value(0));
         assertEquals(2, jdbc.queryForObject("select count(*) from shopping_cart", Integer.class));
+    }
+
+    @Test
+    void repetitionMergesTheExistingSkuWithCurrentCatalogDetails() throws Exception {
+        jdbc.update("insert into order_detail (name,order_id,dish_id,number,amount) values ('历史名称',10,5,3,0.01)");
+        for(int i=0;i<2;i++) {
+            mvc.perform(post("/user/order/repetition/10").header("authentication",token())).andExpect(jsonPath("$.code").value(1));
+        }
+        assertEquals(2,jdbc.queryForObject("select count(*) from shopping_cart",Integer.class));
+        assertEquals(8,jdbc.queryForObject("select number from shopping_cart where user_id=42",Integer.class));
+        assertEquals("当前菜品",jdbc.queryForObject("select name from shopping_cart where user_id=42",String.class));
+        assertEquals(new BigDecimal("12.50"),jdbc.queryForObject("select amount from shopping_cart where user_id=42",BigDecimal.class));
+    }
+
+    @Test
+    void anUnavailableReorderLineRollsBackEarlierCartChanges() throws Exception {
+        jdbc.update("insert into order_detail (id,name,order_id,dish_id,number,amount) values (100,'可售历史菜品',10,5,3,0.01)");
+        jdbc.update("insert into order_detail (id,name,order_id,setmeal_id,number,amount) values (101,'已删除套餐',10,999,1,30.00)");
+        mvc.perform(post("/user/order/repetition/10").header("authentication",token())).andExpect(jsonPath("$.code").value(0));
+        assertEquals(2,jdbc.queryForObject("select number from shopping_cart where user_id=42",Integer.class));
+        assertEquals("测试菜品",jdbc.queryForObject("select name from shopping_cart where user_id=42",String.class));
+        assertEquals(2,jdbc.queryForObject("select count(*) from shopping_cart",Integer.class));
+    }
+
+    @Test
+    void anAddDuringCheckoutWaitsAndRemainsInTheNewCart() throws Exception {
+        deliveryEntered=new CountDownLatch(1); deliveryContinue=new CountDownLatch(1);
+        ExecutorService pool=Executors.newFixedThreadPool(2);
+        try {
+            Future<?> submitted=pool.submit(() -> {
+                BaseContext.setCurrentId(42L);
+                try { context.getBean(OrderService.class).orderSubmit(submission("33.00")); }
+                finally { BaseContext.removeCurrentId(); }
+            });
+            assertTrue(deliveryEntered.await(10,TimeUnit.SECONDS));
+            Future<?> added=pool.submit(() -> {
+                BaseContext.setCurrentId(42L);
+                try { ShoppingCartDTO input=new ShoppingCartDTO(); input.setDishId(5L); context.getBean(ShoppingCartService.class).add(input); }
+                finally { BaseContext.removeCurrentId(); }
+            });
+            assertBlocked(added);
+            deliveryContinue.countDown();
+            submitted.get(10,TimeUnit.SECONDS); added.get(10,TimeUnit.SECONDS);
+            assertEquals(1,jdbc.queryForObject("select count(*) from shopping_cart where user_id=42",Integer.class));
+            assertEquals(1,jdbc.queryForObject("select number from shopping_cart where user_id=42",Integer.class));
+            assertEquals(2,jdbc.queryForObject("select number from order_detail",Integer.class));
+            assertEquals(1,jdbc.queryForObject("select count(*) from shopping_cart where user_id=84",Integer.class));
+        } finally { deliveryContinue.countDown(); pool.shutdownNow(); assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS)); }
+    }
+
+    @Test
+    void checkoutReadsTheCartAfterThePrecedingWriterCommits() throws Exception {
+        ExecutorService pool=Executors.newSingleThreadExecutor();
+        CompletableFuture<Void> submitted=new CompletableFuture<>();
+        try {
+            new TransactionTemplate(context.getBean(PlatformTransactionManager.class)).execute(status -> {
+                jdbc.queryForObject("select id from `user` where id=42 for update",Long.class);
+                pool.submit(() -> {
+                    BaseContext.setCurrentId(42L);
+                    try { context.getBean(OrderService.class).orderSubmit(submission("46.50")); submitted.complete(null); }
+                    catch(Throwable ex) { submitted.completeExceptionally(ex); }
+                    finally { BaseContext.removeCurrentId(); }
+                });
+                assertBlocked(submitted);
+                jdbc.update("update shopping_cart set number=3 where id=1");
+                return null;
+            });
+            submitted.get(10,TimeUnit.SECONDS);
+            assertEquals(0,jdbc.queryForObject("select count(*) from shopping_cart where user_id=42",Integer.class));
+            assertEquals(3,jdbc.queryForObject("select number from order_detail",Integer.class));
+            assertEquals(new BigDecimal("46.50"),jdbc.queryForObject("select amount from orders where id<>10",BigDecimal.class));
+        } finally { pool.shutdownNow(); assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS)); }
+    }
+
+    private OrdersSubmitDTO submission(String amount) {
+        OrdersSubmitDTO input=new OrdersSubmitDTO(); input.setAddressBookId(101L); input.setAmount(new BigDecimal(amount)); input.setPayMethod(1);
+        return input;
+    }
+
+    private void assertBlocked(Future<?> operation) {
+        long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(5);
+        while(System.nanoTime()<deadline && !operation.isDone()) {
+            if(jdbc.queryForObject("select count(*) from information_schema.sessions where blocker_id is not null",Integer.class)>0) return;
+            Thread.yield();
+        }
+        fail("Cart operation must wait for the preceding user's transaction");
     }
 
     @Test
@@ -741,7 +843,12 @@ class OrderPaymentModuleTest {
             config.addMapper(DishMapper.class);
             config.addMapper(SetmealMapper.class);
             factory.setConfiguration(config);
-            factory.setPlugins(new PageInterceptor());
+            // Match production's eager PageHelper setup before requests run concurrently.
+            PageInterceptor pageInterceptor = new PageInterceptor();
+            java.util.Properties pageProperties = new java.util.Properties();
+            pageProperties.setProperty("helperDialect", "mysql");
+            pageInterceptor.setProperties(pageProperties);
+            factory.setPlugins(pageInterceptor);
             factory.setMapperLocations(new ClassPathResource("mapper/OrderMapper.xml"),
                     new ClassPathResource("mapper/OrderDetailMapper.xml"), new ClassPathResource("mapper/ShoppingCartMapper.xml"),
                     new ClassPathResource("mapper/SetmealDishMapper.xml"));

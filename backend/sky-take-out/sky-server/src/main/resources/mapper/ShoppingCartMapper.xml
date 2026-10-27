@@ -6,15 +6,14 @@
     <select id="list" resultType="com.sky.entity.ShoppingCart">
         select * from shopping_cart
         <where>
-            <if test="userId != null">
-                and user_id = #{userId}
-            </if>
+            user_id = #{userId}
             <if test="dishId != null">
-                and dish_id = #{dishId}
+                and dish_id = #{dishId} and setmeal_id is null
             </if>
             <if test="setmealId != null">
-                and setmeal_id = #{setmealId}
+                and setmeal_id = #{setmealId} and dish_id is null
             </if>
         </where>
+        order by id
     </select>
 </mapper>

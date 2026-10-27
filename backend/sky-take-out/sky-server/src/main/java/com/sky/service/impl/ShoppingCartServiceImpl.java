@@ -1,109 +1,105 @@
 package com.sky.service.impl;
 
-import com.sky.context.BaseContext;
 import com.sky.dto.ShoppingCartDTO;
-import com.sky.entity.Dish;
-import com.sky.entity.Setmeal;
 import com.sky.entity.ShoppingCart;
-import com.sky.mapper.DishMapper;
-import com.sky.mapper.SetmealMapper;
+import com.sky.exception.ShoppingCartBusinessException;
 import com.sky.mapper.ShoppingCartMapper;
-import com.sky.service.DishService;
+import com.sky.service.CartAccessService;
+import com.sky.service.OrderPricingService;
 import com.sky.service.ShoppingCartService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class ShoppingCartServiceImpl implements ShoppingCartService {
-    @Autowired
-    private ShoppingCartMapper shoppingCartMapper;
-    @Autowired
-    private DishMapper dishMapper;
-    @Autowired
-    private SetmealMapper setmealMapper;
-    /**
-     * 添加购物车
-     *
-     * @param shoppingCartDTO 购物车数据传输对象
-     */
-    public void add(ShoppingCartDTO shoppingCartDTO) {
-        //判断当前要加入购物车中的商品是否已经存在
-        ShoppingCart shoppingCart = new ShoppingCart();
-        BeanUtils.copyProperties(shoppingCartDTO, shoppingCart);
-        Long userId = BaseContext.getCurrentId();
-        shoppingCart.setUserId(userId);
-        List<ShoppingCart> shoppingCartList = shoppingCartMapper.list(shoppingCart);
-        //如果存在，则数量加1
-        if (shoppingCartList != null && !shoppingCartList.isEmpty()) {
-            ShoppingCart cart = shoppingCartList.get(0);
-            cart.setNumber(cart.getNumber() + 1);
-            shoppingCartMapper.update(cart);
-        }
-        //如果不存在，则添加到购物车中
-        else {
-            //判断本次添加到购物车的是菜品还是套餐
-            if (shoppingCart.getDishId() != null) {
-                Dish dish = dishMapper.getById(shoppingCart.getDishId());
-                shoppingCart.setName(dish.getName());
-                shoppingCart.setImage(dish.getImage());
-                shoppingCart.setAmount(dish.getPrice());
-            }else {
-                Setmeal setmeal = setmealMapper.getById(shoppingCart.getSetmealId());
-                shoppingCart.setName(setmeal.getName());
-                shoppingCart.setImage(setmeal.getImage());
-                shoppingCart.setAmount(setmeal.getPrice());
+    @Autowired private ShoppingCartMapper shoppingCartMapper;
+    @Autowired private CartAccessService cartAccessService;
+    @Autowired private OrderPricingService orderPricingService;
+
+    @Override
+    @Transactional
+    public void add(ShoppingCartDTO input) { add(input, 1); }
+
+    @Override
+    @Transactional
+    public void add(ShoppingCartDTO input, int quantity) {
+        ShoppingCart key = itemKey(input);
+        if (quantity <= 0) throw new ShoppingCartBusinessException("商品数量必须大于零");
+        key.setUserId(cartAccessService.lockCurrentCart());
+        key.setNumber(quantity);
+        ShoppingCart fresh = orderPricingService.refreshItem(key);
+        ShoppingCart existing = consolidate(key);
+        if (existing == null) {
+            fresh.setCreateTime(LocalDateTime.now());
+            shoppingCartMapper.insert(fresh);
+        } else {
+            if (shoppingCartMapper.increment(existing.getId(), key.getUserId(), quantity) != 1) {
+                throw new ShoppingCartBusinessException("购物车数量超出范围，请减少商品");
             }
-            shoppingCart.setNumber(1);
-            shoppingCart.setCreateTime(LocalDateTime.now());
-            shoppingCartMapper.insert(shoppingCart);
+            fresh.setId(existing.getId());
+            if (shoppingCartMapper.refreshItem(fresh) != 1) throw new ShoppingCartBusinessException("购物车已变化，请重试");
         }
     }
 
-    /**
-     * 查询购物车列表
-     *
-     * @return 购物车列表
-     */
+    @Override
     public List<ShoppingCart> showShoppingCart() {
-        Long userId = BaseContext.getCurrentId();
-        ShoppingCart shoppingCart = new ShoppingCart();
-        shoppingCart.setUserId(userId);
-        return shoppingCartMapper.list(shoppingCart);
+        return shoppingCartMapper.list(ShoppingCart.builder().userId(cartAccessService.currentUserId()).build());
     }
 
-    /**
-     * 清空购物车
-     */
-    public void clean() {
-        Long userId = BaseContext.getCurrentId();
-        shoppingCartMapper.delete(userId);
-    }
+    @Override
+    @Transactional
+    public void clean() { shoppingCartMapper.delete(cartAccessService.lockCurrentCart()); }
 
-    /**
-     * 减少购物车中商品的数量
-     *
-     * @param shoppingCartDTO 购物车数据传输对象
-     */
-    public void sub(ShoppingCartDTO shoppingCartDTO) {
-        ShoppingCart shoppingCart = new ShoppingCart();
-        BeanUtils.copyProperties(shoppingCartDTO, shoppingCart);
-        Long userId = BaseContext.getCurrentId();
-        shoppingCart.setUserId(userId);
-        List<ShoppingCart> shoppingCartList = shoppingCartMapper.list(shoppingCart);
-        if (shoppingCartList != null && !shoppingCartList.isEmpty()) {
-            ShoppingCart cart = shoppingCartList.get(0);
-            if (cart.getNumber() > 1) {
-                cart.setNumber(cart.getNumber() - 1);
-                shoppingCartMapper.update(cart);
-            } else {
-                //如果数量为1，则删除该商品
-                shoppingCartMapper.deleteByIdAndUserId(cart.getId(), userId);
-            }
+    @Override
+    @Transactional
+    public void sub(ShoppingCartDTO input) {
+        ShoppingCart key = itemKey(input);
+        key.setUserId(cartAccessService.lockCurrentCart());
+        ShoppingCart existing = consolidate(key);
+        if (existing == null) return;
+        if (shoppingCartMapper.decrement(existing.getId(), key.getUserId()) == 0) {
+            shoppingCartMapper.deleteSingle(existing.getId(), key.getUserId());
         }
     }
+
+    private ShoppingCart itemKey(ShoppingCartDTO input) {
+        if (input == null || (input.getDishId() == null) == (input.getSetmealId() == null)
+                || (input.getDishId() != null && input.getDishId() <= 0)
+                || (input.getSetmealId() != null && input.getSetmealId() <= 0)) {
+            throw new ShoppingCartBusinessException("请指定一个有效的菜品或套餐");
+        }
+        String flavor = input.getDishId() == null ? "" : normalize(input.getDishFlavor());
+        if (flavor.length() > 50) throw new ShoppingCartBusinessException("口味信息不能超过50个字符");
+        return ShoppingCart.builder().dishId(input.getDishId()).setmealId(input.getSetmealId()).dishFlavor(flavor).build();
+    }
+
+    /** Compare canonical flavors in Java, including old null and surrounding whitespace. */
+    private ShoppingCart consolidate(ShoppingCart key) {
+        List<ShoppingCart> matches = new ArrayList<>();
+        long count = 0;
+        for (ShoppingCart row : shoppingCartMapper.list(key)) {
+            String flavor = key.getSetmealId() == null ? normalize(row.getDishFlavor()) : "";
+            if (!key.getDishFlavor().equals(flavor)) continue;
+            if (row.getNumber() == null || row.getNumber() <= 0) throw new ShoppingCartBusinessException("购物车数量异常，请清空后重试");
+            count += row.getNumber();
+            if (count > Integer.MAX_VALUE) throw new ShoppingCartBusinessException("购物车数量超出范围，请减少商品");
+            matches.add(row);
+        }
+        if (matches.isEmpty()) return null;
+        ShoppingCart kept = matches.get(0);
+        if (matches.size() > 1 || !key.getDishFlavor().equals(kept.getDishFlavor())) {
+            kept.setNumber((int) count);
+            kept.setDishFlavor(key.getDishFlavor());
+            if (shoppingCartMapper.consolidate(kept) != 1) throw new ShoppingCartBusinessException("购物车已变化，请重试");
+        }
+        for (int i=1;i<matches.size();i++) shoppingCartMapper.deleteByIdAndUserId(matches.get(i).getId(), key.getUserId());
+        return kept;
+    }
+
+    private String normalize(String flavor) { return flavor == null ? "" : flavor.trim(); }
 }

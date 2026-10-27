@@ -14,6 +14,9 @@ public interface ShoppingCartService {
      */
     void add(ShoppingCartDTO shoppingCartDTO);
 
+    /** Add multiple units within the caller's reorder transaction. */
+    void add(ShoppingCartDTO shoppingCartDTO, int quantity);
+
     /**
      * 查询购物车列表
      *

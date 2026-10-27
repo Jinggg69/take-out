@@ -18,13 +18,17 @@ function load(file, dependencies = {}) {
 }
 const mapState = keys => Object.fromEntries(keys.map(key => [key, function () { return this.$store.state[key] }]))
 const mapMutations = keys => Object.fromEntries(keys.map(key => [key, function (value) { this.$store.commit(key, value) }]))
-function createCheckout(submit = () => Promise.resolve({ code: 1, data: { id: 7 } })) {
+function createCheckout(submit = () => Promise.resolve({ code: 1, data: { id: 7 } }),
+  quote = () => Promise.resolve({ code: 1, data: {
+    items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, deliveryFee: 6, amount: 126,
+  } })) {
   const store = load('store/index.js', { Vue: { use() {} }, Vuex: { Store: function (options) { return options } } })
   store.commit = (key, value) => store.mutations[key](store.state, value)
-  const requests = [], toasts = [], navigation = []
+  const requests = [], toasts = [], navigation = [], quoteRequests = []
   const component = load('pages/order/index.js', {
     mapState, mapMutations, Pikers: {}, AddressPop: {}, DishDetail: {}, DishInfo: {}, dayjs,
     submitOrderSubmit: params => { requests.push(params); return submit(params) },
+    getOrderQuote: () => { quoteRequests.push({}); return quote() },
     presentFormat: () => '2026-10-19 14:30:00', dateFormat: () => '2026-10-20 09:30:00',
     uni: { showToast: options => toasts.push(options), navigateTo: options => navigation.push(options) },
   })
@@ -37,7 +41,10 @@ function createCheckout(submit = () => Promise.resolve({ code: 1, data: { id: 7 
   page.addressBookId = 3
   page.arrivalTime = '立即派送'
   page.computOrderInfo()
-  return { page, store, requests, toasts, navigation }
+  // Existing checkout-action tests start after a successful initial quotation.
+  page.quoteReady = true
+  page.packAmount = 1
+  return { page, store, requests, toasts, navigation, quoteRequests }
 }
 
 for (const gender of ['0', 0]) {
@@ -103,4 +110,95 @@ test('未选择地址时阻止下单且按钮不会锁死', async () => {
   await page.payOrderHandle()
   assert.equal(requests.length, 0)
   assert.equal(page.isHandlePy, false)
+})
+
+test('服务端报价替换旧购物车单价、名称和结算费用', async () => {
+  const { page, store, requests } = createCheckout(undefined, async () => ({ code: 1, data: {
+    items: [{ name: '新菜名', number: 2, amount: 17.35 }], goodsAmount: 34.70,
+    packAmount: 2, deliveryFee: 6, amount: 42.70,
+  } }))
+  assert.equal(await page.refreshQuote(), true)
+  assert.equal(store.state.orderListData[0].name, '新菜名')
+  assert.equal(page.orderDishPrice, 42.70)
+  assert.equal(page.packAmount, 2)
+  assert.equal(page.orderDishNumber, 2)
+  assert.equal(page.quoteReady, true)
+  assert.equal(requests.length, 0)
+})
+
+test('报价失败时拒绝使用旧金额下单并允许重试', async () => {
+  let fail = true
+  const { page, requests, toasts } = createCheckout(undefined, async () => {
+    if (fail) throw { msg: '菜品已停售' }
+    return { code: 1, data: { items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, deliveryFee: 6, amount: 126 } }
+  })
+  assert.equal(await page.refreshQuote(), false)
+  await page.payOrderHandle()
+  assert.equal(page.quoteReady, false)
+  assert.equal(requests.length, 0)
+  assert.ok(toasts.some(value => value.title.includes('菜品已停售')))
+  fail = false
+  await page.payOrderHandle()
+  assert.equal(page.quoteReady, true)
+  assert.equal(requests.length, 0)
+  await page.payOrderHandle()
+  assert.equal(requests.length, 1)
+})
+
+test('未取得报价时首次点击只更新价格供确认，不自动提交', async () => {
+  const { page, requests, quoteRequests, toasts } = createCheckout()
+  page.quoteReady = false
+  await page.payOrderHandle()
+  assert.equal(quoteRequests.length, 1)
+  assert.equal(requests.length, 0)
+  assert.ok(toasts.some(value => value.title.includes('确认')))
+  await page.payOrderHandle()
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].amount, 126)
+})
+
+test('提交后价格变化则刷新显示，下一次点击才提交新金额', async () => {
+  let attempt = 0
+  const { page, requests, navigation } = createCheckout(async () => {
+    if (++attempt === 1) throw { code: 0, msg: '商品价格或数量已变化，请重新确认订单金额' }
+    return { code: 1, data: { id: 8 } }
+  }, async () => ({ code: 1, data: {
+    items: [{ number: 1, amount: 120 }], goodsAmount: 120, packAmount: 1, deliveryFee: 6, amount: 127,
+  } }))
+  await page.payOrderHandle()
+  assert.equal(requests.length, 1)
+  assert.equal(page.orderDishPrice, 127)
+  assert.equal(navigation.length, 0)
+  await page.payOrderHandle()
+  assert.equal(requests.length, 2)
+  assert.equal(requests[1].amount, 127)
+  assert.equal(navigation.length, 1)
+})
+
+for (const data of [null, {}, { items: [], amount: 1 }, {
+  items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, deliveryFee: 6, amount: -1,
+}, {
+  items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, deliveryFee: 6, amount: 125,
+}]) {
+  test(`异常报价不能恢复可下单状态：${JSON.stringify(data)}`, async () => {
+    const { page, requests } = createCheckout(undefined, async () => ({ code: 1, data }))
+    assert.equal(await page.refreshQuote(), false)
+    await page.payOrderHandle()
+    assert.equal(page.quoteReady, false)
+    assert.equal(requests.length, 0)
+  })
+}
+
+test('并发获取报价共享请求，完成后可再次刷新', async () => {
+  let resolveQuote
+  const pending = new Promise(resolve => { resolveQuote = resolve })
+  const { page, quoteRequests } = createCheckout(undefined, () => pending)
+  const first = page.refreshQuote()
+  const second = page.refreshQuote()
+  assert.equal(quoteRequests.length, 1)
+  resolveQuote({ code: 1, data: { items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, deliveryFee: 6, amount: 126 } })
+  assert.equal(await first, true)
+  assert.equal(await second, true)
+  await page.refreshQuote()
+  assert.equal(quoteRequests.length, 2)
 })

@@ -22,6 +22,7 @@ function createPage({ now = '2026-10-19T13:14:00', estimate, shop = { shopId: 1 
       return estimate ? estimate(params) : { code: 1, data: '2026-10-19 14:10:00' }
     },
     getAddressBookDefault: () => Promise.reject({ code: 0, msg: '没有查询到默认地址' }),
+    getOrderQuote: () => Promise.resolve({ code: 0, msg: '购物车为空' }),
     queryAddressBookList: () => Promise.resolve({ code: 1, data: [] }),
     getLableVal: () => '',
     uni: { getSystemInfoSync: () => ({ platform: 'ios' }), showToast() {} },

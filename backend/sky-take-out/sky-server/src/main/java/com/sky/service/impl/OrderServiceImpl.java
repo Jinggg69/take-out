@@ -12,6 +12,7 @@ import com.sky.dto.OrdersPageQueryDTO;
 import com.sky.dto.OrdersPaymentDTO;
 import com.sky.dto.OrdersRejectionDTO;
 import com.sky.dto.OrdersSubmitDTO;
+import com.sky.dto.ShoppingCartDTO;
 import com.sky.entity.AddressBook;
 import com.sky.entity.OrderDetail;
 import com.sky.entity.Orders;
@@ -30,6 +31,8 @@ import com.sky.result.PageResult;
 import com.sky.service.DeliveryRangeService;
 import com.sky.service.OrderService;
 import com.sky.service.OrderPricingService;
+import com.sky.service.CartAccessService;
+import com.sky.service.ShoppingCartService;
 import com.sky.utils.WeChatPayUtil;
 import com.sky.vo.OrderPaymentVO;
 import com.sky.vo.OrderStatisticsVO;
@@ -54,6 +57,8 @@ import java.util.Objects;
  */
 @Service
 public class OrderServiceImpl implements OrderService {
+    @Autowired private CartAccessService cartAccessService;
+    @Autowired private ShoppingCartService shoppingCartService;
     @Autowired
     private OrderPricingService orderPricingService;
     @Autowired
@@ -91,8 +96,8 @@ public class OrderServiceImpl implements OrderService {
             throw new OrderBusinessException("请确认有效的订单金额后重新提交");
         }
         //处理各种业务异常（地址簿为空，购物车数据为空）
+        Long userId = cartAccessService.lockCurrentCart();
         AddressBook addressBook = addressBookMapper.getById(ordersSubmitDTO.getAddressBookId());
-        Long userId = BaseContext.getCurrentId();
         if (addressBook == null || userId == null || !userId.equals(addressBook.getUserId())) {
             throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_IS_NULL);
         }
@@ -350,6 +355,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public void repetition(Long id) {
+        cartAccessService.lockCurrentCart();
         Orders order = requireOrder(id, false);
         requireUserOrder(order);
         List<OrderDetail> details = orderDetailMapper.getByOrderId(id);
@@ -357,11 +363,12 @@ public class OrderServiceImpl implements OrderService {
             throw new OrderBusinessException("订单明细为空，无法再来一单");
         }
         for (OrderDetail detail : details) {
-            ShoppingCart cart = new ShoppingCart();
-            BeanUtils.copyProperties(detail, cart, "id");
-            cart.setUserId(BaseContext.getCurrentId());
-            cart.setCreateTime(LocalDateTime.now());
-            shoppingCartMapper.insert(cart);
+            if (detail.getNumber() == null || detail.getNumber() <= 0) throw new OrderBusinessException("历史订单商品数量异常");
+            ShoppingCartDTO item = new ShoppingCartDTO();
+            item.setDishId(detail.getDishId());
+            item.setSetmealId(detail.getSetmealId());
+            item.setDishFlavor(detail.getDishFlavor());
+            shoppingCartService.add(item, detail.getNumber());
         }
     }
 

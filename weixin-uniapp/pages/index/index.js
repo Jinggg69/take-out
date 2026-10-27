@@ -526,7 +526,7 @@ export default {
 			if (item.dishFlavor !== "" && item.dishFlavor) {
 				dishFlavorDatas = item.dishFlavor
 			} else if (flavorRemark.length > 0) {
-				dishFlavorDatas = flavorRemark[0]
+				dishFlavorDatas = flavorRemark.join(',')
 			} else {
 				dishFlavorDatas = null
 			}

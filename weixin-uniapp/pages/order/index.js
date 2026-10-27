@@ -1,6 +1,7 @@
 import {
 	// 提交订单
 	submitOrderSubmit,
+	getOrderQuote,
 	// 查询默认地址
 	getAddressBookDefault,
 	queryAddressBookList, getEstimatedDeliveryTime
@@ -31,6 +32,9 @@ export default {
 			platform: 'ios',
 			orderDishPrice: 0,
 			orderPriceError: '',
+			quoteReady: false,
+			quotePromise: null,
+			quotedDeliveryFee: DELIVERY_FEE,
 			openPayType: false,
 			psersonUrl: '../../static/btn_waiter_sel.png',
 			nickName: '',//名字
@@ -91,7 +95,7 @@ export default {
 	},
 	computed: {
 		orderDeliveryFee() {
-			return DELIVERY_FEE
+			return this.quotedDeliveryFee
 		},
 		// 菜品数据
 		orderListDataes: function () {
@@ -146,7 +150,7 @@ export default {
 		this.nickName = this.$store.state.baseUserInfo && this.$store.state.baseUserInfo.nickName
 		this.gender = this.$store.state.baseUserInfo && this.$store.state.baseUserInfo.gender
 		this.remark = this.remarkData()
-		this.init()
+		await this.init()
 		// 存在options说明换地址了
 		if (this.addressData() && this.addressData().detail) {
 			this.addressBookId = ''
@@ -180,7 +184,49 @@ export default {
 		...mapMutations(['setAddressBackUrl', 'setOrderData', 'setArrivalTime', 'setRemark', 'setGender']),
 		init() {
 			this.computOrderInfo()
-
+			return this.refreshQuote()
+		},
+		// Quote failures must never leave an earlier price eligible for submission.
+		refreshQuote() {
+			if (this.quotePromise) return this.quotePromise
+			this.quoteReady = false
+			this.orderPriceError = '正在获取最新价格'
+			this.quotePromise = (async () => {
+				try {
+					const result = await getOrderQuote()
+					const quote = result && result.data
+					if (!result || ![1, 200].includes(Number(result.code)) || !quote || !Array.isArray(quote.items) || !quote.items.length) {
+						throw { msg: (result && result.msg) || '报价数据异常，请刷新价格' }
+					}
+					let goodsCents = 0, count = 0
+					for (const item of quote.items) {
+						const quantity = Number(item.number), price = Number(item.amount)
+						if (!Number.isInteger(quantity) || quantity <= 0 || !Number.isFinite(price) || price < 0 || Math.abs(price * 100 - Math.round(price * 100)) > 0.000001) {
+							throw { msg: '报价商品信息异常，请刷新价格' }
+						}
+						goodsCents += Math.round(price * 100) * quantity
+						count += quantity
+					}
+					const pack = Number(quote.packAmount), fee = Number(quote.deliveryFee), total = Number(quote.amount)
+					if (!Number.isInteger(pack) || pack !== count || !Number.isFinite(fee) || fee < 0
+						|| !Number.isFinite(total) || total <= 0 || total > 99999999.99
+						|| Math.abs(goodsCents - Number(quote.goodsAmount) * 100) > 0.000001
+						|| Math.abs(total * 100 - goodsCents - pack * 100 - fee * 100) > 0.000001) {
+						throw { msg: '报价金额异常，请刷新价格' }
+					}
+					this.$store.commit('initdishListMut', quote.items)
+					this.quotedDeliveryFee = fee
+					this.computOrderInfo()
+					this.packAmount = pack
+					this.orderDishPrice = total
+					this.quoteReady = true
+					return true
+				} catch (error) {
+					this.orderPriceError = (error && error.msg) || '获取价格失败，请刷新后重试'
+					return false
+				}
+			})().finally(() => { this.quotePromise = null })
+			return this.quotePromise
 		},
 		initPlatform() {
 			const res = uni.getSystemInfoSync()
@@ -303,7 +349,14 @@ export default {
 				})
 				return false
 			}
-			this.computOrderInfo()
+			if (!this.quoteReady) {
+				this.isHandlePy = true
+				try {
+					const ready = await this.refreshQuote()
+					uni.showToast({ title: ready ? '价格已更新，请确认后再次点击支付' : this.orderPriceError, icon: 'none' })
+				} finally { this.isHandlePy = false }
+				return false
+			}
 			if (this.orderPriceError || !Number.isFinite(this.orderDishPrice) || this.orderDishNumber <= 0) {
 				uni.showToast({ title: this.orderPriceError || '购物车为空，请先选择菜品', icon: 'none' })
 				return false
@@ -319,7 +372,7 @@ export default {
 					deliveryStatus: this.arrivalTime === '立即派送' ? 1 : 0,
 					tablewareStatus: this.status,
 					tablewareNumber: this.num,
-					packAmount: this.orderDishNumber,
+					packAmount: this.packAmount,
 					amount: this.orderDishPrice,
 					shopId: this.shopInfo().shopId,
 					deliveryFee: this.orderDeliveryFee
@@ -336,6 +389,8 @@ export default {
 					throw res
 				}
 			} catch (error) {
+				// Refresh for a new user confirmation; never retry creating an order automatically.
+				await this.refreshQuote()
 				uni.showToast({ title: (error && error.msg) || '下单失败，请稍后重试', icon: 'none' })
 			} finally {
 				this.isHandlePy = false

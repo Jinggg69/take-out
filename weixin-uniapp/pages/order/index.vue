@@ -37,6 +37,7 @@
         <!-- end -->
         <!-- 订单明细 -->
         <view class="order_list_cont">
+          <view v-if="orderPriceError" class="boxPad" role="status">{{ orderPriceError }}</view>
           <!-- 菜品详情 -->
           <dish-detail
             :orderDataes="orderDataes"
@@ -83,9 +84,9 @@
           <text class="ico">￥ </text> {{ orderDishPrice.toFixed(2) }}
         </view>
         <view class="order_but">
-          <view v-if="isHandlePy" class="order_but_rit">去支付</view>
+          <view v-if="isHandlePy" class="order_but_rit">正在处理…</view>
           <view v-else class="order_but_rit" @click="payOrderHandle()">
-            去支付
+            {{ quoteReady ? '去支付' : '刷新价格' }}
           </view>
         </view>
       </view>

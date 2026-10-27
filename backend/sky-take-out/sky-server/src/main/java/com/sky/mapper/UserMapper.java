@@ -8,6 +8,8 @@ import org.apache.ibatis.annotations.Select;
 
 @Mapper
 public interface UserMapper {
+    @Select("select id from `user` where id=#{id} for update")
+    Long lockById(Long id);
 
     /**
      * 根据openid查询用户
