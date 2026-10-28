@@ -44,7 +44,7 @@ uni-page-body {
 }
 /* #endif */
 
-/* 以下样式用于 hello uni-app 演示所需 */
+/* 页面基础样式 */
 page {
   background-color: #FFF8EE;
   color: #302824;

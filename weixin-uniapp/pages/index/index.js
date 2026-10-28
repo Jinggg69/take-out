@@ -4,7 +4,7 @@ import popMask from "./components/popMask.vue" //规格
 import popCart from "./components/popCart.vue" //购物车弹出层
 import dishDetail from "./components/dishDetail.vue" //菜品详情
 import {
-	// 苍穹外卖相关的接口
+	// 用户登录与菜单接口
 	userLogin,
 	getCategoryList,
 	dishListByCategoryId,

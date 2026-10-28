@@ -1,6 +1,6 @@
 # 餐饮 SaaS 重构项目 · 均州鱼庄
 
-基于黑马程序员「苍穹外卖」项目持续重构，面向单店及小型连锁餐饮商家，逐步建设支持多租户、多门店和多种点餐方式的餐饮管理系统。
+面向单店及小型连锁餐饮商家的餐饮管理系统，逐步建设多租户、多门店和多种点餐方式支持。
 
 当前以「均州鱼庄」作为管理端和小程序的品牌界面，保留现有 Java 后端与外卖业务基础。新的 Vue 3 管理端已建立，员工、分类、菜品、套餐、订单、工作台与数据统计页面均已接入前端路由和 API 适配。
 
@@ -117,18 +117,17 @@
 ```text
 take-out/
 ├── backend/
-│   └── sky-take-out/
+│   └── junzhou-take-out/
 │       ├── pom.xml                 # Maven 聚合工程
-│       ├── sky-common/             # 通用工具、异常、返回结构、上下文及配置
-│       ├── sky-pojo/               # Entity、DTO、VO
-│       └── sky-server/             # Controller、Service、Mapper、定时任务、WebSocket
+│       ├── junzhou-common/             # 通用工具、异常、返回结构、上下文及配置
+│       ├── junzhou-pojo/               # Entity、DTO、VO
+│       └── junzhou-server/             # Controller、Service、Mapper、定时任务、WebSocket
 ├── frontend/
 │   ├── junzhou-admin-vue3/         # 当前 Vue 3 管理端
-│   ├── 苍穹外卖前端源码/           # 本地旧版参考源码，已忽略
 │   └── nginx-1.20.2/               # 现有静态部署与代理配套
 ├── weixin-uniapp/                  # 微信小程序源码与测试
 ├── database/
-│   ├── sky.sql                    # 单店数据库初始化脚本
+│   ├── junzhou.sql                    # 单店数据库初始化脚本
 │   └── 数据库设计文档.md
 ├── api/                           # 管理端、用户端接口定义
 ├── scripts/                       # 本地 Redis 管理脚本与说明
@@ -136,7 +135,9 @@ take-out/
 └── brand-review/                   # 本地界面检查材料，已忽略
 ```
 
-后端模块依赖为 `sky-server → sky-common`、`sky-server → sky-pojo`。目前是一个 Spring Boot 应用，三个 Maven 模块不代表三个独立服务。
+后端模块依赖为 `junzhou-server → junzhou-common`、`junzhou-server → junzhou-pojo`。目前是一个 Spring Boot 应用，三个 Maven 模块不代表三个独立服务。
+
+后端 Maven 坐标和 Java 包名已统一为 `com.junzhou`，启动类为 `com.junzhou.JunzhouApplication`。Nginx 静态目录为 `frontend/nginx-1.20.2/html/junzhou/`。现有数据库名 `sky_take_out` 和 `sky.*` 配置键保持兼容，本次重命名不需要迁移数据库；本地历史报告、备份与旧源码归档保留原名。
 
 ## 本地开发
 
@@ -149,13 +150,13 @@ take-out/
 - 准备 Redis；小程序使用 HBuilderX 与微信开发者工具。
 - 支付、图片上传和配送范围校验分别需要微信支付、OSS、百度地图配置。
 
-`database/sky.sql` 创建并使用 `sky_take_out` 数据库，包含 `DROP TABLE IF EXISTS`。仅在确认可重建的开发库中初始化；已有数据的数据库需要备份和增量迁移，不能直接执行该脚本升级。
+`database/junzhou.sql` 创建并使用 `sky_take_out` 数据库，包含 `DROP TABLE IF EXISTS`。仅在确认可重建的开发库中初始化；已有数据的数据库需要备份和增量迁移，不能直接执行该脚本升级。
 
 已有库按迁移说明依次执行 `database/migrations/20261026_01_admin_session.sql`、`database/migrations/20261027_01_order_payment_lifecycle.sql`，再发布新后端。全新初始化脚本已包含会话表、订单生命周期字段及退款表。
 
 ### 2. 配置 Java 后端
 
-主配置为 `backend/sky-take-out/sky-server/src/main/resources/application.yml`，默认激活 `dev`。
+主配置为 `backend/junzhou-take-out/junzhou-server/src/main/resources/application.yml`，默认激活 `dev`。
 
 在同目录准备被 Git 忽略的 `application-dev.yml`，配置至少包括：
 
@@ -187,7 +188,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\redis.ps1 status
 
 ```powershell
 .\scripts\backend.ps1 -Goal package
-java -jar backend/sky-take-out/sky-server/target/sky-server-1.0-SNAPSHOT.jar --spring.config.additional-location=optional:file:backend/sky-take-out/sky-server/src/main/resources/
+java -jar backend/junzhou-take-out/junzhou-server/target/junzhou-server-1.0-SNAPSHOT.jar --spring.config.additional-location=optional:file:backend/junzhou-take-out/junzhou-server/src/main/resources/
 ```
 
 默认端口为 `8080`，Knife4j 接口文档入口为 `http://localhost:8080/doc.html`。上述构建入口会运行测试；已有缓存且不需下载时可追加 `-Offline`。它支持 PATH、MAVEN_HOME、IntelliJ 自带 Maven 或显式 `-MavenPath`，详见开发说明。
@@ -278,7 +279,7 @@ node --test tests/*.test.cjs
 - `/workspace/*`、`/report/*` 的前端适配已存在，但相应后端接口尚待补齐；小程序商户信息等缺口仍需专项处理。
 - 小程序中的桌台接口定义和店铺字段不代表已经实现堂食或多门店业务。
 
-上述问题需要专项验证和修复后再扩大业务范围。实际运行库是否与 `sky.sql` 一致，也需要在迁移前核对。
+上述问题需要专项验证和修复后再扩大业务范围。实际运行库是否与 `junzhou.sql` 一致，也需要在迁移前核对。
 
 ## 分阶段重构计划
 
@@ -301,9 +302,9 @@ node --test tests/*.test.cjs
 - 阶段1本地文档位于 `docs/stage1/`，步骤8—10说明为 `order-payment-lifecycle.md`、验收为 `remaining-verification.md`。docs按项目要求被Git忽略，GitHub不会包含它；可随仓库查看的升级说明为 [数据库迁移说明](database/migrations/README.md)。
 
 - 新管理端的运行方式与迁移边界：`frontend/junzhou-admin-vue3/README.md`、`PRODUCT.md`、`DESIGN.md`。
-- 数据库结构：`database/sky.sql`、`database/数据库设计文档.md`。
+- 数据库结构：`database/junzhou.sql`、`database/数据库设计文档.md`。
 - 接口定义：`api/管理端接口.json`、`api/用户端接口.json`；实际可用接口以当前 Controller 为准。
 - 本地 Redis：`scripts/redis.md`。
-- 小程序开发参考：`weixin-uniapp/README.md`、`weixin-uniapp/小程序开发流程.md`；历史文档中的功能描述需与当前代码核对。
+- 小程序功能与结算说明：[小程序说明](weixin-uniapp/README.md)；本地运行与联调：[小程序开发流程](weixin-uniapp/小程序开发流程.md)。
 
 项目基于黑马程序员「苍穹外卖」进行学习与持续重构。当前保留其后端模块组织和业务基础，并逐步迁移管理端、调整小程序品牌界面及建设餐饮 SaaS 所需能力。

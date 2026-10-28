@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
-$taskProject = Join-Path $taskRoot 'backend\sky-take-out'
+$taskProject = Join-Path $taskRoot 'backend\junzhou-take-out'
 
 if (!$MavenPath) {
     $taskCommand = Get-Command mvn.cmd,mvn -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -37,7 +37,7 @@ if (!$RepositoryPath -and $env:USERPROFILE) {
     if (Test-Path -LiteralPath $taskCachedRepository -PathType Container) { $RepositoryPath = $taskCachedRepository }
 }
 
-$taskArguments = @('-B', '-ntp', '-pl', 'sky-server', '-am')
+$taskArguments = @('-B', '-ntp', '-pl', 'junzhou-server', '-am')
 if ($Offline) { $taskArguments += '-o' }
 if ($RepositoryPath) { $taskArguments += "-Dmaven.repo.local=$RepositoryPath" }
 if ($Test) { $taskArguments += "-Dtest=$Test", '-Dsurefire.failIfNoSpecifiedTests=false' }

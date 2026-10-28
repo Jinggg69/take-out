@@ -1,0 +1,38 @@
+package com.junzhou.service;
+
+import com.junzhou.dto.ShoppingCartDTO;
+import com.junzhou.entity.ShoppingCart;
+
+import java.util.List;
+
+public interface ShoppingCartService {
+
+    /**
+     * 添加购物车
+     *
+     * @param shoppingCartDTO 购物车数据传输对象
+     */
+    void add(ShoppingCartDTO shoppingCartDTO);
+
+    /** Add multiple units within the caller's reorder transaction. */
+    void add(ShoppingCartDTO shoppingCartDTO, int quantity);
+
+    /**
+     * 查询购物车列表
+     *
+     * @return 购物车列表
+     */
+    List<ShoppingCart> showShoppingCart();
+
+    /**
+     * 清空购物车
+     */
+    void clean();
+
+    /**
+     * 减少购物车中商品的数量
+     *
+     * @param shoppingCartDTO 购物车数据传输对象
+     */
+    void sub(ShoppingCartDTO shoppingCartDTO);
+}

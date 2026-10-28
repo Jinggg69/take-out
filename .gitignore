@@ -3,6 +3,7 @@
 **/.idea/
 *.iml
 *.class
+**/.VSCodeCounter/
 
 # Logs and local environment configuration
 *.log
@@ -37,7 +38,7 @@ tools/redis/
 /backend/ORDER_MODULE.md
 /backend/ORDER_MODULE_TEST_REPORT.md
 /backend/订单模块功能实现说明.md
-/backend/sky-take-out/sky-server/ADDRESS_BOOK_TEST_REPORT.md
-/backend/sky-take-out/sky-server/ORDER_MODULE.md
-/backend/sky-take-out/sky-server/ORDER_MODULE_TEST_REPORT.md
+/backend/junzhou-take-out/junzhou-server/ADDRESS_BOOK_TEST_REPORT.md
+/backend/junzhou-take-out/junzhou-server/ORDER_MODULE.md
+/backend/junzhou-take-out/junzhou-server/ORDER_MODULE_TEST_REPORT.md
 /local-reports/

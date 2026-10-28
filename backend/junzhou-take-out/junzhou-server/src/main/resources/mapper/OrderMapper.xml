@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.junzhou.mapper.OrderMapper">
+
+    <select id="pageQuery" resultType="com.junzhou.entity.Orders">
+        select * from orders
+        <where>
+            <if test="number != null and number != ''">and number like concat('%', #{number}, '%')</if>
+            <if test="phone != null and phone != ''">and phone like concat('%', #{phone}, '%')</if>
+            <if test="status != null">and status = #{status}</if>
+            <if test="userId != null">and user_id = #{userId}</if>
+            <if test="refundOnly != null and refundOnly">and (pay_status in (2,3,4) or refund_status is not null)</if>
+            <if test="beginTime != null">and order_time &gt;= #{beginTime}</if>
+            <if test="endTime != null">and order_time &lt;= #{endTime}</if>
+        </where>
+        order by order_time desc, id desc
+    </select>
+
+    <insert id="insert" parameterType="com.junzhou.entity.Orders"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into orders (number, status, user_id, address_book_id, order_time,
+                            checkout_time, pay_method, pay_status, amount, remark,
+                            user_name, phone, address, consignee, cancel_reason,
+                            rejection_reason, cancel_time, estimated_delivery_time,
+                            delivery_status, delivery_time, pack_amount,
+                            tableware_number, tableware_status, dispatch_time, wechat_transaction_id, refund_status,
+                            payment_check_time, wechat_trade_state, client_request_id, submit_fingerprint)
+        values (#{number}, #{status}, #{userId}, #{addressBookId}, #{orderTime},
+                #{checkoutTime}, #{payMethod}, #{payStatus}, #{amount}, #{remark},
+                #{userName}, #{phone}, #{address}, #{consignee}, #{cancelReason},
+                #{rejectionReason}, #{cancelTime}, #{estimatedDeliveryTime},
+                #{deliveryStatus}, #{deliveryTime}, #{packAmount},
+                #{tablewareNumber}, #{tablewareStatus}, #{dispatchTime}, #{wechatTransactionId}, #{refundStatus},
+                #{paymentCheckTime}, #{wechatTradeState}, #{clientRequestId}, #{submitFingerprint})
+    </insert>
+
+    <update id="update" parameterType="com.junzhou.entity.Orders">
+        update orders
+        <set>
+            <if test="cancelReason != null and cancelReason != ''">
+                cancel_reason = #{cancelReason},
+            </if>
+            <if test="rejectionReason != null and rejectionReason != ''">
+                rejection_reason = #{rejectionReason},
+            </if>
+            <if test="cancelTime != null">
+                cancel_time = #{cancelTime},
+            </if>
+            <if test="payStatus != null">
+                pay_status = #{payStatus},
+            </if>
+            <if test="payMethod != null">
+                pay_method = #{payMethod},
+            </if>
+            <if test="checkoutTime != null">
+                checkout_time = #{checkoutTime},
+            </if>
+            <if test="status != null">
+                status = #{status},
+            </if>
+            <if test="deliveryTime != null">
+                delivery_time = #{deliveryTime},
+            </if>
+            <if test="dispatchTime != null">dispatch_time=#{dispatchTime},</if>
+            <if test="wechatTransactionId != null">wechat_transaction_id=#{wechatTransactionId},</if>
+            <if test="refundStatus != null">refund_status=#{refundStatus},</if>
+            <if test="paymentCheckTime != null">payment_check_time=#{paymentCheckTime},</if>
+            <if test="wechatTradeState != null">wechat_trade_state=#{wechatTradeState},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+</mapper>
