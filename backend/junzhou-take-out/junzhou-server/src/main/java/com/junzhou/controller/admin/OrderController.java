@@ -7,7 +7,7 @@ import com.junzhou.dto.OrdersRejectionDTO;
 import com.junzhou.result.PageResult;
 import com.junzhou.result.Result;
 import com.junzhou.service.OrderService;
-import com.junzhou.service.RefundWorker;
+import com.junzhou.service.PaymentRecoveryService;
 import com.junzhou.vo.OrderStatisticsVO;
 import com.junzhou.vo.OrderVO;
 import io.swagger.annotations.Api;
@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.*;
 public class OrderController {
     @Autowired
     private OrderService orderService;
-    @Autowired private RefundWorker refundWorker;
+    @Autowired private PaymentRecoveryService refundWorker;
 
     @PostMapping("/{id}/refund/retry")
     @ApiOperation("按原退款单号核验或重试已有退款")

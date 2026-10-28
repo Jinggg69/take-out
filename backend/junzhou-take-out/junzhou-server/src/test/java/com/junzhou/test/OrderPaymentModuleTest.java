@@ -20,9 +20,8 @@ import com.junzhou.properties.WeChatProperties;
 import com.junzhou.service.OrderService;
 import com.junzhou.service.OrderPricingService;
 import com.junzhou.service.PaymentLifecycleService;
-import com.junzhou.service.PaymentReconciliationService;
+import com.junzhou.service.PaymentRecoveryService;
 import com.junzhou.service.RefundTransactionService;
-import com.junzhou.service.RefundWorker;
 import com.junzhou.service.WeChatNotificationService;
 import com.junzhou.service.CartAccessService;
 import com.junzhou.service.impl.ShoppingCartServiceImpl;
@@ -107,8 +106,8 @@ class OrderPaymentModuleTest {
         context.setServletContext(new MockServletContext());
         context.register(WebMvcConfiguration.class, OrderController.class, OrderServiceImpl.class,
                 GlobalExceptionHandler.class, JwtTokenUserInterceptor.class, JwtTokenAdminInterceptor.class,
-                PaymentTestConfiguration.class, WebSocketServer.class, AdminSessionService.class, OrderPricingService.class,
-                CartAccessService.class, ShoppingCartServiceImpl.class);
+                PaymentTestConfiguration.class, WebSocketServer.class, com.junzhou.service.impl.AdminSessionServiceImpl.class, com.junzhou.service.impl.OrderPricingServiceImpl.class,
+                com.junzhou.service.impl.CartAccessServiceImpl.class, ShoppingCartServiceImpl.class);
         context.refresh();
         mapServer = MockRestServiceServer.bindTo(context.getBean(RestTemplate.class)).build();
         mapServer.expect(ExpectedCount.between(0, Integer.MAX_VALUE),
@@ -721,7 +720,7 @@ class OrderPaymentModuleTest {
         addOrder(11, 42, 2, 1);
         context.getBean(TestWeChatPayUtil.class).refundResult = "{\"code\":\"SYSTEM_ERROR\",\"message\":\"退款失败\"}";
         adminPut("/admin/order/rejection", "{\"id\":11,\"rejectionReason\":\"售罄\"}", 1);
-        context.getBean(RefundWorker.class).retry(11L);
+        context.getBean(PaymentRecoveryService.class).retry(11L);
         assertEquals(6, statusOf(11));
         assertEquals(3, jdbc.queryForObject("select pay_status from orders where id=11", Integer.class));
         assertNotNull(jdbc.queryForObject("select cancel_time from orders where id=11", java.sql.Timestamp.class));
@@ -737,14 +736,14 @@ class OrderPaymentModuleTest {
             context.getBean(TestWeChatPayUtil.class).refundResult = "{\"status\":\"UNKNOWN\"}";
         }
         adminPut("/admin/order/rejection", "{\"id\":11,\"rejectionReason\":\"售罄\"}", 1);
-        context.getBean(RefundWorker.class).retry(11L);
+        context.getBean(PaymentRecoveryService.class).retry(11L);
         assertEquals(6, statusOf(11));
         assertEquals(3, jdbc.queryForObject("select pay_status from orders where id=11", Integer.class));
         java.sql.Timestamp cancelledAt = jdbc.queryForObject("select cancel_time from orders where id=11", java.sql.Timestamp.class);
         adminPut("/admin/order/confirm", "{\"id\":11}", 0);
         context.getBean(TestWeChatPayUtil.class).refundTimesOut = false;
         context.getBean(TestWeChatPayUtil.class).refundResult = "{\"status\":\"SUCCESS\"}";
-        context.getBean(RefundWorker.class).retry(11L);
+        context.getBean(PaymentRecoveryService.class).retry(11L);
         adminPut("/admin/order/rejection", "{\"id\":11,\"rejectionReason\":\"售罄\"}", 1);
         assertEquals(2, jdbc.queryForObject("select pay_status from orders where id=11", Integer.class));
         assertEquals(cancelledAt, jdbc.queryForObject("select cancel_time from orders where id=11", java.sql.Timestamp.class));
@@ -780,11 +779,11 @@ class OrderPaymentModuleTest {
         context.getBean(TestWeChatPayUtil.class).refundResult = "{\"code\":\"SYSTEM_ERROR\"}";
         mvc.perform(signedNotification("/notify/paySuccess",paymentResource("order-10","wx-10"),"TRANSACTION.SUCCESS"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value("SUCCESS"));
-        context.getBean(RefundWorker.class).retry(10L);
+        context.getBean(PaymentRecoveryService.class).retry(10L);
         assertEquals(6, statusOf(10));
         assertEquals(3, jdbc.queryForObject("select pay_status from orders where id=10", Integer.class));
         context.getBean(TestWeChatPayUtil.class).refundResult = "{\"status\":\"SUCCESS\"}";
-        context.getBean(RefundWorker.class).retry(10L);
+        context.getBean(PaymentRecoveryService.class).retry(10L);
         assertEquals(2, jdbc.queryForObject("select pay_status from orders where id=10", Integer.class));
     }
 
@@ -927,7 +926,7 @@ class OrderPaymentModuleTest {
 
     @Test void refundProcessingQueryAndRepeatedNotificationCannotDowngradeSuccess() throws Exception {
         cancelPaid(); provider().refundResult="{\"status\":\"PROCESSING\"}";
-        context.getBean(RefundWorker.class).retry(10L);
+        context.getBean(PaymentRecoveryService.class).retry(10L);
         assertEquals("PROCESSING",refundState(10)); assertEquals(3,paymentState(10));
         mvc.perform(signedNotification("/notify/refundSuccess",refundResource("SUCCESS"),"REFUND.SUCCESS"))
                 .andExpect(status().isOk());
@@ -943,7 +942,7 @@ class OrderPaymentModuleTest {
         cancelPaid();
         mvc.perform(signedNotification("/notify/refundSuccess",refundResource(state),"REFUND."+state))
                 .andExpect(status().isOk());
-        context.getBean(RefundWorker.class).processDue();
+        context.getBean(PaymentRecoveryService.class).processDue();
         assertEquals(state,refundState(10)); assertEquals(4,paymentState(10));
         assertEquals(0,provider().refundCalls);
         mvc.perform(get("/user/order/queryOrdersCheckStatus").header("authentication",token())
@@ -953,10 +952,10 @@ class OrderPaymentModuleTest {
 
     @Test void uncertainRefundQueriesBeforeResubmittingAndUsesTheSameIdentityOnlyOn404() throws Exception {
         cancelPaid(); provider().refundTimesOut=true;
-        context.getBean(RefundWorker.class).retry(10L);
+        context.getBean(PaymentRecoveryService.class).retry(10L);
         assertEquals(1,provider().refundCalls); assertEquals(0,provider().refundQueries);
         provider().refundTimesOut=false; provider().refundMissing=true; provider().refundResult="{\"status\":\"SUCCESS\"}";
-        context.getBean(RefundWorker.class).retry(10L);
+        context.getBean(PaymentRecoveryService.class).retry(10L);
         assertEquals(1,provider().refundQueries); assertEquals(2,provider().refundCalls);
         assertEquals("SUCCESS",refundState(10));
     }
@@ -965,7 +964,7 @@ class OrderPaymentModuleTest {
         jdbc.update("update orders set status=6,pay_status=2 where id=10");
         context.getBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-10","wx-10"));
         provider().refundMissing=true;
-        context.getBean(RefundWorker.class).retry(10L);
+        context.getBean(PaymentRecoveryService.class).retry(10L);
         assertEquals("VERIFYING",refundState(10)); assertEquals(0,provider().refundCalls);
         assertEquals(1,provider().refundQueries); assertEquals(3,paymentState(10));
     }
@@ -986,14 +985,14 @@ class OrderPaymentModuleTest {
     @Test void cancelledPaymentWithLostNotificationIsRecoveredByAuthenticatedQuery() {
         jdbc.update("update orders set status=6 where id=10");
         provider().queriedPayment=paymentResource("order-10","wx-10");
-        context.getBean(PaymentReconciliationService.class).reconcileCancelled();
+        context.getBean(PaymentRecoveryService.class).reconcileCancelled();
         assertEquals(6,statusOf(10)); assertEquals(3,paymentState(10)); assertEquals("REQUESTED",refundState(10));
     }
 
     @Test void unpaidCancelledProviderOrderIsClosedWithoutRefund() {
         jdbc.update("update orders set status=6 where id=10");
         provider().queriedPayment=JSON.parseObject("{\"out_trade_no\":\"order-10\",\"trade_state\":\"NOTPAY\"}");
-        context.getBean(PaymentReconciliationService.class).reconcileCancelled();
+        context.getBean(PaymentRecoveryService.class).reconcileCancelled();
         assertEquals(1,provider().closeCalls); assertEquals(0,paymentState(10));
         assertEquals("CLOSED",jdbc.queryForObject("select wechat_trade_state from orders",String.class));
     }
@@ -1173,11 +1172,10 @@ class OrderPaymentModuleTest {
         @Bean SetmealMapper setmealMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(SetmealMapper.class); }
         @Bean SetmealDishMapper setmealDishMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(SetmealDishMapper.class); }
         @Bean RefundRequestMapper refundRequestMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(RefundRequestMapper.class); }
-        @Bean RefundTransactionService refundTransactions() { return new RefundTransactionService(); }
-        @Bean RefundWorker refundWorker() { return new RefundWorker(); }
-        @Bean PaymentLifecycleService paymentLifecycleService() { return new PaymentLifecycleService(); }
-        @Bean PaymentReconciliationService paymentReconciliationService() { return new PaymentReconciliationService(); }
-        @Bean WeChatNotificationService weChatNotificationService(WeChatProperties properties) { return new WeChatNotificationService(properties); }
+        @Bean RefundTransactionService refundTransactions() { return new com.junzhou.service.impl.RefundTransactionServiceImpl(); }
+        @Bean PaymentRecoveryService refundWorker() { return new com.junzhou.service.impl.PaymentRecoveryServiceImpl(); }
+        @Bean PaymentLifecycleService paymentLifecycleService() { return new com.junzhou.service.impl.PaymentLifecycleServiceImpl(); }
+        @Bean WeChatNotificationService weChatNotificationService(WeChatProperties properties) { return new com.junzhou.service.impl.WeChatNotificationServiceImpl(properties); }
         @Bean TestWeChatPayUtil weChatPayUtil() { return new TestWeChatPayUtil(); }
         @Bean RestTemplate mapRestTemplate() { return new RestTemplate(); }
         @Bean DeliveryRangeService deliveryRangeService(RestTemplate client) {

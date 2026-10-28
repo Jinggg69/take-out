@@ -30,7 +30,7 @@ class WeChatNotificationServiceTest {
     @BeforeEach void setup() throws Exception {
         properties = new WeChatProperties();
         signer = new SignedWechatNotifications(properties, directory, clock);
-        service = new WeChatNotificationService(properties, clock);
+        service = new com.junzhou.service.impl.WeChatNotificationServiceImpl(properties, clock);
     }
 
     @ParameterizedTest @ValueSource(strings={"TRANSACTION.SUCCESS", "REFUND.SUCCESS", "REFUND.ABNORMAL", "REFUND.CLOSED"})
@@ -85,7 +85,7 @@ class WeChatNotificationServiceTest {
         assertNotNull(verify(publicSigned)); assertNotNull(verify(certificateSigned));
         Clock expiredClock = Clock.fixed(Instant.parse("2036-01-01T00:00:00Z"), ZoneOffset.UTC);
         Signed expired = signer.sign(certificateSigned.body, Long.toString(expiredClock.instant().getEpochSecond()));
-        assertThrows(SecurityException.class, () -> new WeChatNotificationService(properties, expiredClock)
+        assertThrows(SecurityException.class, () -> new com.junzhou.service.impl.WeChatNotificationServiceImpl(properties, expiredClock)
                 .verify(expired.body, expired.timestamp, expired.nonce, "A123", expired.signature));
     }
 

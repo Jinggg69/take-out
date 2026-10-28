@@ -50,8 +50,8 @@ class ShoppingCartModuleTest {
         context.setServletContext(new MockServletContext());
         context.register(OrderPaymentModuleTest.PaymentTestConfiguration.class, WebMvcConfiguration.class,
                 ShoppingCartController.class, ShoppingCartServiceImpl.class, OrderServiceImpl.class,
-                OrderPricingService.class, GlobalExceptionHandler.class, JwtTokenUserInterceptor.class,
-                JwtTokenAdminInterceptor.class, AdminSessionService.class, WebSocketServer.class, CartAccessService.class);
+                com.junzhou.service.impl.OrderPricingServiceImpl.class, GlobalExceptionHandler.class, JwtTokenUserInterceptor.class,
+                JwtTokenAdminInterceptor.class, com.junzhou.service.impl.AdminSessionServiceImpl.class, WebSocketServer.class, com.junzhou.service.impl.CartAccessServiceImpl.class);
         context.refresh();
         jdbc = new JdbcTemplate(context.getBean(DataSource.class));
         jdbc.execute("create table `user` (id bigint primary key, openid varchar(64))");

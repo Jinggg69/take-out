@@ -12,5 +12,5 @@ import static org.mockito.Mockito.mock;
 public class UserOnlyAdminConfiguration {
     @Bean EmployeeMapper employeeMapper() { return mock(EmployeeMapper.class); }
     @Bean AdminSessionMapper adminSessionMapper() { return mock(AdminSessionMapper.class); }
-    @Bean AdminSessionService adminSessionService() { return new AdminSessionService(); }
+    @Bean AdminSessionService adminSessionService() { return new com.junzhou.service.impl.AdminSessionServiceImpl(); }
 }

@@ -348,7 +348,7 @@ class AdminAuthenticationTest {
     @MapperScan("com.junzhou.mapper")
     @ComponentScan(basePackages="com.junzhou.service", useDefaultFilters=false,
             includeFilters=@ComponentScan.Filter(type=FilterType.REGEX,
-                    pattern={"com\\.junzhou\\.service\\.impl\\.EmployeeServiceImpl", "com\\.junzhou\\.service\\.AdminSessionService"}))
+                    pattern={"com\\.junzhou\\.service\\.impl\\.EmployeeServiceImpl", "com\\.junzhou\\.service\\.impl\\.AdminSessionServiceImpl"}))
     static class DatabaseConfiguration {
         @Bean DataSource dataSource() {
             JdbcDataSource source = new JdbcDataSource();

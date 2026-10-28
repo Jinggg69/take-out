@@ -86,7 +86,7 @@ class EmployeePasswordTest {
         properties.setAdminSecretKey(SECRET);
         JwtTokenAdminInterceptor interceptor = new JwtTokenAdminInterceptor();
         ReflectionTestUtils.setField(interceptor, "jwtProperties", properties);
-        AdminSessionService sessions = new AdminSessionService();
+        AdminSessionService sessions = new com.junzhou.service.impl.AdminSessionServiceImpl();
         ReflectionTestUtils.setField(sessions, "adminSessionMapper", session.getMapper(AdminSessionMapper.class));
         ReflectionTestUtils.setField(interceptor, "adminSessionService", sessions);
         mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler())

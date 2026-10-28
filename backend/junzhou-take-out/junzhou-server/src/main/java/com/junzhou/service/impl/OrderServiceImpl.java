@@ -32,7 +32,7 @@ import com.junzhou.service.OrderPricingService;
 import com.junzhou.service.CartAccessService;
 import com.junzhou.service.ShoppingCartService;
 import com.junzhou.service.RefundTransactionService;
-import com.junzhou.service.OrderSubmissionIdentity;
+import com.junzhou.payment.OrderSubmissionIdentity;
 import com.junzhou.utils.WeChatPayUtil;
 import com.junzhou.vo.OrderPaymentVO;
 import com.junzhou.vo.OrderStatisticsVO;
