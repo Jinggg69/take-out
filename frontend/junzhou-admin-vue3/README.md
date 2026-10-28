@@ -48,7 +48,7 @@ npm run preview
 开发代理：`/api/employee/login` → `http://localhost:8080/admin/employee/login`。
 WebSocket代理：`/ws/{clientId}` → `http://localhost:8080/ws/{clientId}`，不经过 `/admin`。
 生产相对资源和hash路由适配原有静态部署；生产/API代理继续由部署服务器提供。
-未修改现有Nginx配置。生产Socket的 `/ws/` 按页面协议解析为同源ws/wss地址。
+仓库不提供生产代理配置，部署时需配置 `/api/` 和 `/ws/` 的转发。生产Socket的 `/ws/` 按页面协议解析为同源ws/wss地址。
 
 ## 请求边界
 
@@ -95,3 +95,4 @@ Pinia管理用户及导航状态，保留原token/username/user_info Cookie和si
 集成验收与真实环境人工检查清单见本地忽略文档 `docs/phase-fg.md`，不上传GitHub。
 每次仅推进获授权阶段。产品与视觉约束见 `PRODUCT.md`、`DESIGN.md`。
 阶段交付、验收记录保存在本地 `docs/phase-*.md`，已加入Git忽略；原源码归档也不纳入提交。
+

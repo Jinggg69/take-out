@@ -108,7 +108,7 @@
 | 新管理端 | Vue 3、TypeScript、Vite、Pinia、Vue Router 4、Element Plus、Axios、Sass |
 | 小程序 | Vue 2、uni-app、Vuex、uni-ui |
 | 测试 | JUnit、Spring Test、部分 H2 集成测试、Node.js 测试 |
-| 部署配套 | 仓库内保留 Nginx 配置与旧管理端静态资源 |
+| 部署配套 | 生产环境需配置静态资源托管与接口代理 |
 
 后端已统一为 Java 8 字节码目标，移除子模块 `source/target=9` 覆盖。本次在 JDK 25.0.3、Maven 3.9.11 上完成测试和打包，并核对 class major version 为 52；其他 JDK 环境尚未逐一验证。
 
@@ -124,7 +124,6 @@ take-out/
 │       └── junzhou-server/             # Controller、Service、Mapper、定时任务、WebSocket
 ├── frontend/
 │   ├── junzhou-admin-vue3/         # 当前 Vue 3 管理端
-│   └── nginx-1.20.2/               # 现有静态部署与代理配套
 ├── weixin-uniapp/                  # 微信小程序源码与测试
 ├── database/
 │   ├── junzhou.sql                    # 单店数据库初始化脚本
@@ -137,7 +136,7 @@ take-out/
 
 后端模块依赖为 `junzhou-server → junzhou-common`、`junzhou-server → junzhou-pojo`。目前是一个 Spring Boot 应用，三个 Maven 模块不代表三个独立服务。
 
-后端 Maven 坐标和 Java 包名已统一为 `com.junzhou`，启动类为 `com.junzhou.JunzhouApplication`。Nginx 静态目录为 `frontend/nginx-1.20.2/html/junzhou/`。现有数据库名 `sky_take_out` 和 `sky.*` 配置键保持兼容，本次重命名不需要迁移数据库；本地历史报告、备份与旧源码归档保留原名。
+后端 Maven 坐标和 Java 包名已统一为 `com.junzhou`，启动类为 `com.junzhou.JunzhouApplication`。现有数据库名 `sky_take_out` 和 `sky.*` 配置键保持兼容，本次重命名不需要迁移数据库；本地历史报告、备份与旧源码归档保留原名。
 
 ## 本地开发
 
@@ -220,7 +219,7 @@ npm run dev
 
 本地使用 Vite 开发管理端、Spring Boot 提供接口时，不要求启动 Nginx。小程序也可以直接请求后端。
 
-现有 Nginx 配置用于提供旧管理端静态页面，将 `/api/` 转发至 `/admin/`，并代理 `/user/` 与 `/ws/`。新管理端构建产物尚需配置实际部署目录；运行 Vite 构建不会自动替换现有 Nginx 页面。
+仓库不再包含 Nginx 程序、配置及旧管理端静态资源。新管理端构建产物需要部署到实际的静态资源目录；部署入口需将 `/api/` 转发至后端 `/admin/`，并按需代理 `/user/` 和 `/ws/`。
 
 生产环境可以使用 Nginx 或其他部署入口处理静态资源、HTTPS 和请求转发。租户识别、RBAC 和数据隔离仍由后端负责。
 
@@ -308,3 +307,4 @@ node --test tests/*.test.cjs
 - 小程序功能与结算说明：[小程序说明](weixin-uniapp/README.md)；本地运行与联调：[小程序开发流程](weixin-uniapp/小程序开发流程.md)。
 
 项目基于黑马程序员「苍穹外卖」进行学习与持续重构。当前保留其后端模块组织和业务基础，并逐步迁移管理端、调整小程序品牌界面及建设餐饮 SaaS 所需能力。
+

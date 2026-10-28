@@ -12,10 +12,9 @@
 !.env.example
 **/application-dev.yml
 
-# Frontend dependencies and Nginx runtime files
+# Frontend dependencies and local Nginx installation
 **/node_modules/
-frontend/nginx-1.20.2/logs/
-frontend/nginx-1.20.2/temp/
+/frontend/nginx-1.20.2/
 
 # Original frontend reference source (local only)
 /frontend/苍穹外卖前端源码/
@@ -42,3 +41,4 @@ tools/redis/
 /backend/junzhou-take-out/junzhou-server/ORDER_MODULE.md
 /backend/junzhou-take-out/junzhou-server/ORDER_MODULE_TEST_REPORT.md
 /local-reports/
+
