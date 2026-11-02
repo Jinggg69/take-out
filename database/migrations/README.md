@@ -2,6 +2,37 @@
 
 `junzhou.sql` 是全新开发库的初始化脚本，包含删除重建表的语句。已有数据库升级使用本目录增量脚本。
 
+## 20261029_01_tenant_store.sql：阶段二单店基础
+
+此脚本必须在下述阶段一迁移之后执行。先核对数据库、验证可恢复备份，并停止所有应用实例和定时任务；只在明确的维护窗口对选定业务库运行。新建库的 `junzhou.sql` 已包含相同结构，不需要再单独执行本脚本。
+
+脚本新增 `tenant`、`store`，其中门店外键指向租户；员工、分类、菜品、套餐、订单、购物车增加 `tenant_id`，订单和购物车另增加 `store_id`。历史单店数据归属 ID 为 1 的默认商户和默认门店；订单明细及退款继续通过订单确定归属。用户名和目录名称的现有全局唯一约束暂不改变。
+
+**这只是数据模型，不提供多租户或多门店隔离。** 现有应用的插入语句尚未传递归属，因此新增字段暂时以 1 为默认值，兼容旧的单店写入。上线多租户之前必须先完成身份上下文、授权、所有 SQL/关联表、缓存、WebSocket、支付通知和任务隔离，移除不安全的默认归属并完成跨租户验收。不要用当前版本创建第二个实际商户或门店。
+
+```sql
+SELECT DATABASE();
+SOURCE D:/take-out/database/migrations/20261029_01_tenant_store.sql;
+SELECT id, code, name, status FROM tenant;
+SELECT id, tenant_id, code, name, status FROM store;
+SELECT COUNT(*) AS unexpected FROM employee WHERE tenant_id <> 1;
+SELECT COUNT(*) AS unexpected FROM category WHERE tenant_id <> 1;
+SELECT COUNT(*) AS unexpected FROM dish WHERE tenant_id <> 1;
+SELECT COUNT(*) AS unexpected FROM setmeal WHERE tenant_id <> 1;
+SELECT COUNT(*) AS unexpected FROM orders WHERE tenant_id <> 1 OR store_id <> 1;
+SELECT COUNT(*) AS unexpected FROM shopping_cart WHERE tenant_id <> 1 OR store_id <> 1;
+```
+
+以上检查适用于首次从单店升级，所有 `unexpected` 均应为 0。还应核对升级前后的各表行数、主键、订单和退款金额、索引及单店业务流程。实际连接信息和路径按部署环境调整；不要使用 `--force`。脚本在相同定义下可重入且不覆盖现有归属；若已有同名结构或默认身份不兼容，会报错，需要人工调查。
+
+MySQL DDL 会隐式提交，脚本并非原子操作；报错后保持停写，检查已创建的表、字段与自用 `_junzhou_20261029_tenant_store` 存储过程，修复原因后重试。回退应用版本时保留新增表和字段，旧应用会继续使用单店默认值；不要通过删除列回退真实业务数据。数据库恢复应按已验证的备份方案执行。
+
+本地迁移回归可设置 `TENANT_TEST_MYSQL_USER`、`TENANT_TEST_MYSQL_PASSWORD` 和可选 `TENANT_TEST_MYSQL_PORT`，运行 `python scripts/test-tenant-migration.py`。脚本只连接本机 MySQL，创建随机临时数据库并在结束时删除，测试账号需要创建和删除数据库的权限。
+
+2026-11-02 阶段 2.1 已在本机 MySQL 8.4.9 验证。回归脚本以初始化文件中阶段二之前的单店结构模拟已完成阶段一的旧库，并补入合成订单、明细、退款、购物车和套餐数据；比较所有原始表的全部原始字段（含主键、金额、支付退款状态），覆盖首次升级、重复执行、错误列定义修复、多个 ALTER 已提交后的注入失败与重入，以及六张业务表已有非默认归属不被覆盖。通过所有表的 `SHOW CREATE TABLE` 比较初始化与增量结构，忽略数据决定的自增计数。另验证旧写入默认值、门店外键拒绝及已有租户表冲突。测试结束清理随机临时库。
+
+这份结果证明本地合成数据的迁移行为；真实业务库备份副本演练仍属于阶段 7.1，未操作或验证真实业务库，也不代表后续隔离任务已完成。此次沿用现有迁移，无新增业务 schema 变更。
+
 ## 已有库升级顺序与检查
 
 先备份目标数据库并验证备份可恢复。在维护窗口停止所有旧、新后端实例及定时任务的写入与退款处理，再执行只读检查；检查通过后依次执行 `20261026_01_admin_session.sql`、`20261027_01_order_payment_lifecycle.sql`，核对结果后发布并启动新后端。不要让旧实例与新退款 worker 同时处理订单。

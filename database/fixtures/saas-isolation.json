@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "synthetic": true,
+  "tenants": [
+    {"id": 101, "code": "fixture-a", "name": "测试商户A"},
+    {"id": 102, "code": "fixture-b", "name": "测试商户B"}
+  ],
+  "stores": [
+    {"id": 1001, "tenant_id": 101, "code": "fixture-a1", "name": "测试A一店"},
+    {"id": 1002, "tenant_id": 101, "code": "fixture-a2", "name": "测试A二店"},
+    {"id": 2001, "tenant_id": 102, "code": "fixture-b1", "name": "测试B一店"}
+  ],
+  "employees": [
+    {"id": 1101, "tenant_id": 101, "username": "fixture_a_manager", "allowed_store_ids": [1001, 1002]},
+    {"id": 1102, "tenant_id": 101, "username": "fixture_a1_staff", "allowed_store_ids": [1001]},
+    {"id": 1103, "tenant_id": 101, "username": "fixture_a2_staff", "allowed_store_ids": [1002]},
+    {"id": 2101, "tenant_id": 102, "username": "fixture_b1_staff", "allowed_store_ids": [2001]}
+  ],
+  "users": [
+    {"id": 3101, "openid": "fixture-not-wechat-user-a", "name": "测试用户甲"},
+    {"id": 3102, "openid": "fixture-not-wechat-user-b", "name": "测试用户乙"},
+    {"id": 3103, "openid": "fixture-not-wechat-shared", "name": "测试跨店用户"}
+  ],
+  "orders": [
+    {"id": 4101, "number": "FIXTURE-A1-001", "tenant_id": 101, "store_id": 1001, "user_id": 3101, "status": 5, "pay_status": 1, "amount": "25.00", "order_time": "2026-10-01 12:00:00"},
+    {"id": 4102, "number": "FIXTURE-A2-001", "tenant_id": 101, "store_id": 1002, "user_id": 3103, "status": 5, "pay_status": 1, "amount": "36.00", "order_time": "2026-10-01 12:01:00"},
+    {"id": 4201, "number": "FIXTURE-B1-001", "tenant_id": 102, "store_id": 2001, "user_id": 3102, "status": 5, "pay_status": 1, "amount": "48.00", "order_time": "2026-10-01 12:02:00"},
+    {"id": 4202, "number": "FIXTURE-B1-002", "tenant_id": 102, "store_id": 2001, "user_id": 3103, "status": 5, "pay_status": 1, "amount": "12.00", "order_time": "2026-10-01 12:03:00"}
+  ],
+  "order_details": [
+    {"id": 5101, "order_id": 4101, "name": "测试菜品甲", "unit_price": "12.50", "quantity": 2},
+    {"id": 5102, "order_id": 4102, "name": "测试菜品乙", "unit_price": "36.00", "quantity": 1},
+    {"id": 5201, "order_id": 4201, "name": "测试菜品丙", "unit_price": "24.00", "quantity": 2},
+    {"id": 5202, "order_id": 4202, "name": "测试菜品丁", "unit_price": "12.00", "quantity": 1}
+  ],
+  "access_expectations": [
+    {"actor_type": "employee", "actor_id": 1102, "order_id": 4101, "allowed": true, "reason": "same_store"},
+    {"actor_type": "employee", "actor_id": 1102, "order_id": 4102, "allowed": false, "reason": "cross_store"},
+    {"actor_type": "employee", "actor_id": 1101, "order_id": 4102, "allowed": true, "reason": "tenant_all_stores"},
+    {"actor_type": "employee", "actor_id": 1101, "order_id": 4201, "allowed": false, "reason": "cross_tenant"},
+    {"actor_type": "employee", "actor_id": 2101, "order_id": 4101, "allowed": false, "reason": "cross_tenant"},
+    {"actor_type": "employee", "actor_id": 2101, "order_id": 4201, "allowed": true, "reason": "same_store"},
+    {"actor_type": "user", "actor_id": 3101, "order_id": 4101, "allowed": true, "reason": "own_order"},
+    {"actor_type": "user", "actor_id": 3101, "order_id": 4102, "allowed": false, "reason": "other_user"},
+    {"actor_type": "user", "actor_id": 3103, "order_id": 4102, "allowed": true, "reason": "own_order"},
+    {"actor_type": "user", "actor_id": 3103, "order_id": 4202, "allowed": true, "reason": "shared_user_other_tenant"},
+    {"actor_type": "employee", "actor_id": 1101, "order_id": 4202, "allowed": false, "reason": "cross_tenant"}
+  ]
+}
