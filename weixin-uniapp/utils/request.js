@@ -10,6 +10,7 @@ export function request({url='', params={}, method='GET'}) {
 			'Accept': 'application/json',
 			'Access-Control-Allow-Origin':'*',
 			'Content-Type': 'application/json', 
+			'X-Store-Id': '1', // 单店过渡配置；后续选店功能改为用户选择
 			// 'shopid':storeInfo.storeInfo.shopId ?? '',
 			// 'storeid':storeInfo.storeInfo.storeId ?? '',
 			'authentication': storeInfo.token

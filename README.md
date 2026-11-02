@@ -215,7 +215,7 @@ npm run dev
 
 真机不能通过 `localhost` 访问开发电脑，需要改用设备可访问的后端地址。当前小程序仍使用 Vue 2，不能按新管理端的 Vite 工程方式启动。
 
-### Nginx 是否必需
+### Nginx 
 
 本地使用 Vite 开发管理端、Spring Boot 提供接口时，不要求启动 Nginx。小程序也可以直接请求后端。
 
@@ -296,6 +296,8 @@ node --test tests/*.test.cjs
 
 优先沿用当前单体应用逐步拆分业务边界。租户数据隔离应覆盖读取、写入、关联表、批量操作、缓存与消息，不能仅通过列表参数或隐藏菜单实现。
 
+后续新增或重构的 Service 层业务服务采用接口与实现类：`service` 包定义 `XxxService` 接口，`service.impl` 包提供标注 `@Service` 的 `XxxServiceImpl`。接口方法编写 JavaDoc，说明用途、参数、返回值及有意义的异常；实现方法编写对应说明并标注 `@Override`，调用方依赖接口。
+
 ## 文档入口与项目来源
 
 - 阶段1本地文档位于 `docs/stage1/`，步骤8—10说明为 `order-payment-lifecycle.md`、验收为 `remaining-verification.md`。docs按项目要求被Git忽略，GitHub不会包含它；可随仓库查看的升级说明为 [数据库迁移说明](database/migrations/README.md)。
@@ -306,5 +308,4 @@ node --test tests/*.test.cjs
 - 本地 Redis：`scripts/redis.md`。
 - 小程序功能与结算说明：[小程序说明](weixin-uniapp/README.md)；本地运行与联调：[小程序开发流程](weixin-uniapp/小程序开发流程.md)。
 
-项目基于黑马程序员「苍穹外卖」进行学习与持续重构。当前保留其后端模块组织和业务基础，并逐步迁移管理端、调整小程序品牌界面及建设餐饮 SaaS 所需能力。
 

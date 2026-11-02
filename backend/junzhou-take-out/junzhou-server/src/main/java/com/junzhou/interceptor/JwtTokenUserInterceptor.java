@@ -2,6 +2,7 @@ package com.junzhou.interceptor;
 
 import com.junzhou.constant.JwtClaimsConstant;
 import com.junzhou.context.BaseContext;
+import com.junzhou.context.RequestScope;
 import com.junzhou.properties.JwtProperties;
 import com.junzhou.utils.JwtUtil;
 import io.jsonwebtoken.Claims;
@@ -18,12 +19,15 @@ import javax.servlet.http.HttpServletResponse;
  */
 @Component
 public class JwtTokenUserInterceptor implements HandlerInterceptor {
+    public static final String USER_ATTRIBUTE = JwtTokenUserInterceptor.class.getName() + ".userId";
     @Autowired
     private JwtProperties jwtProperties;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         BaseContext.removeCurrentId();
+        RequestScope.clear();
+        request.removeAttribute(USER_ATTRIBUTE);
         if (!(handler instanceof HandlerMethod)) {
             return true;
         }
@@ -32,6 +36,7 @@ public class JwtTokenUserInterceptor implements HandlerInterceptor {
             Claims claims = JwtUtil.parseJWT(jwtProperties.getUserSecretKey(), token);
             Long userId = Long.valueOf(claims.get(JwtClaimsConstant.USER_ID).toString());
             BaseContext.setCurrentId(userId);
+            request.setAttribute(USER_ATTRIBUTE, userId);
             return true;
         } catch (Exception ex) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -43,5 +48,7 @@ public class JwtTokenUserInterceptor implements HandlerInterceptor {
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
                                 Object handler, Exception ex) {
         BaseContext.removeCurrentId();
+        RequestScope.clear();
+        request.removeAttribute(USER_ATTRIBUTE);
     }
 }

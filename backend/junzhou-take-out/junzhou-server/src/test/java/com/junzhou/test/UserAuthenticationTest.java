@@ -39,6 +39,7 @@ class UserAuthenticationTest {
         BaseContext.removeCurrentId();
         context = new AnnotationConfigWebApplicationContext();
         context.setServletContext(new MockServletContext());
+        context.register(com.junzhou.test.support.LegacyMvcScopeConfiguration.class);
         context.register(WebMvcConfiguration.class, AuthenticationConfiguration.class);
         context.refresh();
         mvc = MockMvcBuilders.webAppContextSetup(context).build();

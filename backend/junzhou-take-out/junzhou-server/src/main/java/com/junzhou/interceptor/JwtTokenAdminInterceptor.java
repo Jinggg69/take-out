@@ -2,6 +2,7 @@ package com.junzhou.interceptor;
 
 import com.junzhou.constant.JwtClaimsConstant;
 import com.junzhou.context.BaseContext;
+import com.junzhou.context.RequestScope;
 import com.junzhou.properties.JwtProperties;
 import com.junzhou.utils.JwtUtil;
 import com.junzhou.service.AdminSessionService;
@@ -40,6 +41,7 @@ public class JwtTokenAdminInterceptor implements HandlerInterceptor {
      */
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         BaseContext.removeCurrentId();
+        RequestScope.clear();
         request.removeAttribute(AdminSessionService.SESSION_ATTRIBUTE);
         //判断当前拦截到的是Controller的方法还是其他资源
         if (!(handler instanceof HandlerMethod)) {
@@ -79,6 +81,7 @@ public class JwtTokenAdminInterceptor implements HandlerInterceptor {
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
                                 Object handler, Exception ex) {
         BaseContext.removeCurrentId();
+        RequestScope.clear();
         request.removeAttribute(AdminSessionService.SESSION_ATTRIBUTE);
     }
 }

@@ -67,6 +67,7 @@ class AddressBookModuleTest {
         BaseContext.removeCurrentId();
         context = new AnnotationConfigWebApplicationContext();
         context.setServletContext(new MockServletContext());
+        context.register(com.junzhou.test.support.LegacyMvcScopeConfiguration.class);
         context.register(WebMvcConfiguration.class, AddressBookTestConfiguration.class);
         context.refresh();
         jdbc = new JdbcTemplate(context.getBean(DataSource.class));

@@ -73,6 +73,7 @@ class AdminAuthenticationTest {
         BaseContext.removeCurrentId();
         context = new AnnotationConfigWebApplicationContext();
         context.setServletContext(new MockServletContext());
+        context.register(com.junzhou.test.support.LegacyMvcScopeConfiguration.class);
         context.register(DatabaseConfiguration.class, WebMvcConfiguration.class, EmployeeController.class,
                 JwtTokenAdminInterceptor.class, JwtTokenUserInterceptor.class, GlobalExceptionHandler.class, Probe.class);
         context.refresh();

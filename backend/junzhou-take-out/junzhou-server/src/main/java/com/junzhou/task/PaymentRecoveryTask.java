@@ -1,6 +1,8 @@
 package com.junzhou.task;
 
 import com.junzhou.properties.WeChatProperties;
+import com.junzhou.context.BaseContext;
+import com.junzhou.context.RequestScope;
 import com.junzhou.service.PaymentRecoveryService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,8 +18,11 @@ public class PaymentRecoveryTask {
     @Value("${sky.payment.jobs-enabled:true}") private boolean enabled;
     @Scheduled(cron="15 * * * * ?")
     public void recover() {
-        if(!enabled || properties.getMchid()==null || properties.getMchid().trim().isEmpty()) return;
-        try { refunds.processDue(); } catch(RuntimeException ex) { log.warn("退款恢复任务暂不可用"); }
-        try { refunds.reconcileCancelled(); } catch(RuntimeException ex) { log.warn("支付核验任务暂不可用"); }
+        RequestScope.clear(); BaseContext.removeCurrentId();
+        try {
+            if(!enabled || properties.getMchid()==null || properties.getMchid().trim().isEmpty()) return;
+            try { refunds.processDue(); } catch(RuntimeException ex) { log.warn("退款恢复任务暂不可用"); }
+            try { refunds.reconcileCancelled(); } catch(RuntimeException ex) { log.warn("支付核验任务暂不可用"); }
+        } finally { RequestScope.clear(); BaseContext.removeCurrentId(); }
     }
 }

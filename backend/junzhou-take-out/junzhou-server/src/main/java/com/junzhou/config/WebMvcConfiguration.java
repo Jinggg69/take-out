@@ -2,6 +2,7 @@ package com.junzhou.config;
 
 import com.junzhou.interceptor.JwtTokenAdminInterceptor;
 import com.junzhou.interceptor.JwtTokenUserInterceptor;
+import com.junzhou.interceptor.RequestScopeInterceptor;
 import com.junzhou.json.JacksonObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +35,9 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
     @Autowired
     private JwtTokenUserInterceptor jwtTokenUserInterceptor;
 
+    @Autowired
+    private RequestScopeInterceptor requestScopeInterceptor;
+
     /**
      * 注册自定义拦截器
      *
@@ -46,6 +50,9 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
                 .excludePathPatterns("/admin/employee/login");
         registry.addInterceptor(jwtTokenUserInterceptor)
                 .addPathPatterns("/user/shoppingCart/**", "/user/order/**", "/user/addressBook/**");
+        registry.addInterceptor(requestScopeInterceptor)
+                .addPathPatterns("/admin/**", "/user/**")
+                .excludePathPatterns("/admin/employee/login", "/user/user/login");
     }
 
     /**

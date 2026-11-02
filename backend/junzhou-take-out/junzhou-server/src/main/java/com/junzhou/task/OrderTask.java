@@ -1,6 +1,8 @@
 package com.junzhou.task;
 
 import com.junzhou.mapper.OrderMaintenanceMapper;
+import com.junzhou.context.BaseContext;
+import com.junzhou.context.RequestScope;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -35,9 +37,12 @@ public class OrderTask {
      */
     @Scheduled(cron = "0 * * * * ?") // 每分钟执行一次
     public void processTimeoutOrders() {
-        LocalDateTime now = LocalDateTime.now(clock);
-        int cancelled = orderMaintenanceMapper.cancelUnpaidBefore(now.minusMinutes(15), now);
-        log.info("定时取消超时未支付订单:{}", cancelled);
+        RequestScope.clear(); BaseContext.removeCurrentId();
+        try {
+            LocalDateTime now = LocalDateTime.now(clock);
+            int cancelled = orderMaintenanceMapper.cancelUnpaidBefore(now.minusMinutes(15), now);
+            log.info("定时取消超时未支付订单:{}", cancelled);
+        } finally { RequestScope.clear(); BaseContext.removeCurrentId(); }
     }
 
     /**
@@ -46,8 +51,11 @@ public class OrderTask {
      */
     @Scheduled(cron = "0 0 1 * * ?") // 每天凌晨一点执行一次
     public void processDeliveryOrders() {
-        LocalDateTime now = LocalDateTime.now(clock);
-        int completed = orderMaintenanceMapper.completeDeliveriesBefore(now.minusHours(1), now);
-        log.info("定时完成配送订单:{}", completed);
+        RequestScope.clear(); BaseContext.removeCurrentId();
+        try {
+            LocalDateTime now = LocalDateTime.now(clock);
+            int completed = orderMaintenanceMapper.completeDeliveriesBefore(now.minusHours(1), now);
+            log.info("定时完成配送订单:{}", completed);
+        } finally { RequestScope.clear(); BaseContext.removeCurrentId(); }
     }
 }

@@ -48,6 +48,7 @@ class ShoppingCartModuleTest {
         BaseContext.removeCurrentId();
         context = new AnnotationConfigWebApplicationContext();
         context.setServletContext(new MockServletContext());
+        context.register(com.junzhou.test.support.LegacyMvcScopeConfiguration.class);
         context.register(OrderPaymentModuleTest.PaymentTestConfiguration.class, WebMvcConfiguration.class,
                 ShoppingCartController.class, ShoppingCartServiceImpl.class, OrderServiceImpl.class,
                 com.junzhou.service.impl.OrderPricingServiceImpl.class, GlobalExceptionHandler.class, JwtTokenUserInterceptor.class,
