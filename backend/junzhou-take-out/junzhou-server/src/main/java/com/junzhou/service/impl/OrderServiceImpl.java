@@ -33,7 +33,6 @@ import com.junzhou.service.CartAccessService;
 import com.junzhou.service.ShoppingCartService;
 import com.junzhou.service.RefundTransactionService;
 import com.junzhou.payment.OrderSubmissionIdentity;
-import com.junzhou.utils.WeChatPayUtil;
 import com.junzhou.vo.OrderPaymentVO;
 import com.junzhou.vo.OrderStatisticsVO;
 import com.junzhou.vo.OrderSubmitVO;
@@ -74,7 +73,7 @@ public class OrderServiceImpl implements OrderService {
     @Autowired
     private UserMapper userMapper;
     @Autowired
-    private WeChatPayUtil weChatPayUtil;
+    private com.junzhou.service.PaymentAccountService paymentAccounts;
     @Autowired
     private DeliveryRangeService deliveryRangeService;
     @Autowired
@@ -145,7 +144,9 @@ public class OrderServiceImpl implements OrderService {
         order.setConsignee(addressBook.getConsignee());
         order.setUserId(userId);
 
+        order.setPaymentAccountId(paymentAccounts.currentAccountId());
         orderMapper.insert(order);
+        if(order.getId()==null) throw new OrderBusinessException("订单支付账户或归属已变化，请重试");
         //向订单明细表插入多条数据
         List<OrderDetail> orderDetailList = new ArrayList<>();
         for (ShoppingCart cart : quote.getItems()) {
@@ -187,7 +188,7 @@ public class OrderServiceImpl implements OrderService {
         }
         User user = userMapper.getById(userId);
 
-        JSONObject jsonObject = weChatPayUtil.pay(
+        JSONObject jsonObject = paymentAccounts.provider(order).pay(
                 ordersPaymentDTO.getOrderNumber(),
                 order.getAmount(),
                 "均州鱼庄外卖订单",

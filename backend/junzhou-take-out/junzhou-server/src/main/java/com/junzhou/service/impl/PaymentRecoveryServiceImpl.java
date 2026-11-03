@@ -27,7 +27,7 @@ public class PaymentRecoveryServiceImpl implements PaymentRecoveryService {
     @Autowired private PaymentLifecycleService lifecycle;
     @Autowired private RefundRequestMapper refunds;
     @Autowired private RefundTransactionService transactions;
-    @Autowired private WeChatPayUtil provider;
+    @Autowired private com.junzhou.service.PaymentAccountService paymentAccounts;
 
     /** {@inheritDoc} */
     @Override
@@ -51,14 +51,15 @@ public class PaymentRecoveryServiceImpl implements PaymentRecoveryService {
         RefundRequest claim=transactions.claim(number,force);
         if(claim==null) return;
         try {
+            WeChatPayUtil provider=paymentAccounts.provider(orders.getById(claim.getOrderId()));
             JSONObject result;
             if(!RefundRequest.REQUESTED.equals(claim.getStatus()) || claim.getAttempts()>1 || Boolean.TRUE.equals(claim.getQueryOnly())) {
                 try { result=JSON.parseObject(provider.queryRefund(number)); }
                 catch(WechatApiException ex) {
                     if(ex.getStatusCode()!=404 || !"RESOURCE_NOT_EXISTS".equals(ex.getErrorCode()) || Boolean.TRUE.equals(claim.getQueryOnly())) throw ex;
-                    result=submit(claim);
+                    result=submit(claim,provider);
                 }
-            } else result=submit(claim);
+            } else result=submit(claim,provider);
             transactions.recordResult(number,result);
         } catch(Exception ex) {
             String code=ex instanceof WechatApiException ? ((WechatApiException)ex).getErrorCode() : "RESULT_UNCONFIRMED";
@@ -68,7 +69,7 @@ public class PaymentRecoveryServiceImpl implements PaymentRecoveryService {
     }
 
     /** 向微信提交退款请求。 */
-    private JSONObject submit(RefundRequest claim) throws Exception {
+    private JSONObject submit(RefundRequest claim,WeChatPayUtil provider) throws Exception {
         BigDecimal amount=BigDecimal.valueOf(claim.getAmountFen(),2);
         return JSON.parseObject(provider.refund(claim.getOutTradeNo(),claim.getOutRefundNo(),amount,amount));
     }
@@ -86,6 +87,7 @@ public class PaymentRecoveryServiceImpl implements PaymentRecoveryService {
                 || (order.getPaymentCheckTime()!=null && !order.getPaymentCheckTime().isBefore(LocalDateTime.now().minusMinutes(5)))) return;
             orders.recordPaymentCheck(order.getId(),LocalDateTime.now());
             try {
+                WeChatPayUtil provider=paymentAccounts.provider(order);
                 JSONObject result=provider.queryOrder(order.getNumber());
                 if(result==null || !order.getNumber().equals(result.getString("out_trade_no"))) return;
                 String state=result.getString("trade_state");

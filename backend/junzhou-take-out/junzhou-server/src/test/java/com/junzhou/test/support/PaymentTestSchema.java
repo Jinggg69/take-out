@@ -14,6 +14,11 @@ public final class PaymentTestSchema {
         jdbc.execute("alter table orders add (dispatch_time timestamp, wechat_transaction_id varchar(64), "
                 + "refund_status varchar(16), payment_check_time timestamp, wechat_trade_state varchar(32), "
                 + "client_request_id varchar(64), submit_fingerprint varchar(64))");
+        jdbc.execute("create table payment_account(id varchar(64) primary key,tenant_id bigint,store_id bigint,mchid varchar(64),appid varchar(64))");
+        jdbc.execute("insert into payment_account values('legacy',1,1,'test-merchant','test-app')");
+        jdbc.execute("create table store_payment_account(tenant_id bigint,store_id bigint,payment_account_id varchar(64),primary key(tenant_id,store_id))");
+        jdbc.execute("insert into store_payment_account values(1,1,'legacy')");
+        jdbc.execute("alter table orders add payment_account_id varchar(64) default 'legacy'");
         jdbc.execute("create unique index uk_order_number on orders(number)");
         jdbc.execute("create unique index uk_order_transaction on orders(wechat_transaction_id)");
         jdbc.execute("create unique index uk_order_submission on orders(user_id,client_request_id)");

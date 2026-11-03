@@ -11,6 +11,7 @@ import com.junzhou.context.BaseContext;
 import com.junzhou.context.RequestScope;
 import com.junzhou.controller.user.OrderController;
 import com.junzhou.dto.OrdersSubmitDTO;
+import com.junzhou.dto.OrdersPaymentDTO;
 import com.junzhou.handler.GlobalExceptionHandler;
 import com.junzhou.interceptor.JwtTokenAdminInterceptor;
 import com.junzhou.mapper.AdminSessionMapper;
@@ -217,6 +218,81 @@ class OrderPaymentModuleTest {
         RequestScope.clear(); assertThrows(RuntimeException.class,()->orders.getById(10L));
         assertThrows(SecurityException.class,()->context.getBean(com.junzhou.payment.LegacySystemScope.class).enter());
         assertNull(RequestScope.current());
+    }
+
+    @Test void verifiedCallbackWorksAfterAnotherTenantIsAdded() throws Exception {
+        jdbc.execute("insert into tenant values(2,1)");
+        jdbc.execute("insert into store values(2,2,1)");
+        mvc.perform(signedNotification("/notify/paySuccess",paymentResource("order-10","wx-10"),"TRANSACTION.SUCCESS"))
+                .andExpect(status().isOk());
+        assertEquals(1,paymentState(10));
+        assertNull(RequestScope.current());
+    }
+
+    @Test void accountSwitchAffectsNewOrdersButPreservesOriginalOrder() throws Exception {
+        WeChatProperties next=new WeChatProperties(); next.setMchid("merchant-next"); next.setAppid("test-app");
+        context.getBean(WeChatProperties.class).getAccounts().put("next",next);
+        jdbc.execute("insert into payment_account values('next',1,1,'merchant-next','test-app')");
+        jdbc.execute("update store_payment_account set payment_account_id='next'");
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"addressBookId\":101,\"payMethod\":1,\"amount\":33}"))
+                .andExpect(jsonPath("$.code").value(1));
+        assertEquals("next",jdbc.queryForObject("select payment_account_id from orders where id<>10",String.class));
+        mvc.perform(put("/user/order/payment").header("authentication",token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"orderNumber\":\"order-10\"}" )).andExpect(jsonPath("$.code").value(1));
+        mvc.perform(signedNotification("/notify/paySuccess",paymentResource("order-10","wx-10"),"TRANSACTION.SUCCESS"))
+                .andExpect(status().isOk());
+        assertEquals("legacy",jdbc.queryForObject("select payment_account_id from orders where id=10",String.class));
+        mvc.perform(put("/user/order/cancel/10").header("authentication",token())).andExpect(jsonPath("$.code").value(1));
+        systemBean(PaymentRecoveryService.class).retry(10L);
+        assertEquals(1,provider().refundCalls);
+        assertEquals("PROCESSING",refundState(10));
+    }
+
+    @Test void signedOtherTenantNotificationUsesItsOwnAccountAndCannotPayLegacyOrder() throws Exception {
+        WeChatProperties other=new WeChatProperties(); other.setMchid("merchant-other"); other.setAppid("test-app");
+        SignedWechatNotifications signer=new SignedWechatNotifications(other,notificationKeys);
+        context.getBean(WeChatProperties.class).getAccounts().put("other",other);
+        jdbc.execute("insert into tenant values(2,1)"); jdbc.execute("insert into store values(2,2,1)");
+        jdbc.execute("insert into payment_account values('other',2,2,'merchant-other','test-app')");
+        JSONObject resource=paymentResource("order-10","wx-10"); resource.put("mchid","merchant-other");
+        SignedWechatNotifications.Signed signed=signer.wrap(resource,"TRANSACTION.SUCCESS");
+        MockHttpServletRequestBuilder request=post("/notify/paySuccess").contentType(MediaType.APPLICATION_JSON)
+                .content(signed.body).header("Wechatpay-Timestamp",signed.timestamp).header("Wechatpay-Nonce",signed.nonce)
+                .header("Wechatpay-Serial",signed.serial).header("Wechatpay-Signature",signed.signature);
+        mvc.perform(request).andExpect(status().isUnauthorized()); assertEquals(0,paymentState(10));
+        jdbc.execute("update orders set tenant_id=2,store_id=2,payment_account_id='other' where id=10");
+        mvc.perform(request).andExpect(status().isOk()); assertEquals(1,paymentState(10));
+        assertNull(RequestScope.current()); assertNull(BaseContext.getCurrentId());
+    }
+
+    @Test void sharedMerchantKeysStillRouteRefundToTheBoundStoreAccount() throws Exception {
+        signer(); // Configure legacy verification keys.
+        WeChatProperties original=context.getBean(WeChatProperties.class);
+        WeChatProperties shared=new WeChatProperties();
+        org.springframework.beans.BeanUtils.copyProperties(original,shared,"accounts");
+        original.getAccounts().put("store-two",shared);
+        jdbc.execute("insert into tenant values(2,1)"); jdbc.execute("insert into store values(2,2,1)");
+        jdbc.execute("insert into payment_account values('store-two',2,2,'test-merchant','test-app')");
+        jdbc.execute("update orders set tenant_id=2,store_id=2,payment_account_id='store-two' where id=10");
+        mvc.perform(signedNotification("/notify/refundSuccess",refundResource("SUCCESS"),"REFUND.SUCCESS"))
+                .andExpect(status().isOk());
+        assertEquals(2,paymentState(10)); assertEquals(6,statusOf(10));
+        assertEquals(1,jdbc.queryForObject("select count(*) from refund_request where order_id=10",Integer.class));
+        assertNull(RequestScope.current());
+    }
+
+    @Test void changedMerchantOrMissingOriginalAccountFailsClosed() throws Exception {
+        context.getBean(WeChatProperties.class).setMchid("changed-merchant");
+        RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
+        OrdersPaymentDTO payment=new OrdersPaymentDTO(); payment.setOrderNumber("order-10");
+        assertThrows(IllegalStateException.class,()->context.getBean(OrderService.class).payment(payment));
+        RequestScope.clear();
+        assertEquals(0,paymentState(10));
+        context.getBean(WeChatProperties.class).setMchid("test-merchant");
+        jdbc.execute("update orders set payment_account_id=null where id=10");
+        mvc.perform(signedNotification("/notify/paySuccess",paymentResource("order-10","wx-10"),"TRANSACTION.SUCCESS"))
+                .andExpect(status().isUnauthorized()); assertEquals(0,paymentState(10));
     }
 
     @AfterEach
@@ -1266,6 +1342,13 @@ class OrderPaymentModuleTest {
         @Bean com.junzhou.payment.LegacySystemScope systemScope(SqlSessionFactory f) {
             f.getConfiguration().addMapper(com.junzhou.mapper.TenantScopeMapper.class);
             return new com.junzhou.payment.LegacySystemScope(new com.junzhou.service.impl.TenantScopeServiceImpl(new SqlSessionTemplate(f).getMapper(com.junzhou.mapper.TenantScopeMapper.class)));
+        }
+        @Bean com.junzhou.mapper.PaymentAccountMapper paymentAccountMapper(SqlSessionFactory f) {
+            f.getConfiguration().addMapper(com.junzhou.mapper.PaymentAccountMapper.class);
+            return new SqlSessionTemplate(f).getMapper(com.junzhou.mapper.PaymentAccountMapper.class);
+        }
+        @Bean com.junzhou.service.PaymentAccountService paymentAccounts(com.junzhou.mapper.PaymentAccountMapper mapper,WeChatProperties p,TestWeChatPayUtil provider) {
+            return new com.junzhou.service.impl.PaymentAccountServiceImpl(mapper,p,provider);
         }
         @Bean OrderMapper orderMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(OrderMapper.class); }
         @Bean OrderDetailMapper orderDetailMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(OrderDetailMapper.class); }

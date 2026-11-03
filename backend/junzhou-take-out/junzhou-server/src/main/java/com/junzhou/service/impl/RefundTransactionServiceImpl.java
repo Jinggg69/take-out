@@ -25,7 +25,7 @@ import java.util.UUID;
 public class RefundTransactionServiceImpl implements RefundTransactionService {
     @Autowired private OrderMapper orderMapper;
     @Autowired private RefundRequestMapper refunds;
-    @Autowired private WeChatProperties properties;
+    @Autowired private com.junzhou.service.PaymentAccountService paymentAccounts;
 
     /** {@inheritDoc} */
     @Transactional(propagation=Propagation.MANDATORY)
@@ -84,8 +84,6 @@ public class RefundTransactionServiceImpl implements RefundTransactionService {
     @Transactional
     @Override
     public void notifyResult(JSONObject result) {
-        if(blank(properties.getMchid())) throw new IllegalStateException("Payment merchant is not configured");
-        if(!properties.getMchid().equals(result.getString("mchid"))) throw new OrderBusinessException("退款商户信息不匹配");
         Orders order=orderMapper.getByNumberForUpdate(result.getString("out_trade_no"));
         if(order==null) throw new OrderBusinessException("订单不存在");
         RefundRequest current=refunds.getByOrderIdForUpdate(order.getId());
@@ -136,6 +134,7 @@ public class RefundTransactionServiceImpl implements RefundTransactionService {
                 || (amount.containsKey("currency") && !"CNY".equals(amount.getString("currency")))
                 || fen(amount.get("total"))!=refund.getAmountFen()
                 || fen(amount.get("refund"))!=refund.getAmountFen()) throw new OrderBusinessException("退款金额信息不匹配");
+        WeChatProperties properties=paymentAccounts.properties(order);
         if(notification && !properties.getMchid().equals(result.getString("mchid"))) throw new OrderBusinessException("退款商户信息不匹配");
     }
 

@@ -21,6 +21,7 @@ import java.util.Base64;
 public class WeChatNotificationServiceImpl implements WeChatNotificationService {
     private final WeChatProperties properties;
     private final Clock clock;
+    @Autowired(required=false) private com.junzhou.service.PaymentAccountService accounts;
     /** 使用系统时钟创建通知校验服务。 */
     @Autowired
     public WeChatNotificationServiceImpl(WeChatProperties properties) { this(properties, Clock.systemUTC()); }
@@ -30,6 +31,30 @@ public class WeChatNotificationServiceImpl implements WeChatNotificationService 
     /** {@inheritDoc} */
     @Override
     public VerifiedNotification verify(String rawBody, String timestamp, String nonce, String serial, String signature) {
+        if (!properties.getAccounts().isEmpty()) {
+            VerifiedNotification matched=null;
+            java.util.Map<String,WeChatProperties> candidates=new java.util.LinkedHashMap<>(properties.getAccounts());
+            if(candidates.containsKey("legacy")) throw new IllegalStateException("Reserved payment account ID");
+            candidates.put("legacy",properties);
+            for(java.util.Map.Entry<String,WeChatProperties> entry:candidates.entrySet()) {
+                try {
+                    VerifiedNotification verified=verifyFor(entry.getValue(),rawBody,timestamp,nonce,serial,signature).forAccount(entry.getKey());
+                    if(!entry.getValue().getMchid().equals(verified.getResource().getString("mchid"))) continue;
+                    if(accounts!=null) accounts.locate(verified);
+                    if(matched!=null) throw new IllegalStateException("Ambiguous notification payment account");
+                    matched=verified;
+                } catch(SecurityException | NullPointerException ignored) { }
+                catch(IllegalStateException ex) {
+                    if("Ambiguous notification payment account".equals(ex.getMessage())) throw ex;
+                    // One unavailable account must not block unrelated accounts; none matched still fails closed.
+                }
+            }
+            if(matched==null) throw invalid();
+            return matched;
+        }
+        return verifyFor(properties,rawBody,timestamp,nonce,serial,signature);
+    }
+    private VerifiedNotification verifyFor(WeChatProperties properties,String rawBody,String timestamp,String nonce,String serial,String signature) {
         if (rawBody == null || rawBody.isEmpty() || blank(timestamp) || blank(nonce) || blank(serial) || blank(signature)) throw invalid();
         try {
             if (!timestamp.matches("[0-9]{1,19}")) throw invalid();

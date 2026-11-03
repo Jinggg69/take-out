@@ -10,6 +10,9 @@ import org.springframework.stereotype.Component;
 @Data
 public class WeChatProperties {
 
+    @ToString.Exclude
+    private java.util.Map<String, WeChatProperties> accounts = new java.util.LinkedHashMap<>();
+
     private String appid; //小程序的appid
     @ToString.Exclude
     private String secret; //小程序的秘钥

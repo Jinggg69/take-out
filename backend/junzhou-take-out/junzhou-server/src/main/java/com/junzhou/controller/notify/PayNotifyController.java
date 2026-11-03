@@ -22,7 +22,7 @@ import java.util.Collections;
 @RequestMapping("/notify")
 @Slf4j
 public class PayNotifyController {
-    @Autowired private com.junzhou.payment.LegacySystemScope systemScope;
+    @Autowired private com.junzhou.service.PaymentAccountService accounts;
     @Autowired private WeChatNotificationService notifications;
     @Autowired private PaymentLifecycleService payments;
     @Autowired private RefundTransactionService refunds;
@@ -46,7 +46,10 @@ public class PayNotifyController {
             VerifiedNotification notice=notifications.verify(new String(buffer.toByteArray(),StandardCharsets.UTF_8),
                     request.getHeader("Wechatpay-Timestamp"),request.getHeader("Wechatpay-Nonce"),
                     request.getHeader("Wechatpay-Serial"),request.getHeader("Wechatpay-Signature"));
-            try (com.junzhou.payment.LegacySystemScope.Scope ignored=systemScope.enter()) {
+            com.junzhou.entity.Orders order=accounts.locate(notice);
+            com.junzhou.context.RequestScope.set(com.junzhou.context.RequestScope.forSystem(order.getTenantId(),order.getStoreId()));
+            accounts.properties(order);
+            {
             if(refund) {
                 String event=notice.getEventType();
                 if(!("REFUND.SUCCESS".equals(event)||"REFUND.CLOSED".equals(event)||"REFUND.ABNORMAL".equals(event))

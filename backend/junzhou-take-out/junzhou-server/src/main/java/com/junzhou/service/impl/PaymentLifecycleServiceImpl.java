@@ -28,7 +28,7 @@ import java.time.ZoneId;
 public class PaymentLifecycleServiceImpl implements PaymentLifecycleService {
     @Autowired private OrderMapper orders;
     @Autowired private UserMapper users;
-    @Autowired private WeChatProperties properties;
+    @Autowired private com.junzhou.service.PaymentAccountService paymentAccounts;
     @Autowired private RefundTransactionService refunds;
     @Autowired private WebSocketServer sockets;
 
@@ -36,14 +36,16 @@ public class PaymentLifecycleServiceImpl implements PaymentLifecycleService {
     @Transactional
     @Override
     public void confirmPayment(JSONObject payment) {
+        if(payment==null) throw new OrderBusinessException("支付交易信息缺失");
+        Orders order=orders.getByNumberForUpdate(payment.getString("out_trade_no"));
+        if(order==null) throw new OrderBusinessException("订单不存在");
+        WeChatProperties properties=paymentAccounts.properties(order);
         if(blank(properties.getMchid()) || blank(properties.getAppid())) throw new IllegalStateException("Payment merchant is not configured");
         if(payment==null || !properties.getMchid().equals(payment.getString("mchid"))
                 || !properties.getAppid().equals(payment.getString("appid")) || !"SUCCESS".equals(payment.getString("trade_state"))
                 || !"JSAPI".equals(payment.getString("trade_type"))) throw new OrderBusinessException("支付交易信息不匹配");
         String number=payment.getString("out_trade_no"),transaction=payment.getString("transaction_id");
         if(blank(number)||blank(transaction)||transaction.length()>64) throw new OrderBusinessException("支付交易信息缺失");
-        Orders order=orders.getByNumberForUpdate(number);
-        if(order==null) throw new OrderBusinessException("订单不存在");
         JSONObject amount=payment.getJSONObject("amount"),payer=payment.getJSONObject("payer");
         User user=users.getPaymentUserByOrderId(order.getId());
         long expected;
