@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.junzhou.config.WebMvcConfiguration;
 import com.junzhou.constant.JwtClaimsConstant;
 import com.junzhou.context.BaseContext;
+import com.junzhou.context.RequestScope;
 import com.junzhou.controller.user.AddressBookController;
 import com.junzhou.entity.AddressBook;
 import com.junzhou.handler.GlobalExceptionHandler;
@@ -91,10 +92,12 @@ class AddressBookModuleTest {
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(json)).build();
         webMvc = MockMvcBuilders.webAppContextSetup(context).build();
         BaseContext.setCurrentId(42L);
+        RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
     }
 
     @AfterEach
     void tearDown() {
+        RequestScope.clear();
         BaseContext.removeCurrentId();
         try {
             if (jdbc != null) {
@@ -105,6 +108,30 @@ class AddressBookModuleTest {
                 context.close();
             }
         }
+    }
+
+    @Test
+    void mapperRejectsForeignAddressParametersAndMerchantIdentity() {
+        AddressBookMapper mapper = context.getBean(AddressBookMapper.class);
+        assertNull(mapper.getByIdAndUserId(201L,84L));
+        assertEquals(0, mapper.deleteByIdAndUserId(201L,84L));
+        assertEquals(0, mapper.setDefaultByIdAndUserId(201L,84L));
+        assertEquals(0, mapper.update(AddressBook.builder().id(201L).userId(84L).detail("forged").build()));
+        assertTrue(mapper.list(AddressBook.builder().userId(84L).build()).isEmpty());
+        mapper.updateIsDefaultByUserId(AddressBook.builder().userId(84L).isDefault(0).build());
+        assertEquals(1, jdbc.queryForObject("select is_default from address_book where id=201",Integer.class));
+        RequestScope.set(new RequestScope(42L,null,1L,1L,Collections.singleton(1L)));
+        assertThrows(RuntimeException.class, () -> mapper.getByIdAndUserId(101L,42L));
+        assertThrows(RuntimeException.class, () -> service.getById(101L));
+        RequestScope.clear();
+        assertThrows(RuntimeException.class, () -> mapper.deleteByIdAndUserId(101L,42L));
+        assertEquals(3, jdbc.queryForObject("select count(*) from address_book",Integer.class));
+    }
+
+    @Test
+    void mapperListWithoutUserNeverReturnsOtherUsersAddresses() {
+        AddressBook criteria = new AddressBook();
+        assertTrue(context.getBean(com.junzhou.mapper.AddressBookMapper.class).list(criteria).isEmpty());
     }
 
     @Test
@@ -143,6 +170,7 @@ class AddressBookModuleTest {
     @Test
     void listsEmptyWhenCurrentUserHasNoAddresses() throws Exception {
         BaseContext.setCurrentId(999L);
+        RequestScope.set(new RequestScope(null,999L,1L,1L,Collections.emptySet()));
         businessMvc.perform(get(API + "/list"))
                 .andExpect(jsonPath("$.code").value(1))
                 .andExpect(jsonPath("$.data.length()").value(0));

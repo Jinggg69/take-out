@@ -30,8 +30,8 @@ public class AdminSessionServiceImpl implements AdminSessionService {
     @Transactional
     @Override
     public String issue(Employee authenticated) {
-        Employee current = employeeMapper.getByIdForUpdate(authenticated.getId());
-        if (current == null || !StatusConstant.ENABLE.equals(current.getStatus()) || current.getPassword() == null
+        Employee current = employeeMapper.getForSessionIssue(authenticated.getId(), authenticated.getPassword());
+        if (current == null || current.getTenantId() == null || current.getTenantId() <= 0 || !StatusConstant.ENABLE.equals(current.getStatus()) || current.getPassword() == null
                 || !Objects.equals(current.getPassword(), authenticated.getPassword())) {
             throw new LoginFailedException("账号状态已变化，请重新登录");
         }
@@ -44,8 +44,8 @@ public class AdminSessionServiceImpl implements AdminSessionService {
         long expiresAt = JwtUtil.parseJWT(jwtProperties.getAdminSecretKey(), token).getExpiration().getTime();
         long now = System.currentTimeMillis();
         if (expiresAt <= now) throw new IllegalStateException("管理端令牌有效期过短");
-        adminSessionMapper.deleteExpired(current.getId(), now);
-        if (adminSessionMapper.insert(sessionId, current.getId(), expiresAt) != 1) {
+        adminSessionMapper.deleteExpired(current.getId(), now, current.getTenantId());
+        if (adminSessionMapper.insert(sessionId, current.getId(), expiresAt, current.getTenantId()) != 1) {
             throw new IllegalStateException("认证会话创建失败");
         }
         return token;

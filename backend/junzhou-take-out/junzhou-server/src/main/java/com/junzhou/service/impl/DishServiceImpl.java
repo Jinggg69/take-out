@@ -4,6 +4,8 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.junzhou.constant.MessageConstant;
 import com.junzhou.constant.StatusConstant;
+import com.junzhou.context.RequestScope;
+import com.junzhou.mapper.CategoryMapper;
 import com.junzhou.dto.DishDTO;
 import com.junzhou.dto.DishPageQueryDTO;
 import com.junzhou.entity.Dish;
@@ -30,6 +32,8 @@ import java.util.List;
 @Slf4j
 public class DishServiceImpl implements DishService {
     @Autowired
+    private CategoryMapper categoryMapper;
+    @Autowired
     private DishMapper dishMapper;
     @Autowired
     private DishFlavorMapper dishFlavorMapper;
@@ -43,10 +47,11 @@ public class DishServiceImpl implements DishService {
     @Override
     @Transactional
     public void saveWithFlavor(DishDTO dishDTO) {
+        requireCategory(dishDTO.getCategoryId());
         log.info("新增菜品：{}",dishDTO);
         Dish dish = new Dish();
         BeanUtils.copyProperties(dishDTO, dish);
-        dishMapper.insert(dish);
+        if (dishMapper.insert(dish) != 1) throw new SecurityException("目录记录不存在或归属已变更");
         // 获取菜品口味列表
         List<DishFlavor> flavors = dishDTO.getFlavors();
         // 口味列表不为空时，批量保存口味数据
@@ -56,7 +61,7 @@ public class DishServiceImpl implements DishService {
                 flavor.setDishId(dish.getId());
             }
             // 批量插入口味数据
-            dishMapper.insertFlavors(flavors);
+            if (dishMapper.insertFlavors(flavors) != flavors.size()) throw new SecurityException("菜品口味归属已变更");
         }
     }
     /**
@@ -85,7 +90,7 @@ public class DishServiceImpl implements DishService {
 
         //判断当前菜品是否能够删除---是否在售
         for (Long id : ids) {
-            Dish dish = dishMapper.getById(id);
+            Dish dish = dishMapper.getByIdForUpdate(id);
             if (dish == null) {
                 throw new DeletionNotAllowedException(MessageConstant.DISH_NOT_FOUND);
             }
@@ -134,14 +139,15 @@ public class DishServiceImpl implements DishService {
         if (dishDTO == null || dishDTO.getId() == null) {
             throw new BaseException(MessageConstant.DISH_ID_REQUIRED);
         }
-        if (dishMapper.getById(dishDTO.getId()) == null) {
+        if (dishMapper.getByIdForUpdate(dishDTO.getId()) == null) {
             throw new BaseException(MessageConstant.DISH_NOT_EXIST);
         }
 
+        if (dishDTO.getCategoryId() != null) requireCategory(dishDTO.getCategoryId());
         // 更新菜品信息
         Dish dish = new Dish();
         BeanUtils.copyProperties(dishDTO, dish);
-        dishMapper.updateById(dish);
+        if (dishMapper.updateById(dish) != 1) throw new SecurityException("目录记录不存在或归属已变更");
 
         // 删除原有的口味信息
         dishFlavorMapper.deleteByDishIds(Collections.singletonList(dish.getId()));
@@ -152,10 +158,11 @@ public class DishServiceImpl implements DishService {
             for (DishFlavor flavor : flavors) {
                 flavor.setDishId(dish.getId());
             }
-            dishMapper.insertFlavors(flavors);
+            if (dishMapper.insertFlavors(flavors) != flavors.size()) throw new SecurityException("菜品口味归属已变更");
         }
     }
 
+    /** 查询当前商户的在售菜品。 */
     @Override
     public List<Dish> list(Long categoryId) {
         Dish dish = Dish.builder().categoryId(categoryId).status(StatusConstant.ENABLE).build();
@@ -179,7 +186,9 @@ public class DishServiceImpl implements DishService {
         return dishVOList;
     }
 
+    /** 修改当前商户菜品的售卖状态。 */
     @Override
+    @Transactional
     public void startOrStop(Integer status, Long id) {
         if (!StatusConstant.ENABLE.equals(status) && !StatusConstant.DISABLE.equals(status)) {
             throw new BaseException(MessageConstant.DISH_STATUS_INVALID);
@@ -187,12 +196,19 @@ public class DishServiceImpl implements DishService {
         if (id == null) {
             throw new BaseException(MessageConstant.DISH_ID_REQUIRED);
         }
-        if (dishMapper.getById(id) == null) {
+        if (dishMapper.getByIdForUpdate(id) == null) {
             throw new BaseException(MessageConstant.DISH_NOT_EXIST);
         }
 
         // 只更新售卖状态，修改时间和修改人由公共字段填充切面处理。
         Dish dish = Dish.builder().id(id).status(status).build();
-        dishMapper.updateById(dish);
+        if (dishMapper.updateById(dish) != 1) throw new SecurityException("目录记录不存在或归属已变更");
     }
+    /** Validate the category against the authenticated tenant before changing a relationship. */
+    private void requireCategory(Long categoryId) {
+        if (categoryId == null || categoryMapper.lockOwned(categoryId, RequestScope.requireTenantId()) == null) {
+            throw new SecurityException("分类不存在或无权访问");
+        }
+    }
+
 }

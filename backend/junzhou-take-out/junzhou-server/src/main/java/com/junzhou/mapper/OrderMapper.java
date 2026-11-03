@@ -4,8 +4,6 @@ import com.github.pagehelper.Page;
 import com.junzhou.dto.OrdersPageQueryDTO;
 import com.junzhou.entity.Orders;
 import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Select;
-import org.apache.ibatis.annotations.Update;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
@@ -13,19 +11,12 @@ import java.util.List;
 
 @Mapper
 public interface OrderMapper {
-    @Select("select * from orders where user_id=#{userId} and client_request_id=#{requestId}")
     Orders getBySubmission(@Param("userId") Long userId,@Param("requestId") String requestId);
 
-    @Select("select * from orders where status=6 and pay_status=0 "
-            + "and (wechat_trade_state is null or wechat_trade_state not in ('CLOSED','REVOKED','PAYERROR')) "
-            + "and (payment_check_time is null or payment_check_time<#{before}) "
-            + "order by coalesce(payment_check_time,order_time),id limit 20")
     List<Orders> cancelledPaymentsToCheck(LocalDateTime before);
 
-    @Update("update orders set payment_check_time=#{now} where id=#{id}")
     void recordPaymentCheck(@Param("id") Long id,@Param("now") LocalDateTime now);
 
-    @Update("update orders set wechat_trade_state=#{state},payment_check_time=#{now} where id=#{id} and status=6 and pay_status=0")
     int markClosedPayment(@Param("id") Long id,@Param("state") String state,@Param("now") LocalDateTime now);
 
     /**
@@ -39,7 +30,6 @@ public interface OrderMapper {
      * @param orderNumber 商户订单号
      * @return 订单信息
      */
-    @Select("select * from orders where number = #{orderNumber}")
     Orders getByNumber(String orderNumber);
 
     /**
@@ -47,7 +37,6 @@ public interface OrderMapper {
      * @param orderNumber 商户订单号
      * @return 订单信息
      */
-    @Select("select * from orders where number = #{orderNumber} for update")
     Orders getByNumberForUpdate(String orderNumber);
 
     /**
@@ -68,7 +57,6 @@ public interface OrderMapper {
      * @param id 订单id
      * @return 订单信息
      */
-    @Select("select * from orders where id = #{id}")
     Orders getById(Long id);
 
     /**
@@ -76,7 +64,6 @@ public interface OrderMapper {
      * @param id 订单id
      * @return 订单信息
      */
-    @Select("select * from orders where id = #{id} for update")
     Orders getByIdForUpdate(Long id);
 
     /**
@@ -84,7 +71,6 @@ public interface OrderMapper {
      * @param status 订单状态
      * @return 订单数量
      */
-    @Select("select count(*) from orders where status = #{status}")
     Integer countByStatus(Integer status);
 
     /**
@@ -92,8 +78,6 @@ public interface OrderMapper {
      * @param number 商户订单号
      * @return 实际更新的记录数
      */
-    @Update("update orders set status = 2, pay_status = 1, "
-            + "checkout_time = current_timestamp where number = #{number} and status = 1 and pay_status = 0")
     int markPaid(String number);
 
     /**
@@ -102,6 +86,5 @@ public interface OrderMapper {
      * @param orderTime 下单时间上限
      * @return 订单列表
      */
-    @Select("select * from orders where status = #{status} and order_time < #{orderTime}")
     List<Orders> getByStausAndOrderTimeLT(Integer status, LocalDateTime orderTime);
 }

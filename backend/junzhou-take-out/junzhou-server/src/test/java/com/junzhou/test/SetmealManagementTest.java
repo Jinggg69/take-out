@@ -1,5 +1,8 @@
 package com.junzhou.test;
 
+import com.junzhou.context.RequestScope;
+import com.junzhou.mapper.CategoryMapper;
+
 import com.github.pagehelper.PageInterceptor;
 import com.junzhou.aspect.AutoFillAspect;
 import com.junzhou.constant.MessageConstant;
@@ -67,7 +70,7 @@ class SetmealManagementTest {
         jdbc = new JdbcTemplate(context.getBean(DataSource.class));
         jdbc.execute("create table category (id bigint primary key, name varchar(100))");
         jdbc.execute("create table dish (id bigint primary key, name varchar(100), category_id bigint, "
-                + "price decimal(10, 2), status int, create_time timestamp)");
+                + "price decimal(10, 2), image varchar(255), description varchar(255), status int, create_time timestamp)");
         jdbc.execute("create table setmeal (id bigint auto_increment primary key, category_id bigint not null, "
                 + "name varchar(100) not null unique, price decimal(10, 2) not null, status int, "
                 + "description varchar(255), image varchar(255), create_time timestamp not null, "
@@ -81,6 +84,16 @@ class SetmealManagementTest {
                 + "(1, '在售菜品', 30, 18.50, 1, current_timestamp), "
                 + "(2, '停售菜品', 30, 12.00, 0, current_timestamp), "
                 + "(3, '其他菜品', 40, 20.00, 1, current_timestamp)");
+        RequestScope.set(new RequestScope(42L, null, 1L, 1L, Collections.singleton(1L)));
+        jdbc.execute("alter table dish add tenant_id bigint");
+        jdbc.update("update dish set tenant_id = 1");
+        jdbc.execute("alter table dish alter column tenant_id set not null");
+        jdbc.execute("alter table setmeal add tenant_id bigint");
+        jdbc.update("update setmeal set tenant_id = 1");
+        jdbc.execute("alter table setmeal alter column tenant_id set not null");
+        jdbc.execute("alter table category add tenant_id bigint");
+        jdbc.update("update category set tenant_id = 1");
+        jdbc.execute("alter table category alter column tenant_id set not null");
         service = context.getBean(SetmealService.class);
         SetmealController setmealController = new SetmealController();
         ReflectionTestUtils.setField(setmealController, "setmealService", service);
@@ -94,6 +107,7 @@ class SetmealManagementTest {
 
     @AfterEach
     void tearDown() {
+        RequestScope.clear();
         BaseContext.removeCurrentId();
         if (context != null) {
             context.close();
@@ -318,6 +332,73 @@ class SetmealManagementTest {
         return jdbc.queryForMap("select * from setmeal where id = ?", id);
     }
 
+    @Test
+    void isolatesTwoTenantsAndRejectsMixedBulkAndForeignRelations() {
+        service.saveWithDish(dto("tenant A", 1L));
+        long a = idByName("tenant A");
+        jdbc.update("insert into category(id, name, tenant_id) values (99, 'B', 2)");
+        jdbc.update("insert into dish(id, name, category_id, price, status, tenant_id) values (99, 'B dish', 99, 12, 1, 2)");
+        RequestScope.set(new RequestScope(43L, null, 2L, 2L, Collections.singleton(2L)));
+        SetmealDTO bDto = dto("tenant B", 99L);
+        bDto.setCategoryId(99L);
+        service.saveWithDish(bDto);
+        long b = idByName("tenant B");
+        assertEquals(2L, ((Number) row(b).get("TENANT_ID")).longValue());
+        RequestScope.set(new RequestScope(42L, null, 1L, 1L, Collections.singleton(1L)));
+        assertEquals(1, service.list(new com.junzhou.entity.Setmeal()).size());
+        assertNull(context.getBean(SetmealMapper.class).getById(b));
+        assertNull(context.getBean(SetmealMapper.class).getVOById(b));
+        assertTrue(context.getBean(SetmealDishMapper.class).getBySetmealId(b).isEmpty());
+        assertTrue(context.getBean(SetmealMapper.class).getDishItemBySetmealId(b).isEmpty());
+        assertThrows(BaseException.class, () -> service.getByIdWithDish(b));
+        assertThrows(BaseException.class, () -> service.deleteBatch(Arrays.asList(a, b)));
+        context.getBean(SetmealDishMapper.class).deleteBySetmealIds(Arrays.asList(a, b));
+        context.getBean(SetmealMapper.class).deleteBatch(Arrays.asList(a, b));
+        assertEquals(2, count("setmeal"));
+        assertEquals(2, count("setmeal_dish"));
+        SetmealDTO foreignCategory = dto("bad category", 1L);
+        foreignCategory.setCategoryId(99L);
+        assertThrows(SecurityException.class, () -> service.saveWithDish(foreignCategory));
+        assertThrows(BaseException.class, () -> service.saveWithDish(dto("bad dish", 99L)));
+        SetmealDTO update = dto("forged update", 99L);
+        update.setId(a);
+        assertThrows(BaseException.class, () -> service.updateWithDish(update));
+        assertEquals("tenant A", row(a).get("NAME"));
+        assertEquals(1L, service.getByIdWithDish(a).getSetmealDishes().get(0).getDishId());
+        RequestScope.clear();
+        assertThrows(RuntimeException.class, () -> context.getBean(SetmealMapper.class).getById(a));
+    }
+
+    @Test
+    void rejectsCorruptCompositionWithoutHidingForeignComponents() {
+        service.saveWithDish(dto("corrupt", 1L));
+        long id = idByName("corrupt");
+        jdbc.update("insert into dish(id, name, price, status, tenant_id) values (99, 'foreign', 10, 1, 2)");
+        jdbc.update("insert into setmeal_dish(setmeal_id, dish_id, copies) values (?, 99, 1)", id);
+        assertThrows(SecurityException.class, () -> service.getByIdWithDish(id));
+        assertThrows(SecurityException.class, () -> service.getDishItemById(id));
+        assertThrows(SecurityException.class, () -> service.startOrStop(1, id));
+        assertThrows(SecurityException.class, () -> service.deleteBatch(Collections.singletonList(id)));
+        assertEquals(1, count("setmeal"));
+        assertEquals(2, count("setmeal_dish"));
+    }
+
+    @Test
+    void insertsMultipleComponentsAndRejectsMixedParentBulkInsert() {
+        SetmealDTO dto = dto("multiple", 1L);
+        dto.setSetmealDishes(Arrays.asList(SetmealDish.builder().dishId(1L).copies(1).build(),
+                SetmealDish.builder().dishId(2L).copies(2).build()));
+        service.saveWithDish(dto);
+        long id = idByName("multiple");
+        assertEquals(2, service.getByIdWithDish(id).getSetmealDishes().size());
+        jdbc.update("insert into dish(id, name, price, status, tenant_id) values (99, 'foreign', 10, 1, 2)");
+        SetmealDishMapper relations = context.getBean(SetmealDishMapper.class);
+        assertEquals(0, relations.insertBatch(Arrays.asList(
+                SetmealDish.builder().setmealId(id).dishId(1L).name("ok").price(BigDecimal.ONE).copies(1).build(),
+                SetmealDish.builder().setmealId(id).dishId(99L).name("bad").price(BigDecimal.ONE).copies(1).build())));
+        assertEquals(2, count("setmeal_dish"));
+    }
+
     @Configuration
     @EnableTransactionManagement
     @EnableAspectJAutoProxy
@@ -343,7 +424,7 @@ class SetmealManagementTest {
             factory.setConfiguration(configuration);
             factory.setMapperLocations(new ClassPathResource("mapper/SetmealMapper.xml"),
                     new ClassPathResource("mapper/SetmealDishMapper.xml"),
-                    new ClassPathResource("mapper/DishMapper.xml"));
+                    new ClassPathResource("mapper/DishMapper.xml"), new ClassPathResource("mapper/CategoryMapper.xml"));
             PageInterceptor pageInterceptor = new PageInterceptor();
             Properties properties = new Properties();
             properties.setProperty("helperDialect", "mysql");
@@ -366,6 +447,9 @@ class SetmealManagementTest {
         SetmealDishMapper setmealDishMapper(SqlSessionTemplate template) {
             return template.getMapper(SetmealDishMapper.class);
         }
+
+        @Bean
+        CategoryMapper categoryMapper(SqlSessionTemplate template) { return template.getMapper(CategoryMapper.class); }
 
         @Bean
         DishMapper dishMapper(SqlSessionTemplate template) {

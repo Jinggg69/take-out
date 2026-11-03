@@ -21,16 +21,16 @@ public interface DishMapper {
      * @param categoryId
      * @return
      */
-    @Select("select count(id) from dish where category_id = #{categoryId}")
-    Integer countByCategoryId(Long categoryId);
+    @Select("<script><bind name=\"scopeTenant\" value=\"@com.junzhou.context.RequestScope@requireTenantId()\"/>select count(id) from dish where category_id = #{categoryId} and tenant_id = #{tenantId} and tenant_id = #{scopeTenant}</script>")
+    Integer countByCategoryId(@Param("categoryId") Long categoryId, @Param("tenantId") Long tenantId);
 
     @AutoFill(OperationType.INSERT)
-    void insert(Dish dish);
+    int insert(Dish dish);
 
     /**
      * 批量插入菜品口味
      */
-    void insertFlavors(@Param("flavors") List<DishFlavor> flavors);
+    int insertFlavors(@Param("flavors") List<DishFlavor> flavors);
 
     /**
      * 菜品分页查询
@@ -50,14 +50,18 @@ public interface DishMapper {
      * @param id
      * @return
      */
-    @Select("select * from dish where id = #{id}")
+    @Select("<script><bind name=\"scopeTenant\" value=\"@com.junzhou.context.RequestScope@requireTenantId()\"/>select * from dish where id = #{id} and tenant_id = #{scopeTenant}</script>")
     Dish getById(Long id);
+
+    /** Lock an authorized row for a transactional state change. */
+    @Select("<script><bind name=\"scopeTenant\" value=\"@com.junzhou.context.RequestScope@requireTenantId()\"/>select * from dish where id = #{id} and tenant_id = #{scopeTenant} for update</script>")
+    Dish getByIdForUpdate(Long id);
 
     /**
      * 根据id更新菜品及修改记录
      */
     @AutoFill(OperationType.UPDATE)
-    void updateById(Dish dish);
+    int updateById(Dish dish);
 
     /**
      * 按分类和售卖状态查询菜品

@@ -21,10 +21,12 @@ public class ShoppingCartServiceImpl implements ShoppingCartService {
     @Autowired private CartAccessService cartAccessService;
     @Autowired private OrderPricingService orderPricingService;
 
+    /** 将一份商品加入当前用户、商户和门店的购物车。 */
     @Override
     @Transactional
     public void add(ShoppingCartDTO input) { add(input, 1); }
 
+    /** 按数量加入商品，并校验商品归属及实际写入结果。 */
     @Override
     @Transactional
     public void add(ShoppingCartDTO input, int quantity) {
@@ -36,7 +38,7 @@ public class ShoppingCartServiceImpl implements ShoppingCartService {
         ShoppingCart existing = consolidate(key);
         if (existing == null) {
             fresh.setCreateTime(LocalDateTime.now());
-            shoppingCartMapper.insert(fresh);
+            if (shoppingCartMapper.insert(fresh) != 1) throw new SecurityException("无权关联该商品");
         } else {
             if (shoppingCartMapper.increment(existing.getId(), key.getUserId(), quantity) != 1) {
                 throw new ShoppingCartBusinessException("购物车数量超出范围，请减少商品");
@@ -46,15 +48,18 @@ public class ShoppingCartServiceImpl implements ShoppingCartService {
         }
     }
 
+    /** 查询当前用户在当前门店的购物车。 */
     @Override
     public List<ShoppingCart> showShoppingCart() {
         return shoppingCartMapper.list(ShoppingCart.builder().userId(cartAccessService.currentUserId()).build());
     }
 
+    /** 仅清空当前用户在当前门店的购物车。 */
     @Override
     @Transactional
     public void clean() { shoppingCartMapper.delete(cartAccessService.lockCurrentCart()); }
 
+    /** 在当前用户与门店范围内减少商品数量。 */
     @Override
     @Transactional
     public void sub(ShoppingCartDTO input) {

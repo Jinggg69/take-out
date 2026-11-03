@@ -1,5 +1,8 @@
 package com.junzhou.test;
 
+import com.junzhou.context.RequestScope;
+import com.junzhou.mapper.CategoryMapper;
+
 import com.junzhou.constant.MessageConstant;
 import com.junzhou.controller.admin.DishController;
 import com.junzhou.exception.DeletionNotAllowedException;
@@ -68,6 +71,12 @@ class DishDeletionTest {
         jdbc.update("insert into dish_flavor values (101, 1), (102, 2), (105, 5)");
         jdbc.update("insert into setmeal_dish values (10, 4)");
 
+        RequestScope.set(new RequestScope(42L, null, 1L, 1L, Collections.singleton(1L)));
+        jdbc.execute("alter table dish add tenant_id bigint");
+        jdbc.update("update dish set tenant_id = 1");
+        jdbc.execute("alter table dish alter column tenant_id set not null");
+        jdbc.execute("create table setmeal (id bigint primary key, tenant_id bigint not null)");
+        jdbc.update("insert into setmeal values (10, 1)");
         service = new DishServiceImpl();
         ReflectionTestUtils.setField(service, "dishMapper", session.getMapper(DishMapper.class));
         ReflectionTestUtils.setField(service, "dishFlavorMapper", session.getMapper(DishFlavorMapper.class));
@@ -82,6 +91,7 @@ class DishDeletionTest {
 
     @AfterEach
     void tearDown() {
+        RequestScope.clear();
         if (session != null) {
             session.close();
         }
@@ -127,6 +137,21 @@ class DishDeletionTest {
         assertEquals(MessageConstant.DISH_IDS_EMPTY, empty.getMessage());
         assertEquals(1, count("dish", "id = 1"));
         assertEquals(1, count("dish_flavor", "dish_id = 1"));
+    }
+
+    @Test
+    void rejectsMixedTenantDeletionAndScopesFlavorAccess() {
+        jdbc.update("insert into dish(id,status,tenant_id) values (99,0,2)");
+        jdbc.update("insert into dish_flavor(id,dish_id) values (199,99)");
+        assertThrows(DeletionNotAllowedException.class, () -> service.deleteBatch(Arrays.asList(1L, 99L)));
+        session.getMapper(DishFlavorMapper.class).deleteByDishIds(Arrays.asList(1L, 99L));
+        session.getMapper(DishMapper.class).deleteBatch(Arrays.asList(1L, 99L));
+        assertEquals(1, count("dish", "id = 1"));
+        assertEquals(1, count("dish_flavor", "dish_id = 1"));
+        org.junit.jupiter.api.Assertions.assertNull(session.getMapper(DishMapper.class).getById(99L));
+        assertEquals(0, session.getMapper(DishFlavorMapper.class).getByDishId(99L).size());
+        session.getMapper(DishFlavorMapper.class).deleteByDishIds(Collections.singletonList(99L));
+        assertEquals(1, count("dish_flavor", "dish_id = 99"));
     }
 
     private int count(String table, String condition) {

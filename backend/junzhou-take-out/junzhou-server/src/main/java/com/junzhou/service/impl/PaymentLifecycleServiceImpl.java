@@ -45,7 +45,7 @@ public class PaymentLifecycleServiceImpl implements PaymentLifecycleService {
         Orders order=orders.getByNumberForUpdate(number);
         if(order==null) throw new OrderBusinessException("订单不存在");
         JSONObject amount=payment.getJSONObject("amount"),payer=payment.getJSONObject("payer");
-        User user=users.getById(order.getUserId());
+        User user=users.getPaymentUserByOrderId(order.getId());
         long expected;
         try { expected=order.getAmount().movePointRight(2).longValueExact(); }
         catch(RuntimeException ex) { throw new OrderBusinessException("订单金额异常"); }

@@ -1,5 +1,8 @@
 package com.junzhou.test;
 
+import com.junzhou.context.RequestScope;
+import com.junzhou.mapper.CategoryMapper;
+
 import com.junzhou.controller.admin.DishController;
 import com.junzhou.handler.GlobalExceptionHandler;
 import com.junzhou.mapper.DishMapper;
@@ -61,6 +64,10 @@ class DishStatusTest {
         jdbc.update("insert into dish values (2, '其他菜品', 2, 22.00, 'other.png', '其他', 1, "
                 + "timestamp '2026-01-01 00:00:00', timestamp '2026-01-02 00:00:00', 10, 11)");
 
+        RequestScope.set(new RequestScope(42L, null, 1L, 1L, Collections.singleton(1L)));
+        jdbc.execute("alter table dish add tenant_id bigint");
+        jdbc.update("update dish set tenant_id = 1");
+        jdbc.execute("alter table dish alter column tenant_id set not null");
         DishServiceImpl service = new DishServiceImpl();
         ReflectionTestUtils.setField(service, "dishMapper", session.getMapper(DishMapper.class));
         DishController controller = new DishController();
@@ -74,6 +81,7 @@ class DishStatusTest {
 
     @AfterEach
     void tearDown() {
+        RequestScope.clear();
         if (session != null) {
             session.close();
         }

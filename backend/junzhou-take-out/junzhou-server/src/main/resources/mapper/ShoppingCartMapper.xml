@@ -4,9 +4,10 @@
 <mapper namespace="com.junzhou.mapper.ShoppingCartMapper">
 
     <select id="list" resultType="com.junzhou.entity.ShoppingCart">
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/><bind name="scopeStore" value="@com.junzhou.context.RequestScope@requireStoreId()"/><bind name="scopeUser" value="@com.junzhou.context.RequestScope@requireUserId()"/>
         select * from shopping_cart
         <where>
-            user_id = #{userId}
+            user_id = #{userId} and user_id = #{scopeUser} and tenant_id = #{scopeTenant} and store_id = #{scopeStore}
             <if test="dishId != null">
                 and dish_id = #{dishId} and setmeal_id is null
             </if>

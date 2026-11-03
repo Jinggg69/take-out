@@ -4,6 +4,7 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.junzhou.constant.MessageConstant;
 import com.junzhou.constant.StatusConstant;
+import com.junzhou.context.RequestScope;
 import com.junzhou.dto.CategoryDTO;
 import com.junzhou.dto.CategoryPageQueryDTO;
 import com.junzhou.entity.Category;
@@ -37,6 +38,7 @@ public class CategoryServiceImpl implements CategoryService {
      * 新增分类
      * @param categoryDTO
      */
+    @Override
     public void save(CategoryDTO categoryDTO) {
         Category category = new Category();
         //属性拷贝
@@ -51,7 +53,7 @@ public class CategoryServiceImpl implements CategoryService {
         // category.setCreateUser(BaseContext.getCurrentId());
         // category.setUpdateUser(BaseContext.getCurrentId());
 
-        categoryMapper.insert(category);
+        if (categoryMapper.insert(category, currentTenant()) != 1) throw new SecurityException("分类归属已变更");
     }
 
     /**
@@ -59,10 +61,12 @@ public class CategoryServiceImpl implements CategoryService {
      * @param categoryPageQueryDTO
      * @return
      */
+    @Override
     public PageResult pageQuery(CategoryPageQueryDTO categoryPageQueryDTO) {
-        PageHelper.startPage(categoryPageQueryDTO.getPage(),categoryPageQueryDTO.getPageSize());
+        Long tenantId = currentTenant();
         //下一条sql进行分页，自动加入limit关键字分页
-        Page<Category> page = categoryMapper.pageQuery(categoryPageQueryDTO);
+        PageHelper.startPage(categoryPageQueryDTO.getPage(),categoryPageQueryDTO.getPageSize());
+        Page<Category> page = categoryMapper.pageQuery(categoryPageQueryDTO, tenantId);
         return new PageResult(page.getTotal(), page.getResult());
     }
 
@@ -70,29 +74,38 @@ public class CategoryServiceImpl implements CategoryService {
      * 根据id删除分类
      * @param id
      */
+    @Override
+    @org.springframework.transaction.annotation.Transactional
     public void deleteById(Long id) {
+        Long tenantId = currentTenant();
+        if (categoryMapper.lockOwned(id, tenantId) == null) {
+            throw new SecurityException("分类不存在或无权访问");
+        }
         //查询当前分类是否关联了菜品，如果关联了就抛出业务异常
-        Integer count = dishMapper.countByCategoryId(id);
+        Integer count = dishMapper.countByCategoryId(id, tenantId);
         if(count > 0){
             //当前分类下有菜品，不能删除
             throw new DeletionNotAllowedException(MessageConstant.CATEGORY_BE_RELATED_BY_DISH);
         }
 
         //查询当前分类是否关联了套餐，如果关联了就抛出业务异常
-        count = setmealMapper.countByCategoryId(id);
+        count = setmealMapper.countByCategoryId(id, tenantId);
         if(count > 0){
             //当前分类下有菜品，不能删除
             throw new DeletionNotAllowedException(MessageConstant.CATEGORY_BE_RELATED_BY_SETMEAL);
         }
 
         //删除分类数据
-        categoryMapper.deleteById(id);
+        if (categoryMapper.deleteById(id, tenantId) != 1) {
+            throw new SecurityException("分类不存在或无权访问");
+        }
     }
 
     /**
      * 修改分类
      * @param categoryDTO
      */
+    @Override
     public void update(CategoryDTO categoryDTO) {
         Category category = new Category();
         BeanUtils.copyProperties(categoryDTO,category);
@@ -101,7 +114,9 @@ public class CategoryServiceImpl implements CategoryService {
         // category.setUpdateTime(LocalDateTime.now());
         // category.setUpdateUser(BaseContext.getCurrentId());
 
-        categoryMapper.update(category);
+        if (categoryMapper.update(category, currentTenant()) != 1) {
+            throw new SecurityException("分类不存在或无权访问");
+        }
     }
 
     /**
@@ -109,6 +124,7 @@ public class CategoryServiceImpl implements CategoryService {
      * @param status
      * @param id
      */
+    @Override
     public void startOrStop(Integer status, Long id) {
         Category category = Category.builder()
                 .id(id)
@@ -116,7 +132,9 @@ public class CategoryServiceImpl implements CategoryService {
                 // .updateTime(LocalDateTime.now())
                 // .updateUser(BaseContext.getCurrentId())
                 .build();
-        categoryMapper.update(category);
+        if (categoryMapper.update(category, currentTenant()) != 1) {
+            throw new SecurityException("分类不存在或无权访问");
+        }
     }
 
     /**
@@ -124,7 +142,16 @@ public class CategoryServiceImpl implements CategoryService {
      * @param type
      * @return
      */
+    @Override
     public List<Category> list(Integer type) {
-        return categoryMapper.list(type);
+        return categoryMapper.list(type, currentTenant());
+    }
+
+    private Long currentTenant() {
+        RequestScope scope = RequestScope.current();
+        if (scope == null || scope.getTenantId() == null || scope.getTenantId() <= 0) {
+            throw new SecurityException("缺少商户上下文");
+        }
+        return scope.getTenantId();
     }
 }

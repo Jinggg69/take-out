@@ -6,12 +6,25 @@
     <insert id="insertBatch">
         insert into order_detail (name, order_id, dish_id, setmeal_id, dish_flavor,
                                   number, amount, image)
-        values
-        <foreach collection="list" item="orderDetail" separator=",">
-            (#{orderDetail.name}, #{orderDetail.orderId}, #{orderDetail.dishId},
-             #{orderDetail.setmealId}, #{orderDetail.dishFlavor},
-             #{orderDetail.number}, #{orderDetail.amount}, #{orderDetail.image})
+        <foreach collection="list" item="orderDetail" separator=" union all ">
+            select concat(#{orderDetail.name},''), cast(#{orderDetail.orderId} as signed), cast(#{orderDetail.dishId} as signed),
+             cast(#{orderDetail.setmealId} as signed), concat(#{orderDetail.dishFlavor},''),
+             cast(#{orderDetail.number} as signed), cast(#{orderDetail.amount} as decimal(10,2)), concat(#{orderDetail.image},'')
+            from orders where id=#{orderDetail.orderId}
+            <include refid="com.junzhou.mapper.OrderMapper.scope"/>
+            and ((#{orderDetail.dishId} is not null and #{orderDetail.setmealId} is null and exists (select 1 from dish where dish.id=#{orderDetail.dishId} and dish.tenant_id=orders.tenant_id))
+            or (#{orderDetail.setmealId} is not null and #{orderDetail.dishId} is null and exists (select 1 from setmeal where setmeal.id=#{orderDetail.setmealId} and setmeal.tenant_id=orders.tenant_id)))
+            <foreach collection="list" item="check">
+                and exists (select 1 from orders where id=#{check.orderId}
+                    <include refid="com.junzhou.mapper.OrderMapper.scope"/>
+                    and ((#{check.dishId} is not null and #{check.setmealId} is null and exists (select 1 from dish where dish.id=#{check.dishId} and dish.tenant_id=orders.tenant_id))
+                    or (#{check.setmealId} is not null and #{check.dishId} is null and exists (select 1 from setmeal where setmeal.id=#{check.setmealId} and setmeal.tenant_id=orders.tenant_id))))
+            </foreach>
         </foreach>
     </insert>
 
+    <select id="getByOrderId" resultType="com.junzhou.entity.OrderDetail">
+        select * from order_detail where order_id=#{orderId} and exists
+        (select 1 from orders where orders.id=order_detail.order_id <include refid="com.junzhou.mapper.OrderMapper.scope"/>) order by id
+    </select>
 </mapper>

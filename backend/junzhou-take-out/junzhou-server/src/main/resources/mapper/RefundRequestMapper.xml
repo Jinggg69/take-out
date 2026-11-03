@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.junzhou.mapper.RefundRequestMapper">
+<sql id="parent">and exists (select 1 from orders where orders.id=refund_request.order_id <include refid="com.junzhou.mapper.OrderMapper.scope"/>)</sql>
+<select id="findByOrderId" resultType="com.junzhou.entity.RefundRequest">select * from refund_request where order_id=#{orderId} <include refid="parent"/></select>
+<select id="getByOrderIdForUpdate" resultType="com.junzhou.entity.RefundRequest">select * from refund_request where order_id=#{orderId} <include refid="parent"/> for update</select>
+<select id="getByNumber" resultType="com.junzhou.entity.RefundRequest">select * from refund_request where out_refund_no=#{number} <include refid="parent"/></select>
+<select id="getByNumberForUpdate" resultType="com.junzhou.entity.RefundRequest">select * from refund_request where out_refund_no=#{number} <include refid="parent"/> for update</select>
+<select id="due" resultType="java.lang.String">select out_refund_no from refund_request where status in ('REQUESTED','PROCESSING','VERIFYING') and next_attempt_at&lt;=#{now} and (lease_until is null or lease_until&lt;=#{now}) <include refid="parent"/> order by next_attempt_at,out_refund_no limit 20</select>
+<insert id="insert">insert into refund_request(out_refund_no,order_id,out_trade_no,transaction_id,amount_fen,status,query_only,attempts,next_attempt_at,created_at,updated_at) select #{outRefundNo},#{orderId},#{outTradeNo},#{transactionId},#{amountFen},#{status},#{queryOnly},0,#{nextAttemptAt},#{createdAt},#{updatedAt} from orders where id=#{orderId} <include refid="com.junzhou.mapper.OrderMapper.scope"/> and number=#{outTradeNo} and amount*100=#{amountFen} and (wechat_transaction_id=#{transactionId} or (wechat_transaction_id is null and #{transactionId} is null))</insert>
+<update id="update">update refund_request set status=#{status},transaction_id=#{transactionId},provider_refund_id=#{providerRefundId},attempts=#{attempts},next_attempt_at=#{nextAttemptAt},lease_until=#{leaseUntil},lease_token=#{leaseToken},updated_at=#{updatedAt},last_error=#{lastError} where out_refund_no=#{outRefundNo} <include refid="parent"/></update>
+</mapper>

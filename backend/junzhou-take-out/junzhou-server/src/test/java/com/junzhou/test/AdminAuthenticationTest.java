@@ -3,6 +3,7 @@ package com.junzhou.test;
 import com.junzhou.config.WebMvcConfiguration;
 import com.junzhou.constant.JwtClaimsConstant;
 import com.junzhou.context.BaseContext;
+import com.junzhou.context.RequestScope;
 import com.junzhou.controller.admin.EmployeeController;
 import com.junzhou.dto.EmployeeLoginDTO;
 import com.junzhou.dto.PasswordEditDTO;
@@ -78,13 +79,13 @@ class AdminAuthenticationTest {
                 JwtTokenAdminInterceptor.class, JwtTokenUserInterceptor.class, GlobalExceptionHandler.class, Probe.class);
         context.refresh();
         jdbc = new JdbcTemplate(context.getBean(DataSource.class));
-        jdbc.execute("create table employee (id bigint primary key, username varchar(32), name varchar(32), "
+        jdbc.execute("create table employee (id bigint primary key, tenant_id bigint not null, username varchar(32), name varchar(32), "
                 + "password varchar(64), phone varchar(32), sex varchar(2), id_number varchar(32), status int, "
                 + "create_time timestamp, update_time timestamp, create_user bigint, update_user bigint)");
         jdbc.execute("create table admin_session (session_id varchar(36) primary key, employee_id bigint not null, "
                 + "expires_at bigint not null)");
         for (long id : new long[]{42,84}) {
-            jdbc.update("insert into employee (id,username,name,password,status) values (?,?,?,?,1)",
+            jdbc.update("insert into employee (tenant_id,id,username,name,password,status) values (1,?,?,?,?,1)",
                     id, "employee" + id, "Employee " + id, hash("Old123"));
         }
         employees = context.getBean(EmployeeService.class);
@@ -93,6 +94,7 @@ class AdminAuthenticationTest {
 
     @AfterEach
     void tearDown() {
+        RequestScope.clear();
         BaseContext.removeCurrentId();
         context.close();
     }
@@ -152,10 +154,12 @@ class AdminAuthenticationTest {
         String first = login(42, "Old123");
         String second = login(42, "Old123");
         String other = login(84, "Old123");
+        RequestScope.set(new RequestScope(42L,null,1L,1L,java.util.Collections.singleton(1L)));
         employees.startOrStop(0, 42L);
         rejected(first);
         rejected(second);
         accepted(other, 84);
+        RequestScope.set(new RequestScope(42L,null,1L,1L,java.util.Collections.singleton(1L)));
         employees.startOrStop(1, 42L);
         rejected(first);
         rejected(second);
@@ -229,6 +233,7 @@ class AdminAuthenticationTest {
         String token = login(42, "Old123");
         rejectSessionDeletes();
         BaseContext.setCurrentId(42L);
+        RequestScope.set(new RequestScope(42L,null,1L,1L,java.util.Collections.singleton(1L)));
         PasswordEditDTO input = new PasswordEditDTO();
         input.setOldPassword("Old123");
         input.setNewPassword("New456");
@@ -241,6 +246,7 @@ class AdminAuthenticationTest {
     void failedSessionRevocationRollsBackAccountDisable() throws Exception {
         String token = login(42, "Old123");
         rejectSessionDeletes();
+        RequestScope.set(new RequestScope(42L,null,1L,1L,java.util.Collections.singleton(1L)));
         assertThrows(RuntimeException.class, () -> employees.startOrStop(0, 42L));
         assertEquals(1, jdbc.queryForObject("select status from employee where id=42", Integer.class));
         accepted(token, 42);
@@ -284,7 +290,8 @@ class AdminAuthenticationTest {
                     Thread.yield();
                 }
                 assertTrue(blocked, "Session issuance must wait for the employee row lock");
-                employees.startOrStop(0, 42L);
+                RequestScope.set(new RequestScope(42L,null,1L,1L,java.util.Collections.singleton(1L)));
+        employees.startOrStop(0, 42L);
                 return null;
             });
             ExecutionException failure = assertThrows(ExecutionException.class, () -> issued.get(5, TimeUnit.SECONDS));

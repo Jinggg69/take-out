@@ -33,7 +33,7 @@ class AutoFillAspectTest {
         Category category = new Category();
 
         employeeMapper.insert(employee);
-        categoryMapper.insert(category);
+        categoryMapper.insert(category, 1L);
 
         assertNotNull(employee.getCreateTime());
         assertEquals(employee.getCreateTime(), employee.getUpdateTime());
@@ -55,7 +55,7 @@ class AutoFillAspectTest {
         Category category = Category.builder().createTime(originalTime).createUser(8L).build();
 
         employeeMapper.update(employee);
-        categoryMapper.update(category);
+        categoryMapper.update(category, 1L);
 
         assertSame(originalTime, employee.getCreateTime());
         assertEquals(7L, employee.getCreateUser());

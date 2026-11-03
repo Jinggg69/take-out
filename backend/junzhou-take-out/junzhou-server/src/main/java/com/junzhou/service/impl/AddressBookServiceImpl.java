@@ -24,6 +24,7 @@ public class AddressBookServiceImpl implements AddressBookService {
      * @param addressBook
      * @return
      */
+    @Override
     public List<AddressBook> list(AddressBook addressBook) {
         addressBook.setUserId(currentUserId());
         return addressBookMapper.list(addressBook);
@@ -34,6 +35,7 @@ public class AddressBookServiceImpl implements AddressBookService {
      *
      * @param addressBook
      */
+    @Override
     public void save(AddressBook addressBook) {
         addressBook.setUserId(currentUserId());
         addressBook.setIsDefault(0);
@@ -46,6 +48,7 @@ public class AddressBookServiceImpl implements AddressBookService {
      * @param id
      * @return
      */
+    @Override
     public AddressBook getById(Long id) {
         AddressBook addressBook = addressBookMapper.getByIdAndUserId(id, currentUserId());
         if (addressBook == null) {
@@ -59,6 +62,7 @@ public class AddressBookServiceImpl implements AddressBookService {
      *
      * @param addressBook
      */
+    @Override
     public void update(AddressBook addressBook) {
         getById(addressBook.getId());
         addressBook.setUserId(currentUserId());
@@ -74,6 +78,7 @@ public class AddressBookServiceImpl implements AddressBookService {
      * @param addressBook
      */
     @Transactional
+    @Override
     public void setDefault(AddressBook addressBook) {
         AddressBook target = getById(addressBook.getId());
         AddressBook reset = AddressBook.builder().userId(target.getUserId()).isDefault(0).build();
@@ -88,6 +93,7 @@ public class AddressBookServiceImpl implements AddressBookService {
      *
      * @param id
      */
+    @Override
     public void deleteById(Long id) {
         AddressBook target = getById(id);
         if (addressBookMapper.deleteByIdAndUserId(id, target.getUserId()) != 1) {
@@ -96,11 +102,7 @@ public class AddressBookServiceImpl implements AddressBookService {
     }
 
     private Long currentUserId() {
-        Long userId = BaseContext.getCurrentId();
-        if (userId == null) {
-            throw new AddressBookBusinessException(MessageConstant.USER_NOT_LOGIN);
-        }
-        return userId;
+        return com.junzhou.context.RequestScope.requireUserId();
     }
 
     private boolean hasEditableFields(AddressBook addressBook) {

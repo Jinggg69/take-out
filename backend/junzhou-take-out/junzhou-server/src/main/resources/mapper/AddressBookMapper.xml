@@ -3,11 +3,10 @@
 <mapper namespace="com.junzhou.mapper.AddressBookMapper">
 
     <select id="list" parameterType="AddressBook" resultType="AddressBook">
+        <bind name="_user" value="@com.junzhou.context.RequestScope@requireUserId()"/>
         select * from address_book
         <where>
-            <if test="userId != null">
-                and user_id = #{userId}
-            </if>
+            user_id = #{userId} and user_id=#{_user}
             <if test="phone != null">
                 and phone = #{phone}
             </if>
@@ -18,6 +17,7 @@
     </select>
 
     <update id="update" parameterType="addressBook">
+        <bind name="_user" value="@com.junzhou.context.RequestScope@requireUserId()"/>
         update address_book
         <set>
             <if test="consignee != null">
@@ -54,7 +54,7 @@
                 label = #{label},
             </if>
         </set>
-        where id = #{id} and user_id = #{userId}
+        where id = #{id} and user_id = #{userId} and user_id=#{_user}
     </update>
 
 </mapper>

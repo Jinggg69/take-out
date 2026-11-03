@@ -6,6 +6,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 public final class PaymentTestSchema {
     private PaymentTestSchema() {}
     public static void upgrade(JdbcTemplate jdbc) {
+        jdbc.execute("create table tenant(id bigint primary key,status int)");
+        jdbc.execute("create table store(id bigint primary key,tenant_id bigint,status int)");
+        jdbc.execute("insert into tenant values(1,1)");
+        jdbc.execute("insert into store values(1,1,1)");
+        jdbc.execute("alter table orders add (tenant_id bigint default 1 not null, store_id bigint default 1 not null)");
         jdbc.execute("alter table orders add (dispatch_time timestamp, wechat_transaction_id varchar(64), "
                 + "refund_status varchar(16), payment_check_time timestamp, wechat_trade_state varchar(32), "
                 + "client_request_id varchar(64), submit_fingerprint varchar(64))");

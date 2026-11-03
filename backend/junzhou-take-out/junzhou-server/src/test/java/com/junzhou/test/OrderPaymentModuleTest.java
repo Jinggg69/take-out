@@ -6,6 +6,7 @@ import com.github.pagehelper.PageInterceptor;
 import com.junzhou.config.WebMvcConfiguration;
 import com.junzhou.constant.JwtClaimsConstant;
 import com.junzhou.context.BaseContext;
+import com.junzhou.context.RequestScope;
 import com.junzhou.controller.user.OrderController;
 import com.junzhou.dto.OrdersSubmitDTO;
 import com.junzhou.handler.GlobalExceptionHandler;
@@ -101,7 +102,7 @@ class OrderPaymentModuleTest {
 
     @BeforeEach
     void setUp() {
-        BaseContext.removeCurrentId();
+        BaseContext.removeCurrentId(); RequestScope.clear();
         context = new AnnotationConfigWebApplicationContext();
         context.setServletContext(new MockServletContext());
         context.register(com.junzhou.test.support.LegacyMvcScopeConfiguration.class);
@@ -163,7 +164,57 @@ class OrderPaymentModuleTest {
         jdbc.update("insert into orders (id, number, status, user_id, address_book_id, order_time, "
                 + "pay_method, pay_status, amount, remark) values "
                 + "(10, 'order-10', 1, 42, 101, '2026-10-14 12:00:00', 1, 0, 25.00, '保留备注')");
+        jdbc.execute("alter table employee add tenant_id bigint default 1 not null");
+        jdbc.execute("alter table shopping_cart add (tenant_id bigint default 1 not null, store_id bigint default 1 not null)");
+        jdbc.execute("alter table dish add tenant_id bigint default 1 not null");
+        jdbc.execute("alter table setmeal add tenant_id bigint default 1 not null");
         mvc = MockMvcBuilders.webAppContextSetup(context).build();
+    }
+
+    @Test
+    void orderSqlScopesReadsWritesChildrenRefundsAndStatistics() {
+        jdbc.execute("insert into tenant values(2,1)");
+        jdbc.execute("insert into store values(2,1,1),(3,2,1)");
+        jdbc.execute("insert into orders(id,number,status,user_id,address_book_id,order_time,pay_method,pay_status,amount,tenant_id,store_id) values "
+                + "(20,'store-a2',1,42,101,current_timestamp,1,0,25,1,2),(30,'tenant-b',1,42,101,current_timestamp,1,0,25,2,3),"
+                + "(40,'other-user',1,84,101,current_timestamp,1,0,25,1,1),(50,'bad-store',1,42,101,current_timestamp,1,0,25,1,3)");
+        jdbc.execute("insert into order_detail(id,name,order_id,number,amount) values(20,'snapshot',20,1,25),(10,'deleted product snapshot',10,1,25)");
+        jdbc.execute("insert into refund_request(out_refund_no,order_id,out_trade_no,amount_fen,status,next_attempt_at,created_at,updated_at) values('refund-20',20,'store-a2',2500,'REQUESTED',current_timestamp,current_timestamp,current_timestamp)");
+        OrderMapper orders=context.getBean(OrderMapper.class);
+        OrderDetailMapper details=context.getBean(OrderDetailMapper.class);
+        RefundRequestMapper refunds=context.getBean(RefundRequestMapper.class);
+        RequestScope.set(new RequestScope(null,42L,1L,1L,java.util.Collections.emptySet()));
+        assertNotNull(orders.getById(10L));
+        for(long id:new long[]{20,30,40,50}) {
+            assertNull(orders.getById(id)); assertNull(orders.getByIdForUpdate(id));
+            orders.update(com.junzhou.entity.Orders.builder().id(id).status(6).build());
+            assertEquals(1,jdbc.queryForObject("select status from orders where id=?",Integer.class,id));
+        }
+        assertEquals(1,orders.countByStatus(1));
+        assertEquals(0,details.getByOrderId(20L).size());
+        assertEquals("deleted product snapshot",details.getByOrderId(10L).get(0).getName());
+        com.junzhou.entity.OrderDetail own=new com.junzhou.entity.OrderDetail(); own.setOrderId(10L); own.setDishId(5L); own.setName("valid"); own.setNumber(1); own.setAmount(new BigDecimal("25"));
+        com.junzhou.entity.OrderDetail foreign=new com.junzhou.entity.OrderDetail(); foreign.setOrderId(20L); foreign.setDishId(5L); foreign.setName("foreign"); foreign.setNumber(1); foreign.setAmount(new BigDecimal("25"));
+        assertEquals(0,details.insertBatch(java.util.Arrays.asList(own,foreign)));
+        assertEquals(2,jdbc.queryForObject("select count(*) from order_detail",Integer.class));
+        jdbc.execute("update dish set tenant_id=2 where id=5");
+        assertEquals(0,details.insertBatch(java.util.Collections.singletonList(own)));
+        com.junzhou.entity.RefundRequest foreignRefund=new com.junzhou.entity.RefundRequest();
+        foreignRefund.setOutRefundNo("refund-20"); foreignRefund.setOrderId(20L); foreignRefund.setOutTradeNo("store-a2"); foreignRefund.setAmountFen(2500L); foreignRefund.setStatus("SUCCESS"); foreignRefund.setAttempts(0); foreignRefund.setQueryOnly(false);
+        foreignRefund.setNextAttemptAt(java.time.LocalDateTime.now()); foreignRefund.setCreatedAt(java.time.LocalDateTime.now()); foreignRefund.setUpdatedAt(java.time.LocalDateTime.now());
+        assertEquals(0,refunds.update(foreignRefund));
+        assertEquals("REQUESTED",jdbc.queryForObject("select status from refund_request where order_id=20",String.class));
+        foreignRefund.setOutRefundNo("forged"); assertEquals(0,refunds.insert(foreignRefund));
+        foreignRefund.setOrderId(10L); foreignRefund.setOutTradeNo("order-10"); foreignRefund.setTransactionId("forged-transaction");
+        assertEquals(0,refunds.insert(foreignRefund));
+        assertNull(refunds.getByNumber("refund-20")); assertTrue(refunds.due(java.time.LocalDateTime.now().plusMinutes(1)).isEmpty());
+        RequestScope.set(new RequestScope(1L,null,1L,1L,java.util.Collections.singleton(1L)));
+        assertNotNull(orders.getById(40L)); assertNull(orders.getById(20L));
+        RequestScope.set(new RequestScope(1L,null,1L,2L,java.util.Collections.singleton(1L)));
+        assertThrows(RuntimeException.class,()->orders.getById(20L));
+        RequestScope.clear(); assertThrows(RuntimeException.class,()->orders.getById(10L));
+        assertThrows(SecurityException.class,()->context.getBean(com.junzhou.payment.LegacySystemScope.class).enter());
+        assertNull(RequestScope.current());
     }
 
     @AfterEach
@@ -171,7 +222,7 @@ class OrderPaymentModuleTest {
         if (mapServer != null) {
             mapServer.verify();
         }
-        BaseContext.removeCurrentId();
+        BaseContext.removeCurrentId(); RequestScope.clear();
         if (jdbc != null) {
             jdbc.execute("SET DB_CLOSE_DELAY 0");
         }
@@ -298,7 +349,7 @@ class OrderPaymentModuleTest {
         OrdersSubmitDTO input = new OrdersSubmitDTO();
         input.setAddressBookId(101L);
         input.setTablewareNumber(2);
-        BaseContext.setCurrentId(42L);
+        BaseContext.setCurrentId(42L); RequestScope.set(new RequestScope(null,42L,1L,1L,java.util.Collections.emptySet()));
         assertThrows(com.junzhou.exception.OrderBusinessException.class,
                 () -> context.getBean(OrderService.class).orderSubmit(input));
         assertSubmissionUntouched();
@@ -440,7 +491,7 @@ class OrderPaymentModuleTest {
         submit.setAmount(new BigDecimal("33.00"));
         submit.setPackAmount(0);
         submit.setTablewareNumber(2);
-        BaseContext.setCurrentId(42L);
+        BaseContext.setCurrentId(42L); RequestScope.set(new RequestScope(null,42L,1L,1L,java.util.Collections.emptySet()));
         assertThrows(RuntimeException.class, () -> context.getBean(OrderService.class).orderSubmit(submit));
         assertEquals(1, jdbc.queryForObject("select count(*) from orders", Integer.class));
         assertEquals(0, jdbc.queryForObject("select count(*) from order_detail", Integer.class));
@@ -577,15 +628,15 @@ class OrderPaymentModuleTest {
         ExecutorService pool=Executors.newFixedThreadPool(2);
         try {
             Future<?> submitted=pool.submit(() -> {
-                BaseContext.setCurrentId(42L);
+                BaseContext.setCurrentId(42L); RequestScope.set(new RequestScope(null,42L,1L,1L,java.util.Collections.emptySet()));
                 try { context.getBean(OrderService.class).orderSubmit(submission("33.00")); }
-                finally { BaseContext.removeCurrentId(); }
+                finally { BaseContext.removeCurrentId(); RequestScope.clear(); }
             });
             assertTrue(deliveryEntered.await(10,TimeUnit.SECONDS));
             Future<?> added=pool.submit(() -> {
-                BaseContext.setCurrentId(42L);
+                BaseContext.setCurrentId(42L); RequestScope.set(new RequestScope(null,42L,1L,1L,java.util.Collections.emptySet()));
                 try { ShoppingCartDTO input=new ShoppingCartDTO(); input.setDishId(5L); context.getBean(ShoppingCartService.class).add(input); }
-                finally { BaseContext.removeCurrentId(); }
+                finally { BaseContext.removeCurrentId(); RequestScope.clear(); }
             });
             assertBlocked(added);
             deliveryContinue.countDown();
@@ -605,10 +656,10 @@ class OrderPaymentModuleTest {
             new TransactionTemplate(context.getBean(PlatformTransactionManager.class)).execute(status -> {
                 jdbc.queryForObject("select id from `user` where id=42 for update",Long.class);
                 pool.submit(() -> {
-                    BaseContext.setCurrentId(42L);
+                    BaseContext.setCurrentId(42L); RequestScope.set(new RequestScope(null,42L,1L,1L,java.util.Collections.emptySet()));
                     try { context.getBean(OrderService.class).orderSubmit(submission("46.50")); submitted.complete(null); }
                     catch(Throwable ex) { submitted.completeExceptionally(ex); }
-                    finally { BaseContext.removeCurrentId(); }
+                    finally { BaseContext.removeCurrentId(); RequestScope.clear(); }
                 });
                 assertBlocked(submitted);
                 jdbc.update("update shopping_cart set number=3 where id=1");
@@ -721,7 +772,7 @@ class OrderPaymentModuleTest {
         addOrder(11, 42, 2, 1);
         context.getBean(TestWeChatPayUtil.class).refundResult = "{\"code\":\"SYSTEM_ERROR\",\"message\":\"退款失败\"}";
         adminPut("/admin/order/rejection", "{\"id\":11,\"rejectionReason\":\"售罄\"}", 1);
-        context.getBean(PaymentRecoveryService.class).retry(11L);
+        systemBean(PaymentRecoveryService.class).retry(11L);
         assertEquals(6, statusOf(11));
         assertEquals(3, jdbc.queryForObject("select pay_status from orders where id=11", Integer.class));
         assertNotNull(jdbc.queryForObject("select cancel_time from orders where id=11", java.sql.Timestamp.class));
@@ -737,14 +788,14 @@ class OrderPaymentModuleTest {
             context.getBean(TestWeChatPayUtil.class).refundResult = "{\"status\":\"UNKNOWN\"}";
         }
         adminPut("/admin/order/rejection", "{\"id\":11,\"rejectionReason\":\"售罄\"}", 1);
-        context.getBean(PaymentRecoveryService.class).retry(11L);
+        systemBean(PaymentRecoveryService.class).retry(11L);
         assertEquals(6, statusOf(11));
         assertEquals(3, jdbc.queryForObject("select pay_status from orders where id=11", Integer.class));
         java.sql.Timestamp cancelledAt = jdbc.queryForObject("select cancel_time from orders where id=11", java.sql.Timestamp.class);
         adminPut("/admin/order/confirm", "{\"id\":11}", 0);
         context.getBean(TestWeChatPayUtil.class).refundTimesOut = false;
         context.getBean(TestWeChatPayUtil.class).refundResult = "{\"status\":\"SUCCESS\"}";
-        context.getBean(PaymentRecoveryService.class).retry(11L);
+        systemBean(PaymentRecoveryService.class).retry(11L);
         adminPut("/admin/order/rejection", "{\"id\":11,\"rejectionReason\":\"售罄\"}", 1);
         assertEquals(2, jdbc.queryForObject("select pay_status from orders where id=11", Integer.class));
         assertEquals(cancelledAt, jdbc.queryForObject("select cancel_time from orders where id=11", java.sql.Timestamp.class));
@@ -755,8 +806,8 @@ class OrderPaymentModuleTest {
         addOrder(11, 42, 6, 2);
         addOrder(12, 42, 5, 1);
         OrderService service = context.getBean(OrderService.class);
-        context.getBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-11","wx-11"));
-        context.getBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-12","wx-12"));
+        systemBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-11","wx-11"));
+        systemBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-12","wx-12"));
         assertEquals(6, statusOf(11));
         assertEquals(5, statusOf(12));
     }
@@ -780,11 +831,11 @@ class OrderPaymentModuleTest {
         context.getBean(TestWeChatPayUtil.class).refundResult = "{\"code\":\"SYSTEM_ERROR\"}";
         mvc.perform(signedNotification("/notify/paySuccess",paymentResource("order-10","wx-10"),"TRANSACTION.SUCCESS"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value("SUCCESS"));
-        context.getBean(PaymentRecoveryService.class).retry(10L);
+        systemBean(PaymentRecoveryService.class).retry(10L);
         assertEquals(6, statusOf(10));
         assertEquals(3, jdbc.queryForObject("select pay_status from orders where id=10", Integer.class));
         context.getBean(TestWeChatPayUtil.class).refundResult = "{\"status\":\"SUCCESS\"}";
-        context.getBean(PaymentRecoveryService.class).retry(10L);
+        systemBean(PaymentRecoveryService.class).retry(10L);
         assertEquals(2, jdbc.queryForObject("select pay_status from orders where id=10", Integer.class));
     }
 
@@ -842,7 +893,11 @@ class OrderPaymentModuleTest {
     }
 
     private String adminToken() {
-        return context.getBean(AdminSessionService.class).issue(context.getBean(EmployeeMapper.class).getById(1L));
+        RequestScope previous=RequestScope.current();
+        try {
+            RequestScope.set(new RequestScope(1L,null,1L,1L,java.util.Collections.singleton(1L)));
+            return context.getBean(AdminSessionService.class).issue(context.getBean(EmployeeMapper.class).getById(1L));
+        } finally { if(previous==null) RequestScope.clear(); else RequestScope.set(previous); }
     }
 
     @Test
@@ -879,6 +934,10 @@ class OrderPaymentModuleTest {
         return body.toJSONString();
     }
 
+    private <T> T systemBean(Class<T> type) {
+        RequestScope.set(RequestScope.forSystem(1L,1L));
+        return context.getBean(type);
+    }
     private TestWeChatPayUtil provider() { return context.getBean(TestWeChatPayUtil.class); }
     private String refundState(long id) { return jdbc.queryForObject("select status from refund_request where order_id=?",String.class,id); }
     private int paymentState(long id) { return jdbc.queryForObject("select pay_status from orders where id=?",Integer.class,id); }
@@ -903,7 +962,7 @@ class OrderPaymentModuleTest {
     @Test void refundNotificationCanPrecedePaymentAndLocalRequest() throws Exception {
         mvc.perform(signedNotification("/notify/refundSuccess",refundResource("SUCCESS"),"REFUND.SUCCESS"))
                 .andExpect(status().isOk());
-        context.getBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-10","wx-10"));
+        systemBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-10","wx-10"));
         assertEquals(6,statusOf(10)); assertEquals(2,paymentState(10));
         assertEquals(1,jdbc.queryForObject("select count(*) from refund_request",Integer.class));
         assertEquals(0,provider().refundCalls);
@@ -927,12 +986,12 @@ class OrderPaymentModuleTest {
 
     @Test void refundProcessingQueryAndRepeatedNotificationCannotDowngradeSuccess() throws Exception {
         cancelPaid(); provider().refundResult="{\"status\":\"PROCESSING\"}";
-        context.getBean(PaymentRecoveryService.class).retry(10L);
+        systemBean(PaymentRecoveryService.class).retry(10L);
         assertEquals("PROCESSING",refundState(10)); assertEquals(3,paymentState(10));
         mvc.perform(signedNotification("/notify/refundSuccess",refundResource("SUCCESS"),"REFUND.SUCCESS"))
                 .andExpect(status().isOk());
         JSONObject stale=JSON.parseObject(provider().refundResponse("order-10"));
-        context.getBean(RefundTransactionService.class).recordResult("order-10",stale);
+        systemBean(RefundTransactionService.class).recordResult("order-10",stale);
         mvc.perform(signedNotification("/notify/refundSuccess",refundResource("SUCCESS"),"REFUND.SUCCESS"))
                 .andExpect(status().isOk());
         assertEquals("SUCCESS",refundState(10)); assertEquals(2,paymentState(10));
@@ -943,7 +1002,7 @@ class OrderPaymentModuleTest {
         cancelPaid();
         mvc.perform(signedNotification("/notify/refundSuccess",refundResource(state),"REFUND."+state))
                 .andExpect(status().isOk());
-        context.getBean(PaymentRecoveryService.class).processDue();
+        systemBean(PaymentRecoveryService.class).processDue();
         assertEquals(state,refundState(10)); assertEquals(4,paymentState(10));
         assertEquals(0,provider().refundCalls);
         mvc.perform(get("/user/order/queryOrdersCheckStatus").header("authentication",token())
@@ -953,25 +1012,25 @@ class OrderPaymentModuleTest {
 
     @Test void uncertainRefundQueriesBeforeResubmittingAndUsesTheSameIdentityOnlyOn404() throws Exception {
         cancelPaid(); provider().refundTimesOut=true;
-        context.getBean(PaymentRecoveryService.class).retry(10L);
+        systemBean(PaymentRecoveryService.class).retry(10L);
         assertEquals(1,provider().refundCalls); assertEquals(0,provider().refundQueries);
         provider().refundTimesOut=false; provider().refundMissing=true; provider().refundResult="{\"status\":\"SUCCESS\"}";
-        context.getBean(PaymentRecoveryService.class).retry(10L);
+        systemBean(PaymentRecoveryService.class).retry(10L);
         assertEquals(1,provider().refundQueries); assertEquals(2,provider().refundCalls);
         assertEquals("SUCCESS",refundState(10));
     }
 
     @Test void legacyUnconfirmedRefundIsQueryOnlyEvenWhenProviderSaysNotFound() throws Exception {
         jdbc.update("update orders set status=6,pay_status=2 where id=10");
-        context.getBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-10","wx-10"));
+        systemBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-10","wx-10"));
         provider().refundMissing=true;
-        context.getBean(PaymentRecoveryService.class).retry(10L);
+        systemBean(PaymentRecoveryService.class).retry(10L);
         assertEquals("VERIFYING",refundState(10)); assertEquals(0,provider().refundCalls);
         assertEquals(1,provider().refundQueries); assertEquals(3,paymentState(10));
     }
 
     @Test void expiredLeaseCanRecoverButStaleWorkerCannotOverwriteAConfirmedResult() throws Exception {
-        cancelPaid(); RefundTransactionService transactions=context.getBean(RefundTransactionService.class);
+        cancelPaid(); RefundTransactionService transactions=systemBean(RefundTransactionService.class);
         com.junzhou.entity.RefundRequest old=transactions.claim("order-10",true);
         assertNull(transactions.claim("order-10",true));
         jdbc.update("update refund_request set lease_until='2020-01-01 00:00:00' where order_id=10");
@@ -979,30 +1038,30 @@ class OrderPaymentModuleTest {
         transactions.recordFailure(old,"STALE");
         assertEquals(current.getLeaseToken(),jdbc.queryForObject("select lease_token from refund_request",String.class));
         mvc.perform(signedNotification("/notify/refundSuccess",refundResource("SUCCESS"),"REFUND.SUCCESS")).andExpect(status().isOk());
-        transactions.recordFailure(current,"TIMEOUT");
+        systemBean(RefundTransactionService.class).recordFailure(current,"TIMEOUT");
         assertEquals("SUCCESS",refundState(10)); assertEquals(2,paymentState(10));
     }
 
     @Test void cancelledPaymentWithLostNotificationIsRecoveredByAuthenticatedQuery() {
         jdbc.update("update orders set status=6 where id=10");
         provider().queriedPayment=paymentResource("order-10","wx-10");
-        context.getBean(PaymentRecoveryService.class).reconcileCancelled();
+        systemBean(PaymentRecoveryService.class).reconcileCancelled();
         assertEquals(6,statusOf(10)); assertEquals(3,paymentState(10)); assertEquals("REQUESTED",refundState(10));
     }
 
     @Test void unpaidCancelledProviderOrderIsClosedWithoutRefund() {
         jdbc.update("update orders set status=6 where id=10");
         provider().queriedPayment=JSON.parseObject("{\"out_trade_no\":\"order-10\",\"trade_state\":\"NOTPAY\"}");
-        context.getBean(PaymentRecoveryService.class).reconcileCancelled();
+        systemBean(PaymentRecoveryService.class).reconcileCancelled();
         assertEquals(1,provider().closeCalls); assertEquals(0,paymentState(10));
         assertEquals("CLOSED",jdbc.queryForObject("select wechat_trade_state from orders",String.class));
     }
 
     @Test void paymentTransactionCannotBeBoundToTwoOrders() {
         addOrder(11,42,1,0);
-        context.getBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-10","wx-10"));
+        systemBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-10","wx-10"));
         assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
-                ()->context.getBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-11","wx-10")));
+                ()->systemBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-11","wx-10")));
         assertEquals(0,paymentState(11)); assertEquals(1,statusOf(11));
     }
 
@@ -1022,7 +1081,7 @@ class OrderPaymentModuleTest {
         WebSocketServer sockets=context.getBean(WebSocketServer.class);
         String connection="payment-test-"+UUID.randomUUID(); sockets.onOpen(session,connection);
         try {
-            PaymentLifecycleService payments=context.getBean(PaymentLifecycleService.class);
+            PaymentLifecycleService payments=systemBean(PaymentLifecycleService.class);
             TransactionTemplate transaction=new TransactionTemplate(context.getBean(PlatformTransactionManager.class));
             assertThrows(IllegalStateException.class,()->transaction.execute(ignored->{
                 payments.confirmPayment(paymentResource("order-10","wx-10"));
@@ -1156,12 +1215,16 @@ class OrderPaymentModuleTest {
             pageProperties.setProperty("helperDialect", "mysql");
             pageInterceptor.setProperties(pageProperties);
             factory.setPlugins(pageInterceptor);
-            factory.setMapperLocations(new ClassPathResource("mapper/OrderMapper.xml"),
+            factory.setMapperLocations(new ClassPathResource("mapper/OrderMapper.xml"), new ClassPathResource("mapper/RefundRequestMapper.xml"),
                     new ClassPathResource("mapper/OrderDetailMapper.xml"), new ClassPathResource("mapper/ShoppingCartMapper.xml"),
                     new ClassPathResource("mapper/SetmealDishMapper.xml"));
             return factory.getObject();
         }
 
+        @Bean com.junzhou.payment.LegacySystemScope systemScope(SqlSessionFactory f) {
+            f.getConfiguration().addMapper(com.junzhou.mapper.TenantScopeMapper.class);
+            return new com.junzhou.payment.LegacySystemScope(new com.junzhou.service.impl.TenantScopeServiceImpl(new SqlSessionTemplate(f).getMapper(com.junzhou.mapper.TenantScopeMapper.class)));
+        }
         @Bean OrderMapper orderMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(OrderMapper.class); }
         @Bean OrderDetailMapper orderDetailMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(OrderDetailMapper.class); }
         @Bean ShoppingCartMapper shoppingCartMapper(SqlSessionFactory f) { return new SqlSessionTemplate(f).getMapper(ShoppingCartMapper.class); }

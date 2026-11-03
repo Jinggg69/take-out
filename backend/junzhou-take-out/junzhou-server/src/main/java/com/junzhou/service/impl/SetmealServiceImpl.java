@@ -4,6 +4,8 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.junzhou.constant.MessageConstant;
 import com.junzhou.constant.StatusConstant;
+import com.junzhou.context.RequestScope;
+import com.junzhou.mapper.CategoryMapper;
 import com.junzhou.dto.SetmealDTO;
 import com.junzhou.dto.SetmealPageQueryDTO;
 import com.junzhou.entity.Dish;
@@ -32,6 +34,8 @@ import java.util.List;
 @Slf4j
 public class SetmealServiceImpl implements SetmealService {
     @Autowired
+    private CategoryMapper categoryMapper;
+    @Autowired
     private SetmealMapper setmealMapper;
     @Autowired
     private SetmealDishMapper setmealDishMapper;
@@ -45,6 +49,7 @@ public class SetmealServiceImpl implements SetmealService {
     @Override
     @Transactional
     public void saveWithDish(SetmealDTO setmealDTO) {
+        requireCategory(setmealDTO.getCategoryId());
         Setmeal setmeal = new Setmeal();
         BeanUtils.copyProperties(setmealDTO, setmeal);
         // 未指定售卖状态时，新增套餐默认停售。
@@ -55,12 +60,12 @@ public class SetmealServiceImpl implements SetmealService {
         List<SetmealDish> setmealDishes = setmealDTO.getSetmealDishes();
         prepareDishes(setmealDishes, setmeal.getStatus());
 
-        setmealMapper.insert(setmeal);
+        if (setmealMapper.insert(setmeal) != 1) throw new SecurityException("目录记录不存在或归属已变更");
         // 回填套餐ID，建立套餐与菜品的关联关系。
         for (SetmealDish setmealDish : setmealDishes) {
             setmealDish.setSetmealId(setmeal.getId());
         }
-        setmealDishMapper.insertBatch(setmealDishes);
+        if (setmealDishMapper.insertBatch(setmealDishes) != setmealDishes.size()) throw new SecurityException("套餐菜品归属已变更");
     }
 
     /**
@@ -87,10 +92,11 @@ public class SetmealServiceImpl implements SetmealService {
         }
         // 全部校验通过后再删除，起售中的套餐不能删除。
         for (Long id : ids) {
-            Setmeal setmeal = setmealMapper.getById(id);
+            Setmeal setmeal = setmealMapper.getByIdForUpdate(id);
             if (setmeal == null) {
                 throw new DeletionNotAllowedException(MessageConstant.SETMEAL_NOT_EXIST);
             }
+            requireValidDishes(id);
             if (StatusConstant.ENABLE.equals(setmeal.getStatus())) {
                 throw new DeletionNotAllowedException(MessageConstant.SETMEAL_ON_SALE);
             }
@@ -122,7 +128,8 @@ public class SetmealServiceImpl implements SetmealService {
         if (setmealDTO == null || setmealDTO.getId() == null) {
             throw new BaseException(MessageConstant.SETMEAL_ID_REQUIRED);
         }
-        Setmeal original = getSetmeal(setmealDTO.getId());
+        if (setmealDTO.getCategoryId() != null) requireCategory(setmealDTO.getCategoryId());
+        Setmeal original = getSetmealForUpdate(setmealDTO.getId());
         Setmeal setmeal = new Setmeal();
         BeanUtils.copyProperties(setmealDTO, setmeal);
         Integer status = setmeal.getStatus() == null ? original.getStatus() : setmeal.getStatus();
@@ -130,13 +137,13 @@ public class SetmealServiceImpl implements SetmealService {
         List<SetmealDish> setmealDishes = setmealDTO.getSetmealDishes();
         prepareDishes(setmealDishes, status);
 
-        setmealMapper.updateById(setmeal);
+        if (setmealMapper.updateById(setmeal) != 1) throw new SecurityException("目录记录不存在或归属已变更");
         // 先删除旧关系，再保存新的菜品列表。
         setmealDishMapper.deleteBySetmealIds(Collections.singletonList(setmeal.getId()));
         for (SetmealDish setmealDish : setmealDishes) {
             setmealDish.setSetmealId(setmeal.getId());
         }
-        setmealDishMapper.insertBatch(setmealDishes);
+        if (setmealDishMapper.insertBatch(setmealDishes) != setmealDishes.size()) throw new SecurityException("套餐菜品归属已变更");
     }
 
     /**
@@ -148,7 +155,7 @@ public class SetmealServiceImpl implements SetmealService {
     @Transactional
     public void startOrStop(Integer status, Long id) {
         validateStatus(status);
-        getSetmeal(id);
+        getSetmealForUpdate(id);
         if (StatusConstant.ENABLE.equals(status)) {
             List<SetmealDish> setmealDishes = setmealDishMapper.getBySetmealId(id);
             if (setmealDishes.isEmpty()) {
@@ -156,14 +163,14 @@ public class SetmealServiceImpl implements SetmealService {
             }
             // 使用菜品当前状态校验，包含停售或已删除菜品时不能起售。
             for (SetmealDish setmealDish : setmealDishes) {
-                Dish dish = dishMapper.getById(setmealDish.getDishId());
+                Dish dish = dishMapper.getByIdForUpdate(setmealDish.getDishId());
                 if (dish == null || !StatusConstant.ENABLE.equals(dish.getStatus())) {
                     throw new SetmealEnableFailedException(MessageConstant.SETMEAL_ENABLE_FAILED);
                 }
             }
         }
         Setmeal setmeal = Setmeal.builder().id(id).status(status).build();
-        setmealMapper.updateById(setmeal);
+        if (setmealMapper.updateById(setmeal) != 1) throw new SecurityException("目录记录不存在或归属已变更");
     }
 
     /**
@@ -179,7 +186,22 @@ public class SetmealServiceImpl implements SetmealService {
      */
     @Override
     public List<DishItemVO> getDishItemById(Long id) {
+        getSetmeal(id);
         return setmealMapper.getDishItemBySetmealId(id);
+    }
+
+    private void requireValidDishes(Long id) {
+        if (setmealDishMapper.countInvalidDishes(id) != 0) {
+            throw new SecurityException("套餐菜品归属异常");
+        }
+    }
+
+    private Setmeal getSetmealForUpdate(Long id) {
+        if (id == null) throw new BaseException(MessageConstant.SETMEAL_ID_REQUIRED);
+        Setmeal result = setmealMapper.getByIdForUpdate(id);
+        if (result == null) throw new BaseException(MessageConstant.SETMEAL_NOT_EXIST);
+        requireValidDishes(id);
+        return result;
     }
 
     private Setmeal getSetmeal(Long id) {
@@ -190,6 +212,7 @@ public class SetmealServiceImpl implements SetmealService {
         if (setmeal == null) {
             throw new BaseException(MessageConstant.SETMEAL_NOT_EXIST);
         }
+        requireValidDishes(id);
         return setmeal;
     }
 
@@ -211,7 +234,7 @@ public class SetmealServiceImpl implements SetmealService {
                     || setmealDish.getCopies() == null || setmealDish.getCopies() <= 0) {
                 throw new BaseException(MessageConstant.SETMEAL_DISH_INVALID);
             }
-            Dish dish = dishMapper.getById(setmealDish.getDishId());
+            Dish dish = dishMapper.getByIdForUpdate(setmealDish.getDishId());
             if (dish == null) {
                 throw new BaseException(MessageConstant.DISH_NOT_EXIST);
             }
@@ -222,4 +245,11 @@ public class SetmealServiceImpl implements SetmealService {
             setmealDish.setPrice(dish.getPrice());
         }
     }
+    /** Validate the category against the authenticated tenant before changing a relationship. */
+    private void requireCategory(Long categoryId) {
+        if (categoryId == null || categoryMapper.lockOwned(categoryId, RequestScope.requireTenantId()) == null) {
+            throw new SecurityException("分类不存在或无权访问");
+        }
+    }
+
 }

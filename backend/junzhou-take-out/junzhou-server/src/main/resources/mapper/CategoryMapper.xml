@@ -4,46 +4,50 @@
 <mapper namespace="com.junzhou.mapper.CategoryMapper">
 
     <select id="pageQuery" resultType="com.junzhou.entity.Category">
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
         select * from category
         <where>
-            <if test="name != null and name != ''">
-                and name like concat('%',#{name},'%')
+            tenant_id = #{tenantId} and tenant_id = #{scopeTenant}
+            <if test="query.name != null and query.name != ''">
+                and name like concat('%',#{query.name},'%')
             </if>
-            <if test="type != null">
-                and type = #{type}
+            <if test="query.type != null">
+                and type = #{query.type}
             </if>
         </where>
         order by sort asc , create_time desc
     </select>
 
-    <update id="update" parameterType="Category">
+    <update id="update">
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
         update category
         <set>
-            <if test="type != null">
-                type = #{type},
+            <if test="category.type != null">
+                type = #{category.type},
             </if>
-            <if test="name != null">
-                name = #{name},
+            <if test="category.name != null">
+                name = #{category.name},
             </if>
-            <if test="sort != null">
-                sort = #{sort},
+            <if test="category.sort != null">
+                sort = #{category.sort},
             </if>
-            <if test="status != null">
-                status = #{status},
+            <if test="category.status != null">
+                status = #{category.status},
             </if>
-            <if test="updateTime != null">
-                update_time = #{updateTime},
+            <if test="category.updateTime != null">
+                update_time = #{category.updateTime},
             </if>
-            <if test="updateUser != null">
-                update_user = #{updateUser}
+            <if test="category.updateUser != null">
+                update_user = #{category.updateUser}
             </if>
         </set>
-        where id = #{id}
+        where id = #{category.id} and tenant_id = #{tenantId} and tenant_id = #{scopeTenant}
     </update>
 
-    <select id="list" resultType="Category">
+    <select id="list" resultType="com.junzhou.entity.Category">
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
         select * from category
-        where status = 1
+        where status = 1 and tenant_id = #{tenantId} and tenant_id = #{scopeTenant}
         <if test="type != null">
             and type = #{type}
         </if>

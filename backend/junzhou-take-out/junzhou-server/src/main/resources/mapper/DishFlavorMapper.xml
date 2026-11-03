@@ -3,9 +3,13 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.junzhou.mapper.DishFlavorMapper">
     <delete id="deleteByDishIds">
-        delete from dish_flavor where dish_id in
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
+        delete from dish_flavor where exists (select 1 from dish d where d.id = dish_flavor.dish_id and d.tenant_id = #{scopeTenant}) and dish_id in
         <foreach collection="dishIds" item="dishId" separator="," open="(" close=")">
             #{dishId}
         </foreach>
+            <bind name="requestedCount" value="new java.util.HashSet(dishIds).size()"/>
+        and (select count(*) from dish owned where owned.tenant_id = #{scopeTenant} and owned.id in
+        <foreach collection="dishIds" item="requestedId" separator="," open="(" close=")">#{requestedId}</foreach>) = #{requestedCount}
     </delete>
 </mapper>

@@ -36,6 +36,7 @@ public class UserServiceImpl implements UserService {
      * @param userLoginDTO
      * @return
      */
+    @Override
     public User wxLogin(UserLoginDTO userLoginDTO) {
         //调用微信接口服务，获得当前微信用户的openid
         Map<String,String> map = new HashMap<>();

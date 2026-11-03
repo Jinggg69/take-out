@@ -1,6 +1,8 @@
 package com.junzhou.test;
 
 import com.junzhou.mapper.OrderMapper;
+import com.junzhou.context.RequestScope;
+import com.junzhou.payment.LegacySystemScope;
 import com.junzhou.mapper.OrderMaintenanceMapper;
 import com.junzhou.task.OrderTask;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -36,6 +38,7 @@ class OrderMaintenanceTest {
     private static final Clock CLOCK = Clock.fixed(NOW.atZone(ZoneId.of("Asia/Shanghai")).toInstant(),
             ZoneId.of("Asia/Shanghai"));
 
+    private LegacySystemScope systemScope;
     private JdbcTemplate jdbc;
     private OrderTask task;
     private OrderMapper orders;
@@ -51,10 +54,15 @@ class OrderMaintenanceTest {
         jdbc.execute("create table orders (id bigint primary key, number varchar(50), status int, pay_status int, "
                 + "order_time timestamp, dispatch_time timestamp, delivery_time timestamp, checkout_time timestamp, "
                 + "cancel_time timestamp, cancel_reason varchar(255), remark varchar(255), amount decimal(10,2))");
+        jdbc.execute("alter table orders add (tenant_id bigint default 1, store_id bigint default 1, user_id bigint default 42)");
+        jdbc.execute("create table tenant(id bigint primary key,status int)");
+        jdbc.execute("create table store(id bigint primary key,tenant_id bigint,status int)");
+        jdbc.execute("insert into tenant values(1,1)"); jdbc.execute("insert into store values(1,1,1)");
         org.apache.ibatis.session.Configuration configuration = new org.apache.ibatis.session.Configuration();
         configuration.setMapUnderscoreToCamelCase(true);
         configuration.setCacheEnabled(false);
         configuration.addMapper(OrderMapper.class);
+        configuration.addMapper(com.junzhou.mapper.TenantScopeMapper.class);
         configuration.addMapper(OrderMaintenanceMapper.class);
         SqlSessionFactoryBean factory = new SqlSessionFactoryBean();
         factory.setDataSource(source);
@@ -64,13 +72,16 @@ class OrderMaintenanceTest {
         SqlSessionTemplate template = new SqlSessionTemplate(sessions);
         orders = template.getMapper(OrderMapper.class);
         maintenance = template.getMapper(OrderMaintenanceMapper.class);
+        systemScope=new LegacySystemScope(new com.junzhou.service.impl.TenantScopeServiceImpl(template.getMapper(com.junzhou.mapper.TenantScopeMapper.class)));
         task = new OrderTask(maintenance, CLOCK);
+        org.springframework.test.util.ReflectionTestUtils.setField(task,"systemScope",systemScope);
         transactions = new TransactionTemplate(new DataSourceTransactionManager(source));
         workers = Executors.newFixedThreadPool(2);
     }
 
     @AfterEach
     void tearDown() throws Exception {
+        RequestScope.clear();
         workers.shutdownNow();
         assertTrue(workers.awaitTermination(10, TimeUnit.SECONDS));
     }
@@ -144,6 +155,7 @@ class OrderMaintenanceTest {
         assertEquals(5, status(2));
         Map<String, Object>[] before = snapshots(2);
         task = new OrderTask(maintenance, Clock.offset(CLOCK, Duration.ofHours(2)));
+        org.springframework.test.util.ReflectionTestUtils.setField(task,"systemScope",systemScope);
         task.processTimeoutOrders();
         task.processDeliveryOrders();
         assertSnapshotsUnchanged(before);
@@ -155,7 +167,9 @@ class OrderMaintenanceTest {
         CountDownLatch paymentUpdated = new CountDownLatch(1);
         CountDownLatch releasePayment = new CountDownLatch(1);
         Future<?> payment = workers.submit(() -> transactions.execute(status -> {
+            RequestScope.set(RequestScope.forSystem(1L,1L));
             assertEquals(1, orders.markPaid("order-1"));
+            RequestScope.clear();
             paymentUpdated.countDown();
             await(releasePayment);
             return null;
@@ -189,7 +203,7 @@ class OrderMaintenanceTest {
         }));
         try {
             assertTrue(timeoutUpdated.await(5, TimeUnit.SECONDS));
-            Future<Integer> payment = workers.submit(() -> orders.markPaid("order-1"));
+            Future<Integer> payment = workers.submit(() -> { try (LegacySystemScope.Scope ignored=systemScope.enter()) { return orders.markPaid("order-1"); } });
             assertDatabaseRowLockWait(payment);
             releaseTimeout.countDown();
             timeout.get(10, TimeUnit.SECONDS);
@@ -201,6 +215,25 @@ class OrderMaintenanceTest {
         } finally {
             releaseTimeout.countDown();
         }
+    }
+
+    @Test
+    void legacyJobRejectsAdditionalTenantAndAlwaysClearsScope() {
+        add(1,1,0,NOW.minusHours(2),null);
+        jdbc.execute("insert into tenant values(2,1)");
+        assertThrows(SecurityException.class,task::processTimeoutOrders);
+        assertEquals(1,status(1)); assertNull(RequestScope.current());
+    }
+
+    @Test
+    void scopedMaintenanceCannotTouchAnotherStoreOrInconsistentOwnership() {
+        jdbc.execute("insert into store values(2,1,1),(3,2,1)");
+        add(1,1,0,NOW.minusHours(2),null); add(2,1,0,NOW.minusHours(2),null); add(3,1,0,NOW.minusHours(2),null);
+        jdbc.execute("update orders set store_id=2 where id=2"); jdbc.execute("update orders set store_id=3 where id=3");
+        RequestScope.set(RequestScope.forSystem(1L,1L));
+        assertEquals(1,maintenance.cancelUnpaidBefore(NOW.minusMinutes(15),NOW));
+        assertEquals(6,status(1)); assertEquals(1,status(2)); assertEquals(1,status(3));
+        RequestScope.clear(); assertThrows(RuntimeException.class,()->maintenance.cancelUnpaidBefore(NOW,NOW));
     }
 
     private void assertDatabaseRowLockWait(Future<?> operation) throws Exception {

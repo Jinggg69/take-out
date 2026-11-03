@@ -109,8 +109,8 @@ public class OrderServiceImpl implements OrderService {
                         .orderNumber(existing.getNumber()).orderAmount(existing.getAmount()).build();
             }
         }
-        AddressBook addressBook = addressBookMapper.getById(ordersSubmitDTO.getAddressBookId());
-        if (addressBook == null || userId == null || !userId.equals(addressBook.getUserId())) {
+        AddressBook addressBook = addressBookMapper.getByIdAndUserId(ordersSubmitDTO.getAddressBookId(), userId);
+        if (addressBook == null) {
             throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_IS_NULL);
         }
 
@@ -155,7 +155,7 @@ public class OrderServiceImpl implements OrderService {
             orderDetail.setOrderId(order.getId());
             orderDetailList.add(orderDetail);
         }
-        orderDetailMapper.insertBatch(orderDetailList);
+        if (orderDetailMapper.insertBatch(orderDetailList) != orderDetailList.size()) throw new OrderBusinessException("订单商品归属不一致");
 
         //清空当前用户购物车数据
         shoppingCartMapper.delete(userId);
@@ -178,7 +178,7 @@ public class OrderServiceImpl implements OrderService {
      */
     @Override
     public OrderPaymentVO payment(OrdersPaymentDTO ordersPaymentDTO) throws Exception {
-        Long userId = BaseContext.getCurrentId();
+        Long userId = com.junzhou.context.RequestScope.requireUserId();
         Orders order = orderMapper.getByNumber(ordersPaymentDTO.getOrderNumber());
         requireUserOrder(order);
         requireStatus(order, Orders.PENDING_PAYMENT);
@@ -212,14 +212,14 @@ public class OrderServiceImpl implements OrderService {
      */
     @Override
     public PageResult historyOrders(int page, int pageSize, Integer status) {
-        if (BaseContext.getCurrentId() == null) {
+        if (com.junzhou.context.RequestScope.requireUserId() == null) {
             throw new OrderBusinessException(MessageConstant.USER_NOT_LOGIN);
         }
         OrdersPageQueryDTO ordersPageQueryDTO = new OrdersPageQueryDTO();
         ordersPageQueryDTO.setPage(page);
         ordersPageQueryDTO.setPageSize(pageSize);
         ordersPageQueryDTO.setStatus(status);
-        ordersPageQueryDTO.setUserId(BaseContext.getCurrentId());
+        ordersPageQueryDTO.setUserId(com.junzhou.context.RequestScope.requireUserId());
         return conditionSearch(ordersPageQueryDTO);
     }
 
@@ -418,9 +418,9 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public PageResult refundHistory(int page,int pageSize) {
-        if(BaseContext.getCurrentId()==null) throw new OrderBusinessException(MessageConstant.USER_NOT_LOGIN);
+        if(com.junzhou.context.RequestScope.requireUserId()==null) throw new OrderBusinessException(MessageConstant.USER_NOT_LOGIN);
         OrdersPageQueryDTO query=new OrdersPageQueryDTO();
-        query.setPage(page); query.setPageSize(pageSize); query.setUserId(BaseContext.getCurrentId()); query.setRefundOnly(true);
+        query.setPage(page); query.setPageSize(pageSize); query.setUserId(com.junzhou.context.RequestScope.requireUserId()); query.setRefundOnly(true);
         return conditionSearch(query);
     }
     /**
@@ -470,8 +470,8 @@ public class OrderServiceImpl implements OrderService {
      * @param order 待校验的订单
      */
     private void requireUserOrder(Orders order) {
-        if (order == null || BaseContext.getCurrentId() == null
-                || !Objects.equals(BaseContext.getCurrentId(), order.getUserId())) {
+        if (order == null || com.junzhou.context.RequestScope.requireUserId() == null
+                || !Objects.equals(com.junzhou.context.RequestScope.requireUserId(), order.getUserId())) {
             throw new OrderBusinessException(MessageConstant.ORDER_NOT_FOUND);
         }
     }

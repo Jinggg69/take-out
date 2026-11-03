@@ -2,6 +2,7 @@ package com.junzhou.test;
 
 import com.junzhou.constant.JwtClaimsConstant;
 import com.junzhou.context.BaseContext;
+import com.junzhou.context.RequestScope;
 import com.junzhou.controller.admin.EmployeeController;
 import com.junzhou.dto.EmployeeLoginDTO;
 import com.junzhou.exception.PasswordErrorException;
@@ -68,13 +69,13 @@ class EmployeePasswordTest {
         session = new SqlSessionFactoryBuilder().build(config).openSession(true);
         session.getConnection();
         jdbc = new JdbcTemplate(source);
-        jdbc.execute("create table employee (id bigint primary key, username varchar(32), name varchar(32), "
+        jdbc.execute("create table employee (id bigint primary key, tenant_id bigint not null, username varchar(32), name varchar(32), "
                 + "password varchar(64), phone varchar(32), sex varchar(2), id_number varchar(32), status int, "
                 + "create_time timestamp, update_time timestamp, create_user bigint, update_user bigint)");
         jdbc.execute("create table admin_session (session_id varchar(36) primary key, employee_id bigint, expires_at bigint)");
         for (long id : new long[]{42, 84}) {
-            jdbc.update("insert into employee (id, username, name, password, status, create_user, update_user) "
-                    + "values (?, ?, ?, ?, 1, 99, 99)", id, "employee" + id, "Employee " + id, hash("Old123"));
+            jdbc.update("insert into employee (tenant_id, id, username, name, password, status, create_user, update_user) "
+                    + "values (1, ?, ?, ?, ?, 1, 99, 99)", id, "employee" + id, "Employee " + id, hash("Old123"));
         }
         service = new EmployeeServiceImpl();
         ReflectionTestUtils.setField(service, "employeeMapper", session.getMapper(EmployeeMapper.class));
@@ -90,11 +91,16 @@ class EmployeePasswordTest {
         ReflectionTestUtils.setField(sessions, "adminSessionMapper", session.getMapper(AdminSessionMapper.class));
         ReflectionTestUtils.setField(interceptor, "adminSessionService", sessions);
         mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler())
-                .addInterceptors(interceptor).build();
+                .addInterceptors(interceptor, new org.springframework.web.servlet.HandlerInterceptor() {
+                    @Override public boolean preHandle(javax.servlet.http.HttpServletRequest request, javax.servlet.http.HttpServletResponse response, Object handler) {
+                        RequestScope.set(new RequestScope(BaseContext.getCurrentId(),null,1L,1L,Collections.singleton(1L))); return true;
+                    }
+                }).build();
     }
 
     @AfterEach
     void tearDown() {
+        RequestScope.clear();
         BaseContext.removeCurrentId();
         if (session != null) session.close();
     }

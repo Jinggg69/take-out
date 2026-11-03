@@ -34,7 +34,7 @@ public class RefundTransactionServiceImpl implements RefundTransactionService {
         RefundRequest refund=refunds.getByOrderIdForUpdate(order.getId());
         if(refund==null) {
             refund=newRequest(order,order.getNumber(),Orders.REFUND.equals(order.getPayStatus()));
-            refunds.insert(refund);
+            if(refunds.insert(refund)!=1) throw new OrderBusinessException("退款订单归属或金额不一致");
         }
         updateFinancialState(order,refund);
     }
@@ -93,7 +93,7 @@ public class RefundTransactionServiceImpl implements RefundTransactionService {
             // A verified full-refund notification may arrive before the local request/response or payment callback.
             current=newRequest(order,required(result,"out_refund_no"),true);
             validate(order,current,result,true);
-            refunds.insert(current);
+            if(refunds.insert(current)!=1) throw new OrderBusinessException("退款订单归属或金额不一致");
         }
         apply(order,current,result,true);
     }

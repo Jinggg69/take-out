@@ -3,31 +3,46 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.junzhou.mapper.SetmealDishMapper">
     <insert id="insertBatch">
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
         insert into setmeal_dish (setmeal_id, dish_id, name, price, copies)
-        values
-        <foreach collection="setmealDishes" item="setmealDish" separator=",">
-            (#{setmealDish.setmealId}, #{setmealDish.dishId}, #{setmealDish.name},
-             #{setmealDish.price}, #{setmealDish.copies})
+        <foreach collection="setmealDishes" item="setmealDish" separator=" union all ">
+            select s.id, d.id, concat(#{setmealDish.name}, ''),
+             cast(#{setmealDish.price} as decimal(10,2)), cast(#{setmealDish.copies} as signed)
+            from setmeal s join dish d on d.id = #{setmealDish.dishId} and d.tenant_id = s.tenant_id
+            where s.id = #{setmealDish.setmealId} and s.tenant_id = #{scopeTenant}
+            <foreach collection="setmealDishes" item="check">and exists (select 1 from setmeal os join dish od on od.tenant_id = os.tenant_id where os.id = #{check.setmealId} and od.id = #{check.dishId} and os.tenant_id = #{scopeTenant})</foreach>
         </foreach>
     </insert>
 
     <select id="getBySetmealId" resultType="com.junzhou.entity.SetmealDish">
-        select * from setmeal_dish where setmeal_id = #{setmealId} order by id
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
+        select sd.* from setmeal_dish sd join setmeal s on s.id = sd.setmeal_id join dish d on d.id = sd.dish_id and d.tenant_id = s.tenant_id where s.tenant_id = #{scopeTenant} and sd.setmeal_id = #{setmealId} and not exists (select 1 from setmeal_dish invalid left join dish valid on valid.id = invalid.dish_id and valid.tenant_id = #{scopeTenant} where invalid.setmeal_id = s.id and valid.id is null) order by sd.id
     </select>
 
     <delete id="deleteBySetmealIds">
-        delete from setmeal_dish where setmeal_id in
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
+        delete from setmeal_dish where exists (select 1 from setmeal s join dish d on d.tenant_id = s.tenant_id where s.id = setmeal_dish.setmeal_id and d.id = setmeal_dish.dish_id and s.tenant_id = #{scopeTenant}) and setmeal_id in
         <foreach collection="setmealIds" item="setmealId" separator="," open="(" close=")">
             #{setmealId}
         </foreach>
+            <bind name="requestedCount" value="new java.util.HashSet(setmealIds).size()"/>
+        and (select count(*) from setmeal owned where owned.tenant_id = #{scopeTenant} and owned.id in
+        <foreach collection="setmealIds" item="requestedId" separator="," open="(" close=")">#{requestedId}</foreach>) = #{requestedCount}
     </delete>
 
     <select id="getSetmealIdsByDishIds" resultType="java.lang.Long">
-        select setmeal_id
-        from setmeal_dish
-        where dish_id in
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
+        select sd.setmeal_id
+        from setmeal_dish sd join setmeal s on s.id = sd.setmeal_id join dish d on d.id = sd.dish_id and d.tenant_id = s.tenant_id
+        where s.tenant_id = #{scopeTenant} and sd.dish_id in
         <foreach collection="dishIds" item="dishId" separator="," open="(" close=")">
             #{dishId}
         </foreach>
+    </select>
+    <select id="countInvalidDishes" resultType="int">
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
+        select count(*) from setmeal_dish sd join setmeal s on s.id = sd.setmeal_id
+        left join dish d on d.id = sd.dish_id and d.tenant_id = s.tenant_id
+        where s.id = #{setmealId} and s.tenant_id = #{scopeTenant} and d.id is null
     </select>
 </mapper>

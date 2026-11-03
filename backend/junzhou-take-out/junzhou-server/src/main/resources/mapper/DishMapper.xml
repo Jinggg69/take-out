@@ -5,8 +5,10 @@
 
     <insert id="insert" parameterType="com.junzhou.entity.Dish"
             useGeneratedKeys="true" keyProperty="id">
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
         insert into dish
         <trim prefix="(" suffix=")" suffixOverrides=",">
+            tenant_id,
             name,
             category_id,
             <if test="price != null">price,</if>
@@ -18,7 +20,8 @@
             create_user,
             update_user,
         </trim>
-        <trim prefix="values (" suffix=")" suffixOverrides=",">
+        <trim prefix="select " suffix="" suffixOverrides=",">
+            #{scopeTenant},
             #{name},
             #{categoryId},
             <if test="price != null">#{price},</if>
@@ -30,17 +33,21 @@
             #{createUser},
             #{updateUser},
         </trim>
+        from category c where c.id = #{categoryId} and c.tenant_id = #{scopeTenant}
     </insert>
 
     <insert id="insertFlavors">
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
         insert into dish_flavor (dish_id, name, `value`)
-        values
-        <foreach collection="flavors" item="flavor" separator=",">
-            (#{flavor.dishId}, #{flavor.name}, #{flavor.value})
+        <foreach collection="flavors" item="flavor" separator=" union all ">
+            select d.id, concat(#{flavor.name}, ''), concat(#{flavor.value}, '') from dish d
+            where d.id = #{flavor.dishId} and d.tenant_id = #{scopeTenant}
+            <foreach collection="flavors" item="check">and exists (select 1 from dish owned where owned.id = #{check.dishId} and owned.tenant_id = #{scopeTenant})</foreach>
         </foreach>
     </insert>
 
     <update id="updateById" parameterType="com.junzhou.entity.Dish">
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
         update dish
         <set>
             <if test="name != null">name = #{name},</if>
@@ -52,14 +59,17 @@
             <if test="updateTime != null">update_time = #{updateTime},</if>
             <if test="updateUser != null">update_user = #{updateUser},</if>
         </set>
-        where id = #{id}
+        where id = #{id} and tenant_id = #{scopeTenant}
+        <if test="categoryId != null">and exists (select 1 from category c where c.id = #{categoryId} and c.tenant_id = #{scopeTenant})</if>
     </update>
 
     <select id="pageQuery" resultType="com.junzhou.vo.DishVO">
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
         select d.*, c.name as categoryName
         from dish d
-        left join category c on d.category_id = c.id
+        left join category c on d.category_id = c.id and c.tenant_id = d.tenant_id
         <where>
+            d.tenant_id = #{scopeTenant}
             <if test="name != null and !name.isEmpty()">
                 and d.name like CONCAT('%', #{name}, '%')
             </if>
@@ -74,8 +84,10 @@
     </select>
 
     <select id="list" resultType="com.junzhou.entity.Dish">
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
         select * from dish
         <where>
+            tenant_id = #{scopeTenant}
             <if test="categoryId != null">and category_id = #{categoryId}</if>
             <if test="status != null">and status = #{status}</if>
         </where>
@@ -83,9 +95,13 @@
     </select>
 
     <delete id="deleteBatch">
-        delete from dish where id in
+        <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
+        delete from dish where tenant_id = #{scopeTenant} and id in
         <foreach collection="ids" item="id" separator="," open="(" close=")">
             #{id}
         </foreach>
+            <bind name="requestedCount" value="new java.util.HashSet(ids).size()"/>
+        and (select count(*) from (select id, tenant_id from dish group by id, tenant_id) owned where owned.tenant_id = #{scopeTenant} and owned.id in
+        <foreach collection="ids" item="requestedId" separator="," open="(" close=")">#{requestedId}</foreach>) = #{requestedCount}
     </delete>
 </mapper>

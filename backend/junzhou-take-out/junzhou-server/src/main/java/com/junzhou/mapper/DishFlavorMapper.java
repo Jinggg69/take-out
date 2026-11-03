@@ -21,6 +21,6 @@ public interface DishFlavorMapper {
      * @param dishId 菜品 ID
      * @return 菜品口味列表
      */
-    @Select("select * from dish_flavor where dish_id = #{dishId}")
+    @Select("<script><bind name=\"scopeTenant\" value=\"@com.junzhou.context.RequestScope@requireTenantId()\"/>select f.* from dish_flavor f join dish d on d.id = f.dish_id where f.dish_id = #{dishId} and d.tenant_id = #{scopeTenant}</script>")
     List<DishFlavor> getByDishId(Long dishId);
 }

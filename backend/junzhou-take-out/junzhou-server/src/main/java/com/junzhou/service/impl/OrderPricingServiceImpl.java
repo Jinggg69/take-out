@@ -40,7 +40,7 @@ public class OrderPricingServiceImpl implements OrderPricingService {
     @Transactional(readOnly = true)
     @Override
     public OrderQuoteVO quote() {
-        Long userId = BaseContext.getCurrentId();
+        Long userId = com.junzhou.context.RequestScope.requireUserId();
         if (userId == null) throw new OrderBusinessException(MessageConstant.USER_NOT_LOGIN);
         List<ShoppingCart> cart = shoppingCartMapper.list(ShoppingCart.builder().userId(userId).build());
         if (cart == null || cart.isEmpty()) {
@@ -80,6 +80,9 @@ public class OrderPricingServiceImpl implements OrderPricingService {
             Setmeal setmeal = setmealMapper.getById(row.getSetmealId());
             if (setmeal == null || !StatusConstant.ENABLE.equals(setmeal.getStatus())) {
                 throw new OrderBusinessException("购物车中的套餐已停售或删除，请返回菜单检查");
+            }
+            if (setmealDishMapper.countInvalidDishes(setmeal.getId()) != 0) {
+                throw new OrderBusinessException("套餐组成归属异常，请返回菜单检查");
             }
             List<SetmealDish> components = setmealDishMapper.getBySetmealId(setmeal.getId());
             if (components == null || components.isEmpty()) {

@@ -22,6 +22,7 @@ import java.util.Collections;
 @RequestMapping("/notify")
 @Slf4j
 public class PayNotifyController {
+    @Autowired private com.junzhou.payment.LegacySystemScope systemScope;
     @Autowired private WeChatNotificationService notifications;
     @Autowired private PaymentLifecycleService payments;
     @Autowired private RefundTransactionService refunds;
@@ -35,6 +36,7 @@ public class PayNotifyController {
         handle(request,response,true);
     }
     private void handle(HttpServletRequest request,HttpServletResponse response,boolean refund) throws Exception {
+        com.junzhou.context.RequestScope.clear(); com.junzhou.context.BaseContext.removeCurrentId();
         try {
             ByteArrayOutputStream buffer=new ByteArrayOutputStream(); byte[] part=new byte[4096]; int count;
             while((count=request.getInputStream().read(part))!=-1) {
@@ -44,6 +46,7 @@ public class PayNotifyController {
             VerifiedNotification notice=notifications.verify(new String(buffer.toByteArray(),StandardCharsets.UTF_8),
                     request.getHeader("Wechatpay-Timestamp"),request.getHeader("Wechatpay-Nonce"),
                     request.getHeader("Wechatpay-Serial"),request.getHeader("Wechatpay-Signature"));
+            try (com.junzhou.payment.LegacySystemScope.Scope ignored=systemScope.enter()) {
             if(refund) {
                 String event=notice.getEventType();
                 if(!("REFUND.SUCCESS".equals(event)||"REFUND.CLOSED".equals(event)||"REFUND.ABNORMAL".equals(event))
@@ -53,6 +56,7 @@ public class PayNotifyController {
                 if(!"TRANSACTION.SUCCESS".equals(notice.getEventType())) throw new IllegalArgumentException("Unexpected payment event");
                 payments.confirmPayment(notice.getResource());
             }
+            }
             response.setStatus(200); response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write(JSON.toJSONString(Collections.singletonMap("code","SUCCESS")));
         } catch(SecurityException ex) { failure(response,401); }
@@ -60,6 +64,7 @@ public class PayNotifyController {
         catch(DataAccessException ex) { log.warn("支付通知存储暂不可用"); failure(response,503); }
         catch(OrderBusinessException | IllegalArgumentException ex) { failure(response,400); }
         catch(Exception ex) { log.warn("支付通知处理暂不可用"); failure(response,500); }
+        finally { com.junzhou.context.RequestScope.clear(); com.junzhou.context.BaseContext.removeCurrentId(); }
     }
     private void failure(HttpServletResponse response,int status) throws Exception {
         response.setStatus(status); response.setContentType("application/json;charset=UTF-8");

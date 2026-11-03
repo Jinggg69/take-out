@@ -45,7 +45,7 @@ class ShoppingCartModuleTest {
     private ShoppingCartService carts;
 
     @BeforeEach void setUp() {
-        BaseContext.removeCurrentId();
+        BaseContext.removeCurrentId(); com.junzhou.context.RequestScope.clear();
         context = new AnnotationConfigWebApplicationContext();
         context.setServletContext(new MockServletContext());
         context.register(com.junzhou.test.support.LegacyMvcScopeConfiguration.class);
@@ -57,13 +57,13 @@ class ShoppingCartModuleTest {
         jdbc = new JdbcTemplate(context.getBean(DataSource.class));
         jdbc.execute("create table `user` (id bigint primary key, openid varchar(64))");
         jdbc.execute("insert into `user` values (42,'cart-42'),(84,'cart-84')");
-        jdbc.execute("create table shopping_cart (id bigint auto_increment primary key, user_id bigint not null, "
+        jdbc.execute("create table shopping_cart (tenant_id bigint not null default 1,store_id bigint not null default 1,id bigint auto_increment primary key, user_id bigint not null, "
                 + "name varchar(32), dish_id bigint, setmeal_id bigint, dish_flavor varchar(50), "
                 + "number int not null, amount decimal(10,2) not null, image varchar(255), create_time timestamp)");
-        jdbc.execute("create table dish (id bigint primary key, name varchar(32), price decimal(10,2), image varchar(255), status int)");
-        jdbc.execute("insert into dish values (5,'当前菜品',12.50,'dish.png',1)");
-        jdbc.execute("create table setmeal (id bigint primary key, name varchar(32), price decimal(10,2), image varchar(255), status int)");
-        jdbc.execute("insert into setmeal values (5,'同号套餐',30.00,'setmeal.png',1)");
+        jdbc.execute("create table dish (tenant_id bigint not null default 1,id bigint primary key, name varchar(32), price decimal(10,2), image varchar(255), status int)");
+        jdbc.execute("insert into dish(id,name,price,image,status) values (5,'当前菜品',12.50,'dish.png',1)");
+        jdbc.execute("create table setmeal (tenant_id bigint not null default 1,id bigint primary key, name varchar(32), price decimal(10,2), image varchar(255), status int)");
+        jdbc.execute("insert into setmeal(id,name,price,image,status) values (5,'同号套餐',30.00,'setmeal.png',1)");
         jdbc.execute("create table setmeal_dish (id bigint auto_increment primary key, setmeal_id bigint, dish_id bigint, name varchar(32), price decimal(10,2), copies int)");
         jdbc.execute("insert into setmeal_dish (setmeal_id,dish_id,copies) values (5,5,2)");
         seed(84, "微辣", 7);
@@ -72,9 +72,32 @@ class ShoppingCartModuleTest {
     }
 
     @AfterEach void tearDown() {
-        BaseContext.removeCurrentId();
+        BaseContext.removeCurrentId(); com.junzhou.context.RequestScope.clear();
         if (jdbc != null) jdbc.execute("SET DB_CLOSE_DELAY 0");
         if (context != null) context.close();
+    }
+
+    @Test void cartSqlIsolatesSameUserAcrossStoresAndRejectsForeignProduct() {
+        com.junzhou.mapper.ShoppingCartMapper mapper = context.getBean(com.junzhou.mapper.ShoppingCartMapper.class);
+        jdbc.update("insert into shopping_cart(id,tenant_id,store_id,user_id,dish_id,number,amount) values(901,1,1,42,5,1,12.50),(902,1,2,42,5,1,12.50),(903,2,3,42,5,1,12.50)");
+        com.junzhou.context.RequestScope.set(new com.junzhou.context.RequestScope(null,42L,1L,1L,Collections.emptySet()));
+        assertEquals(1,mapper.list(com.junzhou.entity.ShoppingCart.builder().userId(42L).build()).size());
+        assertEquals(0,mapper.increment(902L,42L,1));
+        assertEquals(0,mapper.decrement(903L,42L));
+        mapper.delete(42L);
+        assertEquals(2,jdbc.queryForObject("select count(*) from shopping_cart where user_id=42",Integer.class));
+        jdbc.update("insert into dish(id,tenant_id,name,price,status) values(99,2,'foreign',10,1)");
+        assertEquals(0,mapper.insert(com.junzhou.entity.ShoppingCart.builder().userId(42L).dishId(99L).number(1).amount(java.math.BigDecimal.TEN).build()));
+        com.junzhou.context.RequestScope.clear();
+        assertThrows(Exception.class,() -> mapper.delete(42L));
+        assertEquals(2,jdbc.queryForObject("select count(*) from shopping_cart where user_id=42",Integer.class));
+    }
+
+    @Test void mixedForeignSetmealComponentCannotBeSilentlyExcludedFromPricing() throws Exception {
+        jdbc.update("insert into dish(id,tenant_id,name,price,status) values(99,2,'foreign',10,1)");
+        jdbc.update("insert into setmeal_dish(setmeal_id,dish_id,copies) values(5,99,1)");
+        action("add", "{\"setmealId\":5}", 0);
+        assertEquals(0, count());
     }
 
     @Test void flavorsIdentifyDifferentItemsAndExactAddsMerge() throws Exception {
@@ -134,11 +157,11 @@ class ShoppingCartModuleTest {
     }
 
     @Test void missingIdentityCannotReadOrMutateAnyCart() {
-        assertThrows(BaseException.class, () -> carts.showShoppingCart());
-        assertThrows(BaseException.class, () -> carts.clean());
+        assertThrows(SecurityException.class, () -> carts.showShoppingCart());
+        assertThrows(SecurityException.class, () -> carts.clean());
         ShoppingCartDTO input = new ShoppingCartDTO(); input.setDishId(5L);
-        assertThrows(BaseException.class, () -> carts.add(input));
-        assertThrows(BaseException.class, () -> carts.sub(input));
+        assertThrows(SecurityException.class, () -> carts.add(input));
+        assertThrows(SecurityException.class, () -> carts.sub(input));
         assertEquals(7, jdbc.queryForObject("select number from shopping_cart where user_id=84", Integer.class));
     }
 
@@ -220,8 +243,8 @@ class ShoppingCartModuleTest {
             new TransactionTemplate(context.getBean(PlatformTransactionManager.class)).execute(status -> {
                 jdbc.queryForObject("select id from `user` where id=42 for update",Long.class);
                 for(int i=0;i<threads;i++) futures.add(pool.submit(() -> {
-                    BaseContext.setCurrentId(42L);
-                    try { operation.run(); } finally { BaseContext.removeCurrentId(); }
+                    BaseContext.setCurrentId(42L); com.junzhou.context.RequestScope.set(new com.junzhou.context.RequestScope(null,42L,1L,1L,java.util.Collections.emptySet()));
+                    try { operation.run(); } finally { BaseContext.removeCurrentId(); com.junzhou.context.RequestScope.clear(); }
                 }));
                 long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(5);
                 boolean blocked=false;

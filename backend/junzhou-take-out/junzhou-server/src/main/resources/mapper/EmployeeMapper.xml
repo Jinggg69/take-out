@@ -3,8 +3,10 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
 <mapper namespace="com.junzhou.mapper.EmployeeMapper">
     <select id="pageQuery" resultType="com.junzhou.entity.Employee">
+        <bind name="_tenant" value="@com.junzhou.context.RequestScope@requireEmployeeTenantId()"/>
         select * from employee
         <where>
+            tenant_id=#{_tenant}
             <if test="name != null and name != ''">
                 and name like concat('%',#{name},'%')
             </if>
@@ -13,6 +15,7 @@
     </select>
 
     <update id="update" parameterType="com.junzhou.entity.Employee">
+        <bind name="_tenant" value="@com.junzhou.context.RequestScope@requireEmployeeTenantId()"/>
         update employee
         <set>
             <if test="name != null">
@@ -43,7 +46,7 @@
                 update_user = #{updateUser},
             </if>
         </set>
-        where id = #{id}
+        where id = #{id} and tenant_id=#{_tenant}
     </update>
 
 </mapper>

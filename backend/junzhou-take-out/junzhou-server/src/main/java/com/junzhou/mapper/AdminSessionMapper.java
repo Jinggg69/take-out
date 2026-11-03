@@ -5,22 +5,25 @@ import org.apache.ibatis.annotations.*;
 /** Stores session identifiers, never bearer tokens or passwords. */
 @Mapper
 public interface AdminSessionMapper {
-    @Insert("insert into admin_session (session_id,employee_id,expires_at) values (#{sessionId},#{employeeId},#{expiresAt})")
+    /** Authentication bootstrap issuance; tenant is obtained from the credential-locked employee. */
+    @Insert("insert into admin_session (session_id,employee_id,expires_at) select #{sessionId},id,#{expiresAt} from employee where id=#{employeeId} and tenant_id=#{tenantId} and status=1")
     int insert(@Param("sessionId") String sessionId, @Param("employeeId") Long employeeId,
-               @Param("expiresAt") long expiresAt);
+               @Param("expiresAt") long expiresAt, @Param("tenantId") Long tenantId);
 
+    /** Pre-context authentication of the exact signed session/employee pair. */
     @Select("select count(*) from admin_session s join employee e on e.id=s.employee_id "
             + "where s.session_id=#{sessionId} and s.employee_id=#{employeeId} "
             + "and s.expires_at>#{now} and e.status=1")
     int countActive(@Param("sessionId") String sessionId, @Param("employeeId") Long employeeId,
                     @Param("now") long now);
 
-    @Delete("delete from admin_session where session_id=#{sessionId} and employee_id=#{employeeId}")
+    @Delete("<script><bind name='_tenant' value='@com.junzhou.context.RequestScope@requireEmployeeTenantId()'/> delete from admin_session where session_id=#{sessionId} and employee_id=#{employeeId} and exists (select 1 from employee e where e.id=employee_id and e.tenant_id=#{_tenant})</script>")
     int deleteCurrent(@Param("sessionId") String sessionId, @Param("employeeId") Long employeeId);
 
-    @Delete("delete from admin_session where employee_id=#{employeeId}")
+    @Delete("<script><bind name='_tenant' value='@com.junzhou.context.RequestScope@requireEmployeeTenantId()'/> delete from admin_session where employee_id=#{employeeId} and exists (select 1 from employee e where e.id=employee_id and e.tenant_id=#{_tenant})</script>")
     int deleteByEmployeeId(Long employeeId);
 
-    @Delete("delete from admin_session where employee_id=#{employeeId} and expires_at<=#{now}")
-    int deleteExpired(@Param("employeeId") Long employeeId, @Param("now") long now);
+    /** Authentication bootstrap cleanup, tenant comes from the credential-locked employee. */
+    @Delete("delete from admin_session where employee_id=#{employeeId} and expires_at<=#{now} and exists (select 1 from employee e where e.id=employee_id and e.tenant_id=#{tenantId})")
+    int deleteExpired(@Param("employeeId") Long employeeId, @Param("now") long now, @Param("tenantId") Long tenantId);
 }

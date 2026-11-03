@@ -6,6 +6,8 @@ import com.junzhou.result.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.http.HttpStatus;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.DuplicateFormatFlagsException;
@@ -16,6 +18,13 @@ import java.util.DuplicateFormatFlagsException;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    /** 拒绝无权访问，不暴露内部鉴权细节。 */
+    @ExceptionHandler(SecurityException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Result<String> accessDenied(SecurityException ex) {
+        return Result.error("无权访问");
+    }
 
     /**
      * 捕获业务异常

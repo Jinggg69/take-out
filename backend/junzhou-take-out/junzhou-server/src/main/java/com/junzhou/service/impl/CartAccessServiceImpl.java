@@ -34,7 +34,7 @@ public class CartAccessServiceImpl implements CartAccessService {
 
     /** 校验当前登录身份。 */
     private Long requireIdentity() {
-        Long id = BaseContext.getCurrentId();
+        Long id = com.junzhou.context.RequestScope.requireUserId();
         if (id == null || id <= 0) throw new ShoppingCartBusinessException("请先登录");
         return id;
     }

@@ -8,6 +8,9 @@ import java.util.List;
 
 @Mapper
 public interface SetmealDishMapper {
+    /** Count orphaned or foreign components of an authorized setmeal. */
+    int countInvalidDishes(Long setmealId);
+
     /**
      * 根据菜品ID列表查询对应的套餐ID列表
       * @param dishIds
@@ -18,7 +21,7 @@ public interface SetmealDishMapper {
     /**
      * 批量保存套餐菜品关系
      */
-    void insertBatch(@Param("setmealDishes") List<SetmealDish> setmealDishes);
+    int insertBatch(@Param("setmealDishes") List<SetmealDish> setmealDishes);
 
     /**
      * 根据套餐id查询菜品关系

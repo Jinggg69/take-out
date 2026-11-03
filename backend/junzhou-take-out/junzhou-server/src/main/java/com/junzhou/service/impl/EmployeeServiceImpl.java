@@ -37,6 +37,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Autowired
     private AdminSessionMapper adminSessionMapper;
 
+    /** {@inheritDoc} */
     @Override
     @Transactional
     public void editPassword(PasswordEditDTO input) {
@@ -64,6 +65,7 @@ public class EmployeeServiceImpl implements EmployeeService {
      * @param employeeLoginDTO
      * @return
      */
+    @Override
     public Employee login(EmployeeLoginDTO employeeLoginDTO) {
         String username = employeeLoginDTO.getUsername();
         String password = employeeLoginDTO.getPassword();
@@ -151,7 +153,9 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .id(id)
                 .status(status)
                 .build();
-        employeeMapper.update(employee);
+        if (employeeMapper.update(employee) != 1) {
+            throw new AccountNotFoundException(MessageConstant.ACCOUNT_NOT_FOUND);
+        }
         if (StatusConstant.DISABLE.equals(status)) {
             adminSessionMapper.deleteByEmployeeId(id);
         }
@@ -165,6 +169,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Override
     public Employee getById(Long id) {
         Employee employee = employeeMapper.getById(id);
+        if (employee == null) throw new AccountNotFoundException(MessageConstant.ACCOUNT_NOT_FOUND);
         employee.setPassword("****");
         return employee;
     }
@@ -179,6 +184,8 @@ public class EmployeeServiceImpl implements EmployeeService {
         BeanUtils.copyProperties(employeeDTO,employee);
         // employee.setUpdateTime(LocalDateTime.now());
         // employee.setUpdateUser(BaseContext.getCurrentId());
-        employeeMapper.update(employee);
+        if (employeeMapper.update(employee) != 1) {
+            throw new AccountNotFoundException(MessageConstant.ACCOUNT_NOT_FOUND);
+        }
     }
 }

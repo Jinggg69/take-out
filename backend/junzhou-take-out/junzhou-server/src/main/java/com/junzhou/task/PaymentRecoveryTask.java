@@ -13,13 +13,14 @@ import org.springframework.stereotype.Component;
 @Component
 @Slf4j
 public class PaymentRecoveryTask {
+    @Autowired private com.junzhou.payment.LegacySystemScope systemScope;
     @Autowired private PaymentRecoveryService refunds;
     @Autowired private WeChatProperties properties;
     @Value("${sky.payment.jobs-enabled:true}") private boolean enabled;
     @Scheduled(cron="15 * * * * ?")
     public void recover() {
         RequestScope.clear(); BaseContext.removeCurrentId();
-        try {
+        try (com.junzhou.payment.LegacySystemScope.Scope ignored=systemScope.enter()) {
             if(!enabled || properties.getMchid()==null || properties.getMchid().trim().isEmpty()) return;
             try { refunds.processDue(); } catch(RuntimeException ex) { log.warn("退款恢复任务暂不可用"); }
             try { refunds.reconcileCancelled(); } catch(RuntimeException ex) { log.warn("支付核验任务暂不可用"); }
