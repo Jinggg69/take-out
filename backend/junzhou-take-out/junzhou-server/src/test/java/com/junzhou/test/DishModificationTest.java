@@ -71,6 +71,7 @@ class DishModificationTest {
         jdbc.execute("create table category (id bigint primary key, tenant_id bigint not null)");
         jdbc.update("insert into category values (2, 1), (3, 1)");
         service = new DishServiceImpl();
+        ReflectionTestUtils.setField(service,"fileAssets",org.mockito.Mockito.mock(com.junzhou.service.FileAssetService.class));
         ReflectionTestUtils.setField(service, "categoryMapper", session.getMapper(CategoryMapper.class));
         ReflectionTestUtils.setField(service, "dishMapper", session.getMapper(DishMapper.class));
         ReflectionTestUtils.setField(service, "dishFlavorMapper", session.getMapper(DishFlavorMapper.class));

@@ -461,6 +461,10 @@ class SetmealManagementTest {
         }
 
         @Bean
+        com.junzhou.service.FileAssetService fileAssetService() {
+            return org.mockito.Mockito.mock(com.junzhou.service.FileAssetService.class);
+        }
+        @Bean
         SetmealService setmealService() {
             return new SetmealServiceImpl();
         }

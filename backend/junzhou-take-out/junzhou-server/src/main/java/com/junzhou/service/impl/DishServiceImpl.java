@@ -31,6 +31,7 @@ import java.util.List;
 @Service
 @Slf4j
 public class DishServiceImpl implements DishService {
+    @Autowired private com.junzhou.service.FileAssetService fileAssets;
     @Autowired
     private CategoryMapper categoryMapper;
     @Autowired
@@ -48,6 +49,7 @@ public class DishServiceImpl implements DishService {
     @Transactional
     public void saveWithFlavor(DishDTO dishDTO) {
         requireCategory(dishDTO.getCategoryId());
+        validateImage(dishDTO.getImage(), null);
         log.info("新增菜品：{}",dishDTO);
         Dish dish = new Dish();
         BeanUtils.copyProperties(dishDTO, dish);
@@ -139,10 +141,12 @@ public class DishServiceImpl implements DishService {
         if (dishDTO == null || dishDTO.getId() == null) {
             throw new BaseException(MessageConstant.DISH_ID_REQUIRED);
         }
-        if (dishMapper.getByIdForUpdate(dishDTO.getId()) == null) {
+        Dish original = dishMapper.getByIdForUpdate(dishDTO.getId());
+        if (original == null) {
             throw new BaseException(MessageConstant.DISH_NOT_EXIST);
         }
 
+        validateImage(dishDTO.getImage(), original.getImage());
         if (dishDTO.getCategoryId() != null) requireCategory(dishDTO.getCategoryId());
         // 更新菜品信息
         Dish dish = new Dish();
@@ -203,6 +207,9 @@ public class DishServiceImpl implements DishService {
         // 只更新售卖状态，修改时间和修改人由公共字段填充切面处理。
         Dish dish = Dish.builder().id(id).status(status).build();
         if (dishMapper.updateById(dish) != 1) throw new SecurityException("目录记录不存在或归属已变更");
+    }
+    private void validateImage(String image, String existing) {
+        if(image!=null && !image.trim().isEmpty() && !image.equals(existing)) fileAssets.validateReference(image,existing);
     }
     /** Validate the category against the authenticated tenant before changing a relationship. */
     private void requireCategory(Long categoryId) {

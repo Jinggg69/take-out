@@ -33,6 +33,7 @@ import java.util.List;
 @Service
 @Slf4j
 public class SetmealServiceImpl implements SetmealService {
+    @Autowired private com.junzhou.service.FileAssetService fileAssets;
     @Autowired
     private CategoryMapper categoryMapper;
     @Autowired
@@ -50,6 +51,7 @@ public class SetmealServiceImpl implements SetmealService {
     @Transactional
     public void saveWithDish(SetmealDTO setmealDTO) {
         requireCategory(setmealDTO.getCategoryId());
+        validateImage(setmealDTO.getImage(), null);
         Setmeal setmeal = new Setmeal();
         BeanUtils.copyProperties(setmealDTO, setmeal);
         // 未指定售卖状态时，新增套餐默认停售。
@@ -130,6 +132,7 @@ public class SetmealServiceImpl implements SetmealService {
         }
         if (setmealDTO.getCategoryId() != null) requireCategory(setmealDTO.getCategoryId());
         Setmeal original = getSetmealForUpdate(setmealDTO.getId());
+        validateImage(setmealDTO.getImage(), original.getImage());
         Setmeal setmeal = new Setmeal();
         BeanUtils.copyProperties(setmealDTO, setmeal);
         Integer status = setmeal.getStatus() == null ? original.getStatus() : setmeal.getStatus();
@@ -246,6 +249,9 @@ public class SetmealServiceImpl implements SetmealService {
         }
     }
     /** Validate the category against the authenticated tenant before changing a relationship. */
+    private void validateImage(String image, String existing) {
+        if(image!=null && !image.trim().isEmpty() && !image.equals(existing)) fileAssets.validateReference(image,existing);
+    }
     private void requireCategory(Long categoryId) {
         if (categoryId == null || categoryMapper.lockOwned(categoryId, RequestScope.requireTenantId()) == null) {
             throw new SecurityException("分类不存在或无权访问");
