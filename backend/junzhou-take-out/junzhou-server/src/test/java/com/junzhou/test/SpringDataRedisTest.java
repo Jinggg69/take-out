@@ -1,6 +1,8 @@
 package com.junzhou.test;
 
 import com.junzhou.config.RedisConfiguration;
+import com.junzhou.cache.ScopedCache;
+import com.junzhou.context.RequestScope;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,10 +42,39 @@ class SpringDataRedisTest {
 
     @AfterEach
     void cleanUp() {
+        RequestScope.clear();
         // 只删除当前测试创建的键，保留业务数据。
         if (!testKeys.isEmpty()) {
             redisTemplate.delete(testKeys);
         }
+    }
+
+    @Test
+    void testScopedCatalogEvictionWithRealRedisScan() {
+        long tenantA = UUID.randomUUID().getMostSignificantBits() & Long.MAX_VALUE;
+        long tenantB = UUID.randomUUID().getMostSignificantBits() & Long.MAX_VALUE;
+        RequestScope.set(RequestScope.forSystem(tenantA, 1001L));
+        String dish = ScopedCache.dishKey(7L);
+        String allDishes = ScopedCache.dishKey(null);
+        String setmeal = ScopedCache.setmealKey(7L);
+        String shop = ScopedCache.shopStatusKey();
+        RequestScope.set(RequestScope.forSystem(tenantB, 2001L));
+        String otherDish = ScopedCache.dishKey(7L);
+        testKeys.addAll(Arrays.asList(dish, allDishes, setmeal, shop, otherDish));
+        for (String key : testKeys) redisTemplate.opsForValue().set(key, "cached", 1, TimeUnit.MINUTES);
+
+        RequestScope.set(RequestScope.forSystem(tenantA, 1002L));
+        ScopedCache.evictDishes(redisTemplate);
+        assertNull(redisTemplate.opsForValue().get(dish));
+        assertNull(redisTemplate.opsForValue().get(allDishes));
+        assertEquals("cached", redisTemplate.opsForValue().get(otherDish));
+        assertEquals("cached", redisTemplate.opsForValue().get(setmeal));
+        assertEquals("cached", redisTemplate.opsForValue().get(shop));
+        ScopedCache.evictSetmeals(redisTemplate);
+        assertNull(redisTemplate.opsForValue().get(setmeal));
+        assertEquals("cached", redisTemplate.opsForValue().get(otherDish));
+        assertEquals("cached", redisTemplate.opsForValue().get(shop));
+        ScopedCache.evictSetmeals(redisTemplate); // Empty scan is safe.
     }
 
     @Test

@@ -5,6 +5,8 @@ import com.junzhou.dto.DishPageQueryDTO;
 import com.junzhou.entity.Dish;
 import com.junzhou.result.PageResult;
 import com.junzhou.result.Result;
+import com.junzhou.cache.ScopedCache;
+import com.junzhou.context.RequestScope;
 import com.junzhou.service.DishService;
 import com.junzhou.vo.DishVO;
 import io.swagger.annotations.Api;
@@ -24,7 +26,7 @@ public class DishController {
     @Autowired
     private DishService dishService;
     @Autowired
-    private RedisTemplate redisTemplate;
+    private RedisTemplate<String, Object> redisTemplate;
     /**
      * 新增菜品
      * @param dishDTO
@@ -34,11 +36,11 @@ public class DishController {
     @ApiOperation("新增菜品")
     public Result save(@RequestBody DishDTO dishDTO) {
         log.info("新增菜品：{}",dishDTO);
+        RequestScope.requireStoreId();
         dishService.saveWithFlavor(dishDTO);
 
         //清理缓存数据
-        String key = "dish_" + dishDTO.getCategoryId();
-        redisTemplate.delete(key);
+        ScopedCache.evictDishes(redisTemplate);
         return Result.success();
     }
 
@@ -64,10 +66,11 @@ public class DishController {
     @ApiOperation("批量删除菜品")
     public Result delete(@RequestParam("ids") List<Long> ids) {
         log.info("批量删除菜品：{}", ids);
+        RequestScope.requireStoreId();
         dishService.deleteBatch(ids);
 
-        //清理所有的菜品缓存数据
-        clearCache("dish_*");
+        //清理当前租户的菜品缓存数据
+        ScopedCache.evictDishes(redisTemplate);
         return Result.success();
     }
 
@@ -105,10 +108,11 @@ public class DishController {
     @ApiOperation("修改菜品")
     public Result update(@RequestBody DishDTO dishDTO) {
         log.info("修改菜品：{}", dishDTO);
+        RequestScope.requireStoreId();
         dishService.updateWithFlavor(dishDTO);
 
-        //清理所有的菜品缓存数据
-        clearCache("dish_*");
+        //清理当前租户的菜品缓存数据
+        ScopedCache.evictDishes(redisTemplate);
         return Result.success();
     }
 
@@ -121,17 +125,11 @@ public class DishController {
     @ApiOperation("菜品起售、停售")
     public Result startOrStop(@PathVariable Integer status, @RequestParam Long id) {
         log.info("菜品起售停售：status={}, id={}", status, id);
+        RequestScope.requireStoreId();
         dishService.startOrStop(status, id);
 
-        //清理所有的菜品缓存数据
-        clearCache("dish_*");
+        //清理当前租户的菜品缓存数据
+        ScopedCache.evictDishes(redisTemplate);
         return Result.success();
-    }
-    /**
-     * 清理缓存
-     * @param pattern
-     */
-    private void clearCache(String pattern) {
-        redisTemplate.delete(redisTemplate.keys(pattern));
     }
 }

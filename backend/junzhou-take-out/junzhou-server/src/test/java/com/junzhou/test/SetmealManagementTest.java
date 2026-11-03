@@ -97,6 +97,10 @@ class SetmealManagementTest {
         service = context.getBean(SetmealService.class);
         SetmealController setmealController = new SetmealController();
         ReflectionTestUtils.setField(setmealController, "setmealService", service);
+        org.springframework.data.redis.core.RedisTemplate redis = org.mockito.Mockito.mock(org.springframework.data.redis.core.RedisTemplate.class);
+        org.mockito.Mockito.when(redis.scan(org.mockito.ArgumentMatchers.any(org.springframework.data.redis.core.ScanOptions.class)))
+                .thenAnswer(i -> org.mockito.Mockito.mock(org.springframework.data.redis.core.Cursor.class));
+        ReflectionTestUtils.setField(setmealController, "redisTemplate", redis);
         DishController dishController = new DishController();
         ReflectionTestUtils.setField(dishController, "dishService", context.getBean(DishService.class));
         mvc = MockMvcBuilders.standaloneSetup(setmealController, dishController)

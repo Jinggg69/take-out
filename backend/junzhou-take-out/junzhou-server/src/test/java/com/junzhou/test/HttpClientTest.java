@@ -46,14 +46,17 @@ public class HttpClientTest {
         RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
         ValueOperations<String, Object> values = mock(ValueOperations.class);
         when(redis.opsForValue()).thenReturn(values);
-        when(values.get("SHOP_STATUS")).thenReturn(0);
+        when(values.get("junzhou:v2:tenant:1:store:1:shop-status")).thenReturn(0);
         ShopController controller = new ShopController();
         ReflectionTestUtils.setField(controller, "redisTemplate", redis);
 
+        com.junzhou.context.RequestScope.set(new com.junzhou.context.RequestScope(null, null, 1L, 1L, Collections.emptySet()));
+        try {
         mvc(controller).perform(get("/user/shop/status"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(1))
                 .andExpect(jsonPath("$.data").value(0));
+        } finally { com.junzhou.context.RequestScope.clear(); }
     }
 
     @Test

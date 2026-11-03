@@ -73,7 +73,12 @@ class DishStatusTest {
         DishController controller = new DishController();
         ReflectionTestUtils.setField(controller, "dishService", service);
         redisTemplate = mock(RedisTemplate.class);
-        when(redisTemplate.keys("dish_*")).thenReturn(Collections.singleton("dish_2"));
+        when(redisTemplate.scan(any(org.springframework.data.redis.core.ScanOptions.class))).thenAnswer(i -> {
+            org.springframework.data.redis.core.Cursor<String> cursor = mock(org.springframework.data.redis.core.Cursor.class);
+            when(cursor.hasNext()).thenReturn(true, false);
+            when(cursor.next()).thenReturn("junzhou:v2:tenant:1:dish:category:2");
+            return cursor;
+        });
         ReflectionTestUtils.setField(controller, "redisTemplate", redisTemplate);
         mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
@@ -103,7 +108,7 @@ class DishStatusTest {
         original.put("STATUS", 1);
         assertEquals(original, row(1));
         assertEquals(other, row(2));
-        verify(redisTemplate, times(2)).delete(Collections.singleton("dish_2"));
+        verify(redisTemplate, times(2)).delete("junzhou:v2:tenant:1:dish:category:2");
     }
 
     @Test

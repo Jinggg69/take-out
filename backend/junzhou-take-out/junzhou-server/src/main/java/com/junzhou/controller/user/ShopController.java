@@ -1,6 +1,7 @@
 package com.junzhou.controller.user;
 
 import com.junzhou.result.Result;
+import com.junzhou.cache.ScopedCache;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.extern.slf4j.Slf4j;
@@ -13,10 +14,9 @@ import org.springframework.web.bind.annotation.*;
 @Api(tags = "店铺相关接口")
 @Slf4j
 public class ShopController {
-    private static final String SHOP_STATUS_KEY = "SHOP_STATUS";
 
     @Autowired
-    private RedisTemplate redisTemplate;
+    private RedisTemplate<String, Object> redisTemplate;
 
     /**
      * 获取店铺营业状态
@@ -24,7 +24,7 @@ public class ShopController {
     @GetMapping("/status")
     @ApiOperation("获取店铺营业状态")
     public Result<Integer> getStatus() {
-        Integer status = (Integer) redisTemplate.opsForValue().get(SHOP_STATUS_KEY);
+        Integer status = (Integer) redisTemplate.opsForValue().get(ScopedCache.shopStatusKey());
         if (status == null) {
             status = 1; // 默认状态为营业中
         }
