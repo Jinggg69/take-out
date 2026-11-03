@@ -53,15 +53,15 @@ try:
     # Grants must be explicit; never guess a historical administrator or store.
     assert sql("SELECT COUNT(*) FROM employee_role;", schema) == "0"
     assert sql("SELECT COUNT(*) FROM employee_store;", schema) == "0"
-    sql("INSERT INTO employee_role VALUES(1,1,'CLERK'); INSERT INTO employee_store VALUES(1,1,1);", schema)
+    sql("INSERT INTO employee_role(tenant_id,employee_id,role_code) VALUES(1,1,'CLERK'); INSERT INTO employee_store VALUES(1,1,1);", schema)
     for query in [
-        "INSERT INTO employee_role VALUES(2,1,'CLERK');",
-        "INSERT INTO employee_role VALUES(1,2,'CLERK');",
-        "INSERT INTO employee_role VALUES(1,1,'UNKNOWN');",
+        "INSERT INTO employee_role(tenant_id,employee_id,role_code) VALUES(2,1,'CLERK');",
+        "INSERT INTO employee_role(tenant_id,employee_id,role_code) VALUES(1,2,'CLERK');",
+        "INSERT INTO employee_role(tenant_id,employee_id,role_code) VALUES(1,1,'UNKNOWN');",
         "INSERT INTO employee_store VALUES(1,1,2);",
         "INSERT INTO employee_store VALUES(2,1,2);",
         "INSERT INTO role_permission VALUES(1,'CLERK','unknown:action');",
-        "INSERT INTO employee_role VALUES(1,1,'CLERK');",
+        "INSERT INTO employee_role(tenant_id,employee_id,role_code) VALUES(1,1,'CLERK');",
         "INSERT INTO employee_store VALUES(1,1,1);",
         "INSERT INTO rbac_role(code,name) VALUES('NO_TENANT','invalid');",
         "DELETE FROM employee WHERE id=1;",
