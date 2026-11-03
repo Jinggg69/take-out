@@ -74,7 +74,6 @@ class OrderMaintenanceTest {
         maintenance = template.getMapper(OrderMaintenanceMapper.class);
         systemScope=new LegacySystemScope(new com.junzhou.service.impl.TenantScopeServiceImpl(template.getMapper(com.junzhou.mapper.TenantScopeMapper.class)));
         task = new OrderTask(maintenance, CLOCK);
-        org.springframework.test.util.ReflectionTestUtils.setField(task,"systemScope",systemScope);
         transactions = new TransactionTemplate(new DataSourceTransactionManager(source));
         workers = Executors.newFixedThreadPool(2);
     }
@@ -155,7 +154,6 @@ class OrderMaintenanceTest {
         assertEquals(5, status(2));
         Map<String, Object>[] before = snapshots(2);
         task = new OrderTask(maintenance, Clock.offset(CLOCK, Duration.ofHours(2)));
-        org.springframework.test.util.ReflectionTestUtils.setField(task,"systemScope",systemScope);
         task.processTimeoutOrders();
         task.processDeliveryOrders();
         assertSnapshotsUnchanged(before);
@@ -218,11 +216,26 @@ class OrderMaintenanceTest {
     }
 
     @Test
-    void legacyJobRejectsAdditionalTenantAndAlwaysClearsScope() {
+    void jobsProcessEachTrustedOrderAcrossTenantsAndAlwaysClearScope() {
         add(1,1,0,NOW.minusHours(2),null);
         jdbc.execute("insert into tenant values(2,1)");
-        assertThrows(SecurityException.class,task::processTimeoutOrders);
-        assertEquals(1,status(1)); assertNull(RequestScope.current());
+        jdbc.execute("insert into store values(2,1,1),(3,2,1)");
+        add(2,1,0,NOW.minusHours(2),null); add(3,1,0,NOW.minusHours(2),null); add(4,1,0,NOW.minusHours(2),null);
+        jdbc.execute("update orders set store_id=2 where id=2");
+        jdbc.execute("update orders set tenant_id=2,store_id=3 where id=3");
+        jdbc.execute("update orders set store_id=3 where id=4");
+        task.processTimeoutOrders();
+        assertEquals(6,status(1)); assertEquals(6,status(2)); assertEquals(6,status(3));
+        assertEquals(1,status(4)); assertNull(RequestScope.current());
+    }
+
+    @Test
+    void keysetScanProcessesMoreThanOnePageAndCannotRunAsARequest() {
+        for(long id=1;id<=105;id++) add(id,1,0,NOW.minusHours(2),null);
+        assertThrows(RuntimeException.class,()->maintenance.timeoutCandidates(0,NOW));
+        task.processTimeoutOrders();
+        assertEquals(105,jdbc.queryForObject("select count(*) from orders where status=6",Integer.class));
+        assertNull(RequestScope.current());
     }
 
     @Test

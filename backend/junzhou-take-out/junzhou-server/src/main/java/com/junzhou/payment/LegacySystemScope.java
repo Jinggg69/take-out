@@ -4,8 +4,8 @@ import com.junzhou.context.RequestScope;
 import com.junzhou.service.TenantScopeService;
 import org.springframework.stereotype.Component;
 
-/** Temporary, explicit bridge for verified notifications and scheduled jobs only.
- * Refuses databases containing any additional tenant/store until stage 2.5/2.6 routing exists. */
+/** Temporary bridge for verified notifications and compatibility callers.
+ * Scheduled jobs carry per-order scope; payment account routing still requires stage 2.6. */
 @Component
 public final class LegacySystemScope {
     public interface Scope extends AutoCloseable { @Override void close(); }

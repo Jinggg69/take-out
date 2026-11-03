@@ -1,4 +1,6 @@
 package com.junzhou.test;
+import com.junzhou.entity.Orders;
+import java.time.LocalDateTime;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
@@ -1008,6 +1010,25 @@ class OrderPaymentModuleTest {
         mvc.perform(get("/user/order/queryOrdersCheckStatus").header("authentication",token())
                 .param("page","1").param("pageSize","10").param("payStatus","2"))
                 .andExpect(jsonPath("$.data.total").value(1)).andExpect(jsonPath("$.data.records[0].refundStatus").value(state));
+    }
+
+    @Test void backgroundPaymentCandidatesCarryDatabaseOwnershipAndExistingLeasesExcludeClaims() throws Exception {
+        cancelPaid();
+        SqlSessionFactory factory=context.getBean(SqlSessionFactory.class);
+        if(!factory.getConfiguration().hasMapper(com.junzhou.mapper.OrderMaintenanceMapper.class))
+            factory.getConfiguration().addMapper(com.junzhou.mapper.OrderMaintenanceMapper.class);
+        com.junzhou.mapper.OrderMaintenanceMapper mapper=new SqlSessionTemplate(factory).getMapper(com.junzhou.mapper.OrderMaintenanceMapper.class);
+        RequestScope.clear();
+        java.util.List<Orders> candidates=com.junzhou.task.BackgroundJobScope.scan(() -> mapper.refundCandidates(0,LocalDateTime.now()));
+        assertEquals(1,candidates.size());
+        assertEquals(1L,candidates.get(0).getTenantId()); assertEquals(1L,candidates.get(0).getStoreId());
+        assertEquals("order-10",candidates.get(0).getNumber());
+        jdbc.update("update refund_request set lease_until='2099-01-01 00:00:00' where order_id=10");
+        assertTrue(com.junzhou.task.BackgroundJobScope.scan(() -> mapper.refundCandidates(0,LocalDateTime.now())).isEmpty());
+        jdbc.update("update orders set pay_status=0,wechat_trade_state=null,payment_check_time=null where id=10");
+        assertEquals(1,com.junzhou.task.BackgroundJobScope.scan(() -> mapper.cancelledCandidates(0,LocalDateTime.now())).size());
+        jdbc.update("update orders set tenant_id=2 where id=10");
+        assertTrue(com.junzhou.task.BackgroundJobScope.scan(() -> mapper.cancelledCandidates(0,LocalDateTime.now())).isEmpty());
     }
 
     @Test void uncertainRefundQueriesBeforeResubmittingAndUsesTheSameIdentityOnlyOn404() throws Exception {

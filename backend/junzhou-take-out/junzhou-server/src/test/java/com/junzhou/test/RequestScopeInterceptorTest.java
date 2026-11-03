@@ -55,10 +55,9 @@ class RequestScopeInterceptorTest {
 
     @Test void reusedTaskThreadClearsStaleScopeEvenWhenTaskFails() throws Exception {
         OrderMaintenanceMapper mapper = mock(OrderMaintenanceMapper.class);
-        when(mapper.cancelUnpaidBefore(any(), any())).thenAnswer(invocation -> {
-            assertNotNull(RequestScope.current());
-            assertNull(RequestScope.current().getUserId());
-            assertNull(RequestScope.requireOrderUserId());
+        when(mapper.timeoutCandidates(anyLong(), any())).thenAnswer(invocation -> {
+            assertNull(RequestScope.current());
+            assertTrue(com.junzhou.task.BackgroundJobScope.requireScanning());
             assertNull(BaseContext.getCurrentId());
             RequestScope.set(new RequestScope(null, 2L, 1L, 1L, java.util.Collections.emptySet()));
             throw new IllegalStateException("failure");
@@ -69,8 +68,6 @@ class RequestScopeInterceptorTest {
                 RequestScope.set(new RequestScope(null, 1L, 1L, 1L, java.util.Collections.emptySet()));
                 BaseContext.setCurrentId(1L);
                 OrderTask task = new OrderTask(mapper, Clock.systemUTC());
-                org.springframework.test.util.ReflectionTestUtils.setField(task, "systemScope",
-                        new com.junzhou.payment.LegacySystemScope(mock(TenantScopeService.class)));
                 assertThrows(IllegalStateException.class, task::processTimeoutOrders);
             }).get();
             assertTrue(worker.submit(() -> RequestScope.current() == null && BaseContext.getCurrentId() == null).get());

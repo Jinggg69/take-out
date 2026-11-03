@@ -76,11 +76,18 @@ public class PaymentRecoveryServiceImpl implements PaymentRecoveryService {
     /** {@inheritDoc} */
     @Override
     public void reconcileCancelled() {
-        for(Orders order:orders.cancelledPaymentsToCheck(LocalDateTime.now().minusMinutes(5))) {
+        for(Orders order:orders.cancelledPaymentsToCheck(LocalDateTime.now().minusMinutes(5))) reconcileOrder(order.getId());
+    }
+
+    @Override public void reconcileOrder(Long orderId) {
+        Orders order=orders.getById(orderId);
+        if(order==null || !Orders.CANCELLED.equals(order.getStatus()) || !Orders.UN_PAID.equals(order.getPayStatus())
+                || java.util.Arrays.asList("CLOSED","REVOKED","PAYERROR").contains(order.getWechatTradeState())
+                || (order.getPaymentCheckTime()!=null && !order.getPaymentCheckTime().isBefore(LocalDateTime.now().minusMinutes(5)))) return;
             orders.recordPaymentCheck(order.getId(),LocalDateTime.now());
             try {
                 JSONObject result=provider.queryOrder(order.getNumber());
-                if(result==null || !order.getNumber().equals(result.getString("out_trade_no"))) continue;
+                if(result==null || !order.getNumber().equals(result.getString("out_trade_no"))) return;
                 String state=result.getString("trade_state");
                 if("SUCCESS".equals(state)) lifecycle.confirmPayment(result);
                 else if("NOTPAY".equals(state) || "USERPAYING".equals(state)) {
@@ -90,6 +97,5 @@ public class PaymentRecoveryServiceImpl implements PaymentRecoveryService {
                     orders.markClosedPayment(order.getId(),state,LocalDateTime.now());
                 }
             } catch(Exception ex) { log.warn("已取消订单支付结果待核验，orderId={}",order.getId()); }
-        }
     }
 }

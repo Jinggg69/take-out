@@ -4,6 +4,8 @@ package com.junzhou.service;
 
 /** 支付恢复业务接口。 */
 public interface PaymentRecoveryService {
+    /** Re-read and reconcile one order within its trusted system scope. */
+    void reconcileOrder(Long orderId);
     /**
      * 处理到期的退款请求。
      */
