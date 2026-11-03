@@ -1,18 +1,13 @@
 package com.junzhou.websocket;
-
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.socket.server.standard.ServerEndpointExporter;
-
-/**
- * WebSocket配置类，用于注册WebSocket的Bean
- */
+import org.springframework.web.socket.config.annotation.*;
 @Configuration
-public class WebSocketConfiguration {
-
-    @Bean
-    public ServerEndpointExporter serverEndpointExporter() {
-        return new ServerEndpointExporter();
+@EnableWebSocket
+public class WebSocketConfiguration implements WebSocketConfigurer {
+    private final WebSocketServer sockets;
+    private final OrderSocketAuth auth;
+    public WebSocketConfiguration(WebSocketServer sockets, OrderSocketAuth auth) { this.sockets = sockets; this.auth = auth; }
+    @Override public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+        registry.addHandler(sockets, "/ws/*").addInterceptors(new OrderSocketHandshake(auth));
     }
-
 }

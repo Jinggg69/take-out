@@ -1,71 +1,57 @@
 package com.junzhou.websocket;
 
+import com.junzhou.context.RequestScope;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import javax.websocket.OnClose;
-import javax.websocket.OnMessage;
-import javax.websocket.OnOpen;
-import javax.websocket.Session;
-import javax.websocket.server.PathParam;
-import javax.websocket.server.ServerEndpoint;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
+import org.springframework.web.socket.*;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * WebSocket服务
- */
+/** Connections subscribe only to the scope authorised by the handshake. */
 @Component
-@ServerEndpoint("/ws/{sid}")
-public class WebSocketServer {
-
-    //存放会话对象
-    private static Map<String, Session> sessionMap = new HashMap();
-
-    /**
-     * 连接建立成功调用的方法
-     */
-    @OnOpen
-    public void onOpen(Session session, @PathParam("sid") String sid) {
-        System.out.println("客户端：" + sid + "建立连接");
-        sessionMap.put(sid, session);
+public class WebSocketServer extends TextWebSocketHandler implements SubProtocolCapable {
+    @Autowired(required = false) private OrderSocketAuth auth;
+    private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
+    @Override public List<String> getSubProtocols() { return Collections.singletonList("junzhou-orders"); }
+    @Override public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        if (!valid(session)) { session.close(CloseStatus.POLICY_VIOLATION); return; }
+        sessions.put(session.getId(), session);
     }
-
-    /**
-     * 收到客户端消息后调用的方法
-     *
-     * @param message 客户端发送过来的消息
-     */
-    @OnMessage
-    public void onMessage(String message, @PathParam("sid") String sid) {
-        System.out.println("收到来自客户端：" + sid + "的信息:" + message);
+    @Override public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        sessions.remove(session.getId(), session);
     }
-
-    /**
-     * 连接关闭调用的方法
-     *
-     * @param sid
-     */
-    @OnClose
-    public void onClose(@PathParam("sid") String sid) {
-        System.out.println("连接断开:" + sid);
-        sessionMap.remove(sid);
+    @Override public void handleTransportError(WebSocketSession session, Throwable error) throws Exception {
+        sessions.remove(session.getId(), session);
+        session.close(CloseStatus.SERVER_ERROR);
     }
-
-    /**
-     * 群发
-     *
-     * @param message
-     */
-    public void sendToAllClient(String message) {
-        Collection<Session> sessions = sessionMap.values();
-        for (Session session : sessions) {
+    private boolean valid(WebSocketSession session) {
+        try {
+            if (auth == null) return false;
+            Map<String,Object> a = session.getAttributes();
+            RequestScope scope = auth.authenticate((String)a.get("orderToken"), (Long)a.get("orderStore"));
+            return Objects.equals(scope.getTenantId(), a.get("orderTenant"))
+                    && Objects.equals(scope.getStoreId(), a.get("orderStore"));
+        } catch (RuntimeException ex) { return false; }
+    }
+    public void sendToStore(Long tenant, Long store, String message) {
+        if (tenant == null || tenant <= 0 || store == null || store <= 0)
+            throw new SecurityException("Missing order ownership");
+        for (WebSocketSession session : sessions.values()) {
             try {
-                //服务器向客户端发送消息
-                session.getBasicRemote().sendText(message);
-            } catch (Exception e) {
-                e.printStackTrace();
+                if (!session.isOpen() || !valid(session)) {
+                    sessions.remove(session.getId(), session);
+                    session.close(CloseStatus.POLICY_VIOLATION);
+                    continue;
+                }
+                if (tenant.equals(session.getAttributes().get("orderTenant"))
+                        && store.equals(session.getAttributes().get("orderStore"))) {
+                    synchronized (session) { session.sendMessage(new TextMessage(message)); }
+                }
+            } catch (Exception ex) {
+                sessions.remove(session.getId(), session);
+                try { session.close(CloseStatus.SERVER_ERROR); } catch (Exception ignored) { }
             }
         }
     }
-
 }

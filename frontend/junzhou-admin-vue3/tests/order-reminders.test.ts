@@ -29,3 +29,17 @@ test('socket cleanup removes listeners and closes the connection exactly once', 
   assert.equal(orders, 1)
   assert.equal(socket.closes, 1)
 })
+
+test('authentication uses WebSocket protocols without placing the token in the URL', () => {
+  class TestSocket extends EventTarget { close() {} }
+  let offered: string[] | undefined
+  const cleanup = connectOrderSocket('ws://fixture/ws/abc', {
+    onOrder: () => {}, onError: () => {},
+  }, (url, protocols) => {
+    assert.equal(url, 'ws://fixture/ws/abc')
+    offered = protocols
+    return new TestSocket()
+  }, 'signed-token')
+  assert.deepEqual(offered, ['junzhou-orders', 'auth.signed-token'])
+  cleanup()
+})

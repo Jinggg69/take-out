@@ -22,8 +22,9 @@ export function parseOrderMessage(raw: unknown): OrderMessage | null {
 
 export function connectOrderSocket(url: string,
   handlers: { onOrder: (message: OrderMessage) => void; onError: () => void },
-  createSocket: (url: string) => SocketConnection = address => new WebSocket(address)) {
-  const socket = createSocket(url)
+  createSocket: (url: string, protocols?: string[]) => SocketConnection = (address, protocols) => new WebSocket(address, protocols),
+  token?: string) {
+  const socket = createSocket(url, token ? ['junzhou-orders', `auth.${token}`] : undefined)
   const onMessage = (event: Event) => {
     const message = parseOrderMessage((event as MessageEvent).data)
     if (message) handlers.onOrder(message)

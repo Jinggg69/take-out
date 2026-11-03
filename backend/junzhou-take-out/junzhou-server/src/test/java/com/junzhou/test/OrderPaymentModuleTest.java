@@ -1074,12 +1074,33 @@ class OrderPaymentModuleTest {
         assertEquals(2,jdbc.queryForObject("select count(*) from orders",Integer.class));
     }
 
+    @Test void reminderEndpointOnlyDeliversTheCurrentUsersOrder() throws Exception {
+        WebSocketServer sockets = org.mockito.Mockito.mock(WebSocketServer.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(context.getBean(OrderService.class), "webSocketServer", sockets);
+        mvc.perform(get("/user/order/reminder/10").header("authentication", token()))
+                .andExpect(jsonPath("$.code").value(1));
+        org.mockito.Mockito.verify(sockets).sendToStore(org.mockito.ArgumentMatchers.eq(1L),
+                org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.anyString());
+        jdbc.update("update orders set user_id=84 where id=10");
+        mvc.perform(get("/user/order/reminder/10").header("authentication", token()))
+                .andExpect(jsonPath("$.code").value(0));
+        jdbc.update("update orders set user_id=42,store_id=2 where id=10");
+        mvc.perform(get("/user/order/reminder/10").header("authentication", token()))
+                .andExpect(jsonPath("$.code").value(0));
+        org.mockito.Mockito.verifyNoMoreInteractions(sockets);
+    }
+
     @Test void paymentBroadcastOccursOnceOnlyAfterTheFinancialTransactionCommits() throws Exception {
-        javax.websocket.Session session=org.mockito.Mockito.mock(javax.websocket.Session.class);
-        javax.websocket.RemoteEndpoint.Basic remote=org.mockito.Mockito.mock(javax.websocket.RemoteEndpoint.Basic.class);
-        org.mockito.Mockito.when(session.getBasicRemote()).thenReturn(remote);
+        org.springframework.web.socket.WebSocketSession session=org.mockito.Mockito.mock(org.springframework.web.socket.WebSocketSession.class);
+        org.mockito.Mockito.when(session.isOpen()).thenReturn(true);
+        org.mockito.Mockito.when(session.getId()).thenReturn("payment-test");
+        java.util.Map<String,Object> attrs=new java.util.HashMap<>(); attrs.put("orderToken","test"); attrs.put("orderTenant",1L); attrs.put("orderStore",1L);
+        org.mockito.Mockito.when(session.getAttributes()).thenReturn(attrs);
         WebSocketServer sockets=context.getBean(WebSocketServer.class);
-        String connection="payment-test-"+UUID.randomUUID(); sockets.onOpen(session,connection);
+        com.junzhou.websocket.OrderSocketAuth auth=org.mockito.Mockito.mock(com.junzhou.websocket.OrderSocketAuth.class);
+        org.mockito.Mockito.when(auth.authenticate("test",1L)).thenReturn(new RequestScope(42L,null,1L,1L,java.util.Collections.singleton(1L)));
+        org.springframework.test.util.ReflectionTestUtils.setField(sockets,"auth",auth);
+        sockets.afterConnectionEstablished(session);
         try {
             PaymentLifecycleService payments=systemBean(PaymentLifecycleService.class);
             TransactionTemplate transaction=new TransactionTemplate(context.getBean(PlatformTransactionManager.class));
@@ -1088,13 +1109,13 @@ class OrderPaymentModuleTest {
                 throw new IllegalStateException("Simulated rollback after payment processing");
             }));
             assertEquals(0,paymentState(10));
-            org.mockito.Mockito.verifyNoInteractions(remote);
+            org.mockito.Mockito.verify(session,org.mockito.Mockito.never()).sendMessage(org.mockito.ArgumentMatchers.any());
             payments.confirmPayment(paymentResource("order-10","wx-10"));
             java.sql.Timestamp first=jdbc.queryForObject("select checkout_time from orders where id=10",java.sql.Timestamp.class);
             payments.confirmPayment(paymentResource("order-10","wx-10"));
-            org.mockito.Mockito.verify(remote,org.mockito.Mockito.times(1)).sendText(org.mockito.ArgumentMatchers.anyString());
+            org.mockito.Mockito.verify(session,org.mockito.Mockito.times(1)).sendMessage(org.mockito.ArgumentMatchers.any());
             assertEquals(first,jdbc.queryForObject("select checkout_time from orders where id=10",java.sql.Timestamp.class));
-        } finally { sockets.onClose(connection); }
+        } finally { sockets.afterConnectionClosed(session,org.springframework.web.socket.CloseStatus.NORMAL); }
     }
 
     @Test void concurrentRetriesWithTheSameSubmissionKeyCreateOnlyOneOrder() throws Exception {

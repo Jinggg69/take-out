@@ -17,6 +17,6 @@ export function createDevProxy(apiTarget: string): Record<'/api' | '/ws', ProxyO
       changeOrigin: true,
       rewrite: path => path.replace(/^\/api(?=\/|\?|$)/, apiPrefix),
     },
-    '/ws': { target: target.origin, changeOrigin: true, ws: true },
+    '/ws': { target: target.origin, changeOrigin: false, ws: true },
   }
 }

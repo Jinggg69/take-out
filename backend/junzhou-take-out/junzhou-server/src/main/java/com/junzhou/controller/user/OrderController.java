@@ -133,14 +133,14 @@ public class OrderController {
     }
 
     /**
-     * 用户催单接口占位，暂未调用催单业务
+     * 用户催单，仅访问本人当前门店订单
      * @param id 订单id
      * @return 操作结果
      */
     @GetMapping("/reminder/{id}")
     @ApiOperation("用户催单")
     public Result reminder(@PathVariable("id") Long id){
-
+        orderService.reminder(id);
         return Result.success();
 
     }

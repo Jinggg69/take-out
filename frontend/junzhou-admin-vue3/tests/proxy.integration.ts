@@ -12,7 +12,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 
 test('checked-in modes preserve dev/UAT true and production false', () => {
   for (const [mode, permissions, socket] of [
-    ['development', true, 'ws://localhost:8080/ws/'],
+    ['development', true, '/ws/'],
     ['production', false, '/ws/'],
     ['production.uat', true, '/ws/'],
   ] as const) {
@@ -27,6 +27,7 @@ test('the actual Vite config forwards HTTP and WebSocket to their original names
   { timeout: 20000 }, async () => {
     const upgradedSockets = new Set<Duplex>()
     let upgradedPath = ''
+    let upgradedHost = ''
     const backend = createHttpServer(async (request, response) => {
       let body = ''
       for await (const chunk of request) body += chunk.toString()
@@ -35,6 +36,7 @@ test('the actual Vite config forwards HTTP and WebSocket to their original names
     })
     backend.on('upgrade', (request, socket) => {
       upgradedPath = request.url ?? ''
+      upgradedHost = request.headers.host ?? ''
       upgradedSockets.add(socket)
       socket.on('error', () => socket.destroy())
       socket.on('close', () => upgradedSockets.delete(socket))
@@ -81,6 +83,7 @@ test('the actual Vite config forwards HTTP and WebSocket to their original names
         }, { once: true })
       })
       assert.equal(upgradedPath, '/ws/fixture-client')
+      assert.equal(upgradedHost, `127.0.0.1:${port}`)
     } finally {
       websocket?.close()
       for (const socket of upgradedSockets) socket.destroy()

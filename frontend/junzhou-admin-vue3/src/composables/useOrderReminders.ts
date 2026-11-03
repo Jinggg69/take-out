@@ -2,6 +2,7 @@ import { h, onMounted, onBeforeUnmount } from 'vue'
 import type { Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElNotification } from 'element-plus'
+import { sessionCookies } from '@/utils/cookies'
 import { clientEnvironment } from '@/config'
 import { buildOrderSocketUrl, connectOrderSocket } from '@/services/order-reminders'
 import type { OrderMessage } from '@/services/order-reminders'
@@ -44,7 +45,7 @@ export function useOrderReminders(newOrderAudio: Ref<HTMLAudioElement | undefine
         onError: () => {
           notices.add(ElNotification.error({ title: '订单提醒连接失败', message: '暂时无法接收订单提醒，请刷新页面重试', duration: 0 }))
         },
-      })
+      }, undefined, sessionCookies.getToken())
     } catch {
       notices.add(ElNotification.warning({ title: '订单提醒不可用', message: '无法连接订单提醒，请检查浏览器或网络后刷新重试', duration: 0 }))
     }

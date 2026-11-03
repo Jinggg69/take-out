@@ -73,7 +73,7 @@ public class PaymentLifecycleServiceImpl implements PaymentLifecycleService {
             final JSONObject message=new JSONObject(); message.put("type",1); message.put("orderId",order.getId()); message.put("content","订单号:"+number);
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override public void afterCommit() {
-                    try { sockets.sendToAllClient(message.toJSONString()); }
+                    try { sockets.sendToStore(order.getTenantId(), order.getStoreId(), message.toJSONString()); }
                     catch(RuntimeException ex) { log.warn("订单支付提醒发送失败，orderId={}",order.getId()); }
                 }
             });
