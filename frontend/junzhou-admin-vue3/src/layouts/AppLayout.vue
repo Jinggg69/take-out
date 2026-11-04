@@ -1,85 +1,52 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { ElDrawer } from 'element-plus'
-import AppSidebar from './AppSidebar.vue'
-import AppToolbar from './AppToolbar.vue'
-import { useAppStore } from '@/stores'
-import { useOrderReminders } from '@/composables/useOrderReminders'
-import newOrderSound from '@/assets/audio/preview.mp3'
-import reminderSound from '@/assets/audio/reminder.mp3'
-
-const app = useAppStore()
-const media = window.matchMedia('(max-width: 991px)')
-app.setMobile(media.matches)
-const onResize = () => app.setMobile(media.matches)
-onMounted(() => media.addEventListener('change', onResize))
-onUnmounted(() => media.removeEventListener('change', onResize))
-const drawerVisible = computed({ get: () => app.sidebarOpened, set: value => app.setSidebarOpen(value) })
-const newOrderAudio = ref<HTMLAudioElement>()
-const reminderAudio = ref<HTMLAudioElement>()
-useOrderReminders(newOrderAudio, reminderAudio)
-function focusMain() { document.getElementById('main-content')?.focus() }
+import { onMounted, onUnmounted, ref } from 'vue'
+import { ElButton, ElAlert } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { request } from '@/utils/request'
+import { workspace } from '@/stores/workspace'
+import { useUserStore } from '@/stores'
+import PasswordDialog from './components/PasswordDialog.vue'
+import StoreWorkspace from './StoreWorkspace.vue'
+const loading=ref(true), error=ref(''), password=ref(false)
+const user=useUserStore(), router=useRouter()
+let active=true
+async function load(){loading.value=true;error.value='';try{
+ const {data}=await request.get('/rbac/context');if(!active)return
+ if(String(data.code)!=='1')throw new Error(data.msg||'门店加载失败')
+ workspace.load(data.data.stores)
+}catch(e){if(active)error.value=e instanceof Error?e.message:'门店加载失败'}finally{if(active)loading.value=false}}
+async function logout(){await user.logout();await router.replace('/login')}
+onMounted(load);onUnmounted(()=>{active=false;workspace.reset()})
 </script>
-
 <template>
-  <a
-    class="skip-link"
-    href="#main-content"
-    @click.prevent="focusMain"
-  >跳到主要内容</a>
   <div
-    class="app-layout"
-    :class="{ 'is-collapsed': !app.sidebarOpened, 'is-mobile': app.isMobile }"
+    v-if="loading"
+    role="status"
+    class="workspace-state"
   >
-    <div
-      v-if="!app.isMobile"
-      class="desktop-sidebar"
-    >
-      <AppSidebar :collapsed="!app.sidebarOpened" />
-    </div>
-    <ElDrawer
-      v-else
-      v-model="drawerVisible"
-      title="导航菜单"
-      direction="ltr"
-      :size="224"
-      class="navigation-drawer"
-    >
-      <AppSidebar @navigate="app.setSidebarOpen(false)" />
-    </ElDrawer>
-    <div class="app-workspace">
-      <AppToolbar />
-      <main
-        id="main-content"
-        class="main-content"
-        tabindex="-1"
-      >
-        <RouterView />
-      </main>
-    </div>
-    <audio
-      ref="newOrderAudio"
-      :src="newOrderSound"
-      preload="auto"
-      hidden
-    />
-    <audio
-      ref="reminderAudio"
-      :src="reminderSound"
-      preload="auto"
-      hidden
-    />
+    正在加载门店权限…
   </div>
+  <div
+    v-else-if="error || !workspace.storeId.value"
+    class="workspace-state"
+  >
+    <h1>{{ error ? '暂时无法加载门店' : '暂无可访问门店' }}</h1>
+    <ElAlert
+      :title="error || '请联系商户管理员配置角色和门店任职。'"
+      :closable="false"
+    />
+    <ElButton @click="load">
+      重新加载
+    </ElButton><ElButton @click="password=true">
+      修改密码
+    </ElButton><ElButton @click="logout">
+      退出登录
+    </ElButton>
+    <PasswordDialog v-model="password" />
+  </div>
+  <StoreWorkspace
+    v-else
+    :key="workspace.revision.value"
+  />
 </template>
-
-<style scoped lang="scss">
-.app-layout { display: grid; grid-template-columns: var(--jz-sidebar-width) minmax(0, 1fr); min-height: 100dvh; }
-.app-layout.is-collapsed { grid-template-columns: var(--jz-sidebar-collapsed-width) minmax(0, 1fr); }
-.desktop-sidebar { position: sticky; top: 0; align-self: start; height: 100dvh; overflow: auto; }
-.app-workspace { min-width: 0; }
-.main-content { min-width: 0; padding: var(--jz-space-6); }
-.skip-link { position: fixed; top: -80px; left: var(--jz-space-4); z-index: 4000; padding: var(--jz-space-3); color: var(--jz-surface); background: var(--jz-brand-primary); }
-.skip-link:focus { top: var(--jz-space-3); }
-.is-mobile { display: block; }
-@media (max-width: 767px) { .main-content { padding: var(--jz-space-4); } }
-</style>
+<style scoped>.workspace-state{max-width:640px;margin:12vh auto;padding:24px;display:flex;flex-wrap:wrap;gap:16px;align-items:center}.workspace-state h1{font-size:24px}</style>

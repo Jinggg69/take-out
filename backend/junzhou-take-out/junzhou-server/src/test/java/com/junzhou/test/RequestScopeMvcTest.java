@@ -71,6 +71,12 @@ class RequestScopeMvcTest {
         mvc.perform(get("/user/dish/list").header("X-Store-Id","1")).andExpect(status().isForbidden());
     }
     @Configuration static class Config {
+        @Bean com.junzhou.service.RbacService rbac(){
+            com.junzhou.service.RbacService r=mock(com.junzhou.service.RbacService.class);
+            when(r.accessibleStores(1L,42L)).thenReturn(Collections.singleton(1L));return r;
+        }
+        @Bean com.junzhou.interceptor.RbacInterceptor rbacInterceptor(com.junzhou.service.RbacService rbac){return new com.junzhou.interceptor.RbacInterceptor(rbac);}
+
         @Bean TenantScopeMapper mapper() { return mock(TenantScopeMapper.class); }
         @Bean TenantScopeService scopes(TenantScopeMapper mapper) { return new TenantScopeServiceImpl(mapper); }
         @Bean RequestScopeInterceptor scopeInterceptor(TenantScopeService service) { return new RequestScopeInterceptor(service); }
@@ -85,6 +91,7 @@ class RequestScopeMvcTest {
     }
     @RestController static class Probe {
         @GetMapping({"/admin/probe","/user/order/probe","/user/dish/list"})
+        @com.junzhou.security.RequireActions({})
         String scope() {
             RequestScope s = RequestScope.current();
             return (s.getEmployeeId() == null ? s.getUserId() : s.getEmployeeId()) + ":" + s.getTenantId() + ":" + s.getStoreId();

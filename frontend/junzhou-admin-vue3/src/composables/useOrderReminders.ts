@@ -1,3 +1,4 @@
+import { workspace } from '@/stores/workspace'
 import { h, onMounted, onBeforeUnmount } from 'vue'
 import type { Ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -15,7 +16,9 @@ export function useOrderReminders(newOrderAudio: Ref<HTMLAudioElement | undefine
   const audioFailure = () => {
     if (!audioHintShown) { audioHintShown = true; ElMessage.info('请允许浏览器播放声音，订单消息仍会显示') }
   }
+  const generation=workspace.revision.value
   function onOrder(order: OrderMessage) {
+    if(generation!==workspace.revision.value)return
     const audio = order.type === 1 ? newOrderAudio.value : reminderAudio.value
     if (audio) {
       try { audio.currentTime = 0; void audio.play().catch(audioFailure) }
@@ -38,11 +41,14 @@ export function useOrderReminders(newOrderAudio: Ref<HTMLAudioElement | undefine
     notices.add(notice)
   }
   onMounted(() => {
+    if(!workspace.can('order:read'))return
     try {
-      const url = buildOrderSocketUrl(clientEnvironment.socketUrl, window.location.origin, Math.random().toString(36).slice(2))
-      disconnect = connectOrderSocket(url, {
+      const url = new URL(buildOrderSocketUrl(clientEnvironment.socketUrl, window.location.origin, Math.random().toString(36).slice(2)))
+      url.searchParams.set('storeId',workspace.storeId.value!)
+      disconnect = connectOrderSocket(url.toString(), {
         onOrder,
         onError: () => {
+          if(generation!==workspace.revision.value)return
           notices.add(ElNotification.error({ title: '订单提醒连接失败', message: '暂时无法接收订单提醒，请刷新页面重试', duration: 0 }))
         },
       }, undefined, sessionCookies.getToken())

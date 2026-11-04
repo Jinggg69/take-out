@@ -1,4 +1,5 @@
 package com.junzhou.controller.admin;
+import com.junzhou.security.*;
 
 import com.junzhou.result.Result;
 import com.junzhou.cache.ScopedCache;
@@ -22,6 +23,7 @@ public class ShopController {
      */
     @PutMapping("/{status}")
     @ApiOperation("设置店铺营业状态")
+    @RequireActions({PermissionAction.SHOP_UPDATE})
     public Result setStatus(@PathVariable("status") Integer status) {
         log.info("设置店铺营业状态为：{}", status == 1 ? "营业中" : "打烊中");
         redisTemplate.opsForValue().set(ScopedCache.shopStatusKey(), status);
@@ -33,6 +35,7 @@ public class ShopController {
      */
     @GetMapping("/status")
     @ApiOperation("获取店铺营业状态")
+    @RequireActions({PermissionAction.SHOP_READ})
     public Result<Integer> getStatus() {
         Integer status = (Integer) redisTemplate.opsForValue().get(ScopedCache.shopStatusKey());
         if (status == null) {

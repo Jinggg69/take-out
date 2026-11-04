@@ -1,4 +1,5 @@
 package com.junzhou.controller.admin;
+import com.junzhou.security.*;
 
 import com.junzhou.dto.OrdersCancelDTO;
 import com.junzhou.dto.OrdersConfirmDTO;
@@ -30,6 +31,7 @@ public class OrderController {
 
     @PostMapping("/{id}/refund/retry")
     @ApiOperation("按原退款单号核验或重试已有退款")
+    @RequireActions({PermissionAction.ORDER_REFUND})
     public Result<Void> retryRefund(@PathVariable Long id) {
         refundWorker.retry(id);
         return Result.success();
@@ -42,6 +44,7 @@ public class OrderController {
      */
     @GetMapping("/conditionSearch")
     @ApiOperation("订单搜索")
+    @RequireActions({PermissionAction.ORDER_READ})
     public Result<PageResult> conditionSearch(OrdersPageQueryDTO ordersPageQueryDTO) {
         log.info("订单条件分页查询：{}", ordersPageQueryDTO);
         PageResult pageResult = orderService.conditionSearch(ordersPageQueryDTO);
@@ -54,6 +57,7 @@ public class OrderController {
      */
     @GetMapping("/statistics")
     @ApiOperation("统计待接单、待派送、派送中的订单数量")
+    @RequireActions({PermissionAction.ORDER_READ})
     public Result<OrderStatisticsVO> statistics() {
         log.info("统计各状态订单数量");
         OrderStatisticsVO orderStatisticsVO = orderService.statistics();
@@ -67,6 +71,7 @@ public class OrderController {
      */
     @GetMapping("/details/{id}")
     @ApiOperation("查询订单详情")
+    @RequireActions({PermissionAction.ORDER_READ})
     public Result<OrderVO> details(@PathVariable Long id) {
         log.info("查询订单详情：{}", id);
         OrderVO orderVO = orderService.details(id);
@@ -80,6 +85,7 @@ public class OrderController {
      */
     @PutMapping("/confirm")
     @ApiOperation("接单")
+    @RequireActions({PermissionAction.ORDER_ACCEPT})
     public Result<Void> confirm(@RequestBody OrdersConfirmDTO ordersConfirmDTO) {
         log.info("接单：{}", ordersConfirmDTO);
         orderService.confirm(ordersConfirmDTO);
@@ -93,6 +99,7 @@ public class OrderController {
      */
     @PutMapping("/rejection")
     @ApiOperation("拒单")
+    @RequireActions({PermissionAction.ORDER_REJECT, PermissionAction.ORDER_REFUND})
     public Result<Void> rejection(@RequestBody OrdersRejectionDTO ordersRejectionDTO) {
         log.info("拒单：{}", ordersRejectionDTO);
         orderService.rejection(ordersRejectionDTO);
@@ -106,6 +113,7 @@ public class OrderController {
      */
     @PutMapping("/cancel")
     @ApiOperation("商家取消订单")
+    @RequireActions({PermissionAction.ORDER_CANCEL, PermissionAction.ORDER_REFUND})
     public Result<Void> cancel(@RequestBody OrdersCancelDTO ordersCancelDTO) {
         log.info("商家取消订单：{}", ordersCancelDTO);
         orderService.cancel(ordersCancelDTO);
@@ -119,6 +127,7 @@ public class OrderController {
      */
     @PutMapping("/delivery/{id}")
     @ApiOperation("派送订单")
+    @RequireActions({PermissionAction.ORDER_DELIVER})
     public Result<Void> delivery(@PathVariable Long id) {
         log.info("派送订单：{}", id);
         orderService.delivery(id);
@@ -132,6 +141,7 @@ public class OrderController {
      */
     @PutMapping("/complete/{id}")
     @ApiOperation("完成订单")
+    @RequireActions({PermissionAction.ORDER_COMPLETE})
     public Result<Void> complete(@PathVariable Long id) {
         log.info("完成订单：{}", id);
         orderService.complete(id);

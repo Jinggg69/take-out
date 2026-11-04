@@ -37,6 +37,8 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Autowired
     private AdminSessionMapper adminSessionMapper;
 
+    @Autowired private com.junzhou.service.RbacService rbac;
+
     /** {@inheritDoc} */
     @Override
     @Transactional
@@ -148,6 +150,8 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Override
     @Transactional
     public void startOrStop(Integer status, Long id){
+        if(status==null || (status!=0 && status!=1))throw new SecurityException("Invalid status");
+        rbac.lock();
         // update employee set status = ? where id = ?
         Employee employee = Employee.builder()
                 .id(id)
@@ -156,6 +160,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (employeeMapper.update(employee) != 1) {
             throw new AccountNotFoundException(MessageConstant.ACCOUNT_NOT_FOUND);
         }
+        rbac.ensureAdministrator();
         if (StatusConstant.DISABLE.equals(status)) {
             adminSessionMapper.deleteByEmployeeId(id);
         }

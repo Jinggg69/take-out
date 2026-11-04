@@ -19,15 +19,24 @@ public class RequestScopeInterceptor implements AsyncHandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         RequestScope.clear();
         try {
-            scopes.requireLegacySingleStore();
             String value = request.getHeader("X-Store-Id");
             Long store = value == null || value.isEmpty() ? null : Long.valueOf(value);
             RequestScope scope;
             if (request.getRequestURI().startsWith(request.getContextPath() + "/admin/")) {
                 Long employee = BaseContext.getCurrentId();
                 if (employee == null) throw new SecurityException("Missing employee");
-                scope = scopes.forEmployee(employee, store);
+                boolean selfService=false;
+                if(handler instanceof org.springframework.web.method.HandlerMethod){
+                    org.springframework.web.method.HandlerMethod method=(org.springframework.web.method.HandlerMethod)handler;
+                    selfService=method.getBeanType()==com.junzhou.controller.admin.EmployeeController.class
+                        && (method.getMethod().getName().equals("logout") || method.getMethod().getName().equals("editPassword"));
+                }
+                selfService = selfService || (handler instanceof org.springframework.web.method.HandlerMethod
+                    && ((org.springframework.web.method.HandlerMethod)handler).getBeanType()==com.junzhou.controller.admin.RbacController.class
+                    && ((org.springframework.web.method.HandlerMethod)handler).getMethod().getName().equals("context"));
+                scope = selfService?scopes.forEmployeeIdentity(employee):scopes.forEmployee(employee, store);
             } else {
+                scopes.requireLegacySingleStore();
                 Long user = (Long) request.getAttribute(JwtTokenUserInterceptor.USER_ATTRIBUTE);
                 if (user == null) BaseContext.removeCurrentId();
                 scope = scopes.forUser(user, store);

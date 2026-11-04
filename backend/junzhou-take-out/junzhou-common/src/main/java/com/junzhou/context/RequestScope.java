@@ -69,13 +69,16 @@ public final class RequestScope {
         return scope.userId;
     }
 
-    /** 管理端业务只能由已认证员工访问。 */
-    public static Long requireEmployeeTenantId() {
+    public static Long requireEmployeeTenantId(){
+        Long tenant=requireAuthenticatedEmployeeTenantId();requireStoreId();return tenant;
+    }
+
+    /** 身份自服务不依赖业务门店授权。 */
+    public static Long requireAuthenticatedEmployeeTenantId() {
         Long tenant = requireTenantId();
         RequestScope scope = CURRENT.get();
         if (scope.employeeId == null || scope.employeeId <= 0 || scope.userId != null)
             throw new SecurityException("Missing employee scope");
-        requireStoreId();
         return tenant;
     }
 }

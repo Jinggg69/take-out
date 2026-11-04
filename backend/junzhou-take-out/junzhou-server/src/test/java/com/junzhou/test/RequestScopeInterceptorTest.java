@@ -20,6 +20,19 @@ import static org.mockito.Mockito.*;
 class RequestScopeInterceptorTest {
     @AfterEach void cleanup() { RequestScope.clear(); BaseContext.removeCurrentId(); }
 
+    @Test void selfServiceNeedsIdentityButNoBusinessStore() throws Exception {
+        TenantScopeService scopes=mock(TenantScopeService.class);
+        when(scopes.forEmployeeIdentity(42L)).thenReturn(new RequestScope(42L,null,1L,null,java.util.Collections.emptySet()));
+        RequestScopeInterceptor interceptor=new RequestScopeInterceptor(scopes);
+        BaseContext.setCurrentId(42L);
+        for(String method:java.util.Arrays.asList("logout","editPassword")){
+            java.lang.reflect.Method m=java.util.Arrays.stream(com.junzhou.controller.admin.EmployeeController.class.getDeclaredMethods()).filter(x->x.getName().equals(method)).findFirst().get();
+            org.springframework.web.method.HandlerMethod handler=new org.springframework.web.method.HandlerMethod(new com.junzhou.controller.admin.EmployeeController(),m);
+            assertTrue(interceptor.preHandle(new MockHttpServletRequest("POST","/admin/employee/"+method),new MockHttpServletResponse(),handler));
+            assertNull(RequestScope.current().getStoreId());
+        }
+        verify(scopes,never()).forEmployee(anyLong(),any());
+    }
     @Test void validatesSelectionAndCleansAfterRequestAndAsync() throws Exception {
         TenantScopeMapper mapper = mock(TenantScopeMapper.class);
         when(mapper.isLegacySingleStore()).thenReturn(1);

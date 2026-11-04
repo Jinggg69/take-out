@@ -64,3 +64,5 @@ VALUES(1,1,'MANAGER',10);
 独立审查：指出员工总任职无法表达不同角色的独立指定门店，已通过失败测试复现，新增 employee_role_store 及双重租户复合外键后回归通过。
 
 最终验证：后端全量测试 342 项，0 失败、0 错误、1 跳过（含 RbacPolicyTest 6 项）；3.1 和 3.2 临时 MySQL 库验证均通过；git diff --check 通过。首次全量测试受沙箱本机连接限制，放行后发现 Redis 未启动，临时启动后重跑全绿并停止 Redis。
+
+阶段 3.3 接入后，本店范围也收紧为该角色的 employee_role_store 清单，身份自服务不依赖业务门店；运行时行为与部署说明以 [阶段 3.3](rbac-authorization-stage3.md) 为准。

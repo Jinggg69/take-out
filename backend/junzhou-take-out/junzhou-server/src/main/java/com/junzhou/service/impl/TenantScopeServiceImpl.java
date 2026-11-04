@@ -17,6 +17,14 @@ public class TenantScopeServiceImpl implements TenantScopeService {
         this.mapper = mapper;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired private com.junzhou.service.RbacService rbac;
+
+    @Override public RequestScope forEmployeeIdentity(Long employeeId){
+        Long tenant=mapper.activeEmployeeTenant(employeeId);
+        if(tenant==null || tenant<=0)throw new SecurityException("Inactive employee tenant");
+        return new RequestScope(employeeId,null,tenant,null,Collections.emptySet());
+    }
+
     /** 确认当前数据库仍处于允许的单店过渡状态。 */
     @Override
     public void requireLegacySingleStore() {
@@ -32,11 +40,11 @@ public class TenantScopeServiceImpl implements TenantScopeService {
         if (tenant == null || tenant <= 0) {
             throw new SecurityException("No active employee tenant");
         }
-        Long store = mapper.singleActiveStore(tenant);
-        if (store == null || store <= 0 || (selectedStore != null && !store.equals(selectedStore))) {
-            throw new SecurityException("Store not authorised");
-        }
-        return new RequestScope(employeeId, null, tenant, store, Collections.singleton(store));
+        java.util.Set<Long> allowed = rbac.accessibleStores(tenant,employeeId);
+        Long store=selectedStore;
+        if(store==null && allowed.size()==1)store=allowed.iterator().next();
+        if(store==null || !allowed.contains(store))throw new SecurityException("Store not authorised");
+        return new RequestScope(employeeId,null,tenant,store,allowed);
     }
 
     /** 根据有效门店建立用户端请求范围。 */

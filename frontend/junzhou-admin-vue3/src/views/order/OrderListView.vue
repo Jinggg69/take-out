@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { workspace } from '@/stores/workspace'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElButton, ElCheckbox, ElDatePicker, ElDialog, ElForm, ElFormItem, ElInput, ElMessage, ElOption, ElSelect, ElTable, ElTableColumn, ElTag } from 'element-plus'
@@ -12,6 +13,10 @@ import { actionLabels, cancellationReasons, orderActions, orderMoney, orderReaso
 import { errorMessage } from '@/utils/error-message'
 import { createOrderList } from './list-state'
 
+const visibleOrderActions=(status:number|string)=>orderActions(status).filter(action=>{
+ const code=({accept:'accept',reject:'reject',cancel:'cancel',delivery:'deliver',complete:'complete'} as const)[action]
+ return workspace.can('order:'+code) && (!['reject','cancel'].includes(action)||workspace.can('order:refund'))
+})
 const list = createOrderList(api)
 const { state } = list
 const route = useRoute(); const router = useRouter()
@@ -70,7 +75,7 @@ function openReason(row: OrderRecord, kind: 'reject' | 'cancel', fromDetail: boo
   selectedReason.value = ''; customReason.value = ''; reasonError.value = ''; reasonVisible.value = true
 }
 async function perform(row: OrderRecord, action: OrderAction, fromDetail = false, reason?: string) {
-  if (busy.value || !orderActions(row.status).includes(action)) return
+  if (busy.value || !visibleOrderActions(row.status).includes(action)) return
   if ((action === 'reject' || action === 'cancel') && reason === undefined) { openReason(row, action, fromDetail); return }
   busy.value = true; actionError.value = ''; reasonError.value = ''
   try {
@@ -353,7 +358,7 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
             <template #default="{ row }">
               <div class="management-row-actions">
                 <ElButton
-                  v-for="action in orderActions(row.status)"
+                  v-for="action in visibleOrderActions(row.status)"
                   :key="action"
                   link
                   :type="['cancel', 'reject'].includes(action) ? 'danger' : 'primary'"
@@ -507,7 +512,7 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
             </ElButton>
             <template v-if="detail && !detailLoading && !detailError">
               <ElButton
-                v-for="action in orderActions(detail.status).filter(action => Number(detail?.status) === 1 || action !== 'cancel')"
+                v-for="action in visibleOrderActions(detail.status).filter(action => Number(detail?.status) === 1 || action !== 'cancel')"
                 :key="action"
                 :type="['cancel', 'reject'].includes(action) ? 'danger' : 'primary'"
                 :disabled="busy"

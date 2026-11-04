@@ -4,6 +4,7 @@ import com.junzhou.context.RequestScope;
 
 /** 租户与门店请求范围服务。 */
 public interface TenantScopeService {
+    RequestScope forEmployeeIdentity(Long employeeId);
 
     /**
      * 确认当前数据库仍处于允许的单店过渡状态。

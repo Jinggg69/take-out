@@ -1,4 +1,5 @@
 package com.junzhou.controller.admin;
+import com.junzhou.security.*;
 
 import com.junzhou.dto.SetmealDTO;
 import com.junzhou.dto.SetmealPageQueryDTO;
@@ -34,6 +35,7 @@ public class SetmealController {
      */
     @PostMapping
     @ApiOperation("新增套餐")
+    @RequireActions({PermissionAction.SETMEAL_CREATE})
     public Result save(@RequestBody SetmealDTO setmealDTO) {
         log.info("新增套餐：{}", setmealDTO);
         RequestScope.requireStoreId();
@@ -49,6 +51,7 @@ public class SetmealController {
      */
     @GetMapping("/page")
     @ApiOperation("套餐分页查询")
+    @RequireActions({PermissionAction.SETMEAL_READ})
     public Result<PageResult> page(SetmealPageQueryDTO setmealPageQueryDTO) {
         log.info("套餐分页查询：{}", setmealPageQueryDTO);
         PageResult pageResult = setmealService.pageQuery(setmealPageQueryDTO);
@@ -62,6 +65,7 @@ public class SetmealController {
      */
     @DeleteMapping
     @ApiOperation("批量删除套餐")
+    @RequireActions({PermissionAction.SETMEAL_DELETE})
     public Result delete(@RequestParam("ids") List<Long> ids) {
         log.info("批量删除套餐：{}", ids);
         RequestScope.requireStoreId();
@@ -77,6 +81,7 @@ public class SetmealController {
      */
     @GetMapping("/{id}")
     @ApiOperation("根据id查询套餐")
+    @RequireActions({PermissionAction.SETMEAL_READ})
     public Result<SetmealVO> getById(@PathVariable Long id) {
         log.info("根据id查询套餐：{}", id);
         SetmealVO setmealVO = setmealService.getByIdWithDish(id);
@@ -90,6 +95,7 @@ public class SetmealController {
      */
     @PutMapping
     @ApiOperation("修改套餐")
+    @RequireActions({PermissionAction.SETMEAL_UPDATE})
     public Result update(@RequestBody SetmealDTO setmealDTO) {
         log.info("修改套餐：{}", setmealDTO);
         RequestScope.requireStoreId();
@@ -106,6 +112,7 @@ public class SetmealController {
      */
     @PostMapping("/status/{status}")
     @ApiOperation("套餐起售、停售")
+    @RequireActions({PermissionAction.SETMEAL_STATUS})
     public Result startOrStop(@PathVariable Integer status, @RequestParam Long id) {
         log.info("套餐起售停售：status={}, id={}", status, id);
         RequestScope.requireStoreId();

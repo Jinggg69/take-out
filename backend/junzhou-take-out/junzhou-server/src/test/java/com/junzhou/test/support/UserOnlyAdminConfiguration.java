@@ -10,6 +10,7 @@ import static org.mockito.Mockito.mock;
 /** Unused admin dependencies for tests that exercise only public/user routes. */
 @TestConfiguration
 public class UserOnlyAdminConfiguration {
+    @Bean com.junzhou.service.RbacService rbacService(){return mock(com.junzhou.service.RbacService.class); }
     @Bean EmployeeMapper employeeMapper() { return mock(EmployeeMapper.class); }
     @Bean AdminSessionMapper adminSessionMapper() { return mock(AdminSessionMapper.class); }
     @Bean AdminSessionService adminSessionService() { return new com.junzhou.service.impl.AdminSessionServiceImpl(); }

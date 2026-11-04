@@ -1,4 +1,5 @@
 package com.junzhou.controller.admin;
+import com.junzhou.security.*;
 import com.junzhou.context.RequestScope;
 import com.junzhou.entity.FileAsset;
 import com.junzhou.result.Result;
@@ -11,11 +12,13 @@ import org.springframework.web.multipart.MultipartFile;
 public class CommonController {
     @Autowired private FileAssetService files;
     @PostMapping("/upload")
+    @RequireActions({PermissionAction.FILE_UPLOAD})
     public Result<String> upload(@RequestParam("file") MultipartFile file) {
         RequestScope.requireEmployeeTenantId();
         return Result.success(files.upload(file));
     }
     @GetMapping("/file")
+    @RequireActions({PermissionAction.DISH_READ})
     public Result<FileAsset> file(@RequestParam("url") String url) {
         return Result.success(files.getByUrl(url));
     }

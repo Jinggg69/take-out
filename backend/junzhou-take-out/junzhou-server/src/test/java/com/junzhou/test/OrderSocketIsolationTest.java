@@ -31,6 +31,9 @@ class OrderSocketIsolationTest {
         com.junzhou.service.AdminSessionService sessions = mock(com.junzhou.service.AdminSessionService.class);
         com.junzhou.service.TenantScopeService scopes = mock(com.junzhou.service.TenantScopeService.class);
         OrderSocketAuth auth = new OrderSocketAuth(jwt, sessions, scopes);
+        com.junzhou.service.RbacService rbac=mock(com.junzhou.service.RbacService.class);
+        ReflectionTestUtils.setField(auth,"rbac",rbac);
+        when(rbac.permits(101L,42L,1001L,com.junzhou.security.PermissionAction.ORDER_READ)).thenReturn(true);
         Map<String,Object> claims = new HashMap<>(); claims.put("empId",42L); claims.put("jti","active");
         String token = com.junzhou.utils.JwtUtil.createJWT("socket-test-secret",60000,claims);
         when(sessions.isActive("active",42L)).thenReturn(true);

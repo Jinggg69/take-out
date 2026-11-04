@@ -38,6 +38,8 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
     @Autowired
     private RequestScopeInterceptor requestScopeInterceptor;
 
+    @Autowired private com.junzhou.interceptor.RbacInterceptor rbacInterceptor;
+
     /**
      * 注册自定义拦截器
      *
@@ -53,6 +55,7 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
         registry.addInterceptor(requestScopeInterceptor)
                 .addPathPatterns("/admin/**", "/user/**")
                 .excludePathPatterns("/admin/employee/login", "/user/user/login");
+        registry.addInterceptor(rbacInterceptor).addPathPatterns("/admin/**").excludePathPatterns("/admin/employee/login");
     }
 
     /**

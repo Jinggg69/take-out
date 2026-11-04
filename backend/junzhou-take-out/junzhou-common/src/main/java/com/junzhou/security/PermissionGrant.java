@@ -5,7 +5,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /** One action from one role assignment. Construct only from trusted server-side data.
- * assignedStoreIds: CURRENT_STORE uses employee_store; SPECIFIED_STORES uses
+ * assignedStoreIds: CURRENT_STORE and SPECIFIED_STORES use
  * employee_role_store filtered to this exact employee-role assignment.
  * Target tenant must be read from the target store, never supplied by a client.
  * Lifecycle/status checks and loading assignments belong to the authorization service.

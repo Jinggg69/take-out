@@ -15,7 +15,7 @@ import org.apache.ibatis.annotations.Update;
 @Mapper
 public interface EmployeeMapper {
 
-    @Update("<script><bind name='_tenant' value='@com.junzhou.context.RequestScope@requireEmployeeTenantId()'/> update employee set password=#{newPassword}, update_time=current_timestamp, update_user=#{empId} "
+    @Update("<script><bind name='_tenant' value='@com.junzhou.context.RequestScope@requireAuthenticatedEmployeeTenantId()'/> update employee set password=#{newPassword}, update_time=current_timestamp, update_user=#{empId} "
             + "where id=#{empId} and tenant_id=#{_tenant} and password=#{oldPassword} and status=1</script>")
     int updatePassword(@Param("empId") Long empId, @Param("oldPassword") String oldPassword,
                        @Param("newPassword") String newPassword);

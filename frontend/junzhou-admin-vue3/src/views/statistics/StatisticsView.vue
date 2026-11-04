@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { workspace } from '@/stores/workspace'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { ElButton, ElMessage, ElMessageBox } from 'element-plus'
 import { statisticsApi } from '@/api'
@@ -26,10 +27,11 @@ function choose(key: StatisticsPreset) { selected.value = key; range.value = pre
 function number(value: unknown) { return value !== null && value !== undefined && Number.isFinite(Number(value)) ? String(value) : '—' }
 function rate(value: unknown) { return value !== null && value !== undefined && Number.isFinite(Number(value)) ? `${(Number(value) * 100).toFixed(1)}%` : '—' }
 async function exportData() {
-  if (exporting.value) return
+  if (exporting.value || !workspace.can('report:export')) return
   exporting.value = true
   try {
     await ElMessageBox.confirm('是否确认导出最近30天运营数据?', '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    if(!mounted || !workspace.can('report:export'))return
     const response = await statisticsApi.export()
     const blob = await exportWorkbook(response.data)
     if (!mounted) return
@@ -52,6 +54,7 @@ onBeforeUnmount(() => { mounted = false; reports.dispose() })
   >
     <header class="statistics-heading">
       <h1>数据统计</h1><el-button
+        v-if="workspace.can('report:export')"
         data-testid="statistics-export"
         :loading="exporting"
         @click="exportData"

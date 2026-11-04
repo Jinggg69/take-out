@@ -30,8 +30,10 @@ public class AdminSessionServiceImpl implements AdminSessionService {
     @Transactional
     @Override
     public String issue(Employee authenticated) {
+        if(authenticated==null || authenticated.getTenantId()==null || adminSessionMapper.lockTenantForIssue(authenticated.getTenantId())==null)
+            throw new LoginFailedException("商户状态已变化，请重新登录");
         Employee current = employeeMapper.getForSessionIssue(authenticated.getId(), authenticated.getPassword());
-        if (current == null || current.getTenantId() == null || current.getTenantId() <= 0 || !StatusConstant.ENABLE.equals(current.getStatus()) || current.getPassword() == null
+        if (current == null || current.getTenantId() == null || current.getTenantId() <= 0 || !current.getTenantId().equals(authenticated.getTenantId()) || !StatusConstant.ENABLE.equals(current.getStatus()) || current.getPassword() == null
                 || !Objects.equals(current.getPassword(), authenticated.getPassword())) {
             throw new LoginFailedException("账号状态已变化，请重新登录");
         }

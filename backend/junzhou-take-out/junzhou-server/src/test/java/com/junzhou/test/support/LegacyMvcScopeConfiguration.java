@@ -11,6 +11,12 @@ import static org.mockito.Mockito.*;
 /** Older MVC tests exercise their own business/authentication behavior, not scope. */
 @Configuration
 public class LegacyMvcScopeConfiguration {
+    // Business/authentication regressions use separate RBAC integration tests for authorization.
+    @Bean @Primary public com.junzhou.interceptor.RbacInterceptor legacyRbacStub(){
+        com.junzhou.interceptor.RbacInterceptor interceptor=mock(com.junzhou.interceptor.RbacInterceptor.class);
+        when(interceptor.preHandle(any(),any(),any())).thenReturn(true);return interceptor;
+    }
+
     @Bean public TenantScopeService testTenantScopeService() { return mock(TenantScopeService.class); }
     @Bean @Primary public RequestScopeInterceptor legacyScopeStub() throws Exception {
         RequestScopeInterceptor interceptor = mock(RequestScopeInterceptor.class);

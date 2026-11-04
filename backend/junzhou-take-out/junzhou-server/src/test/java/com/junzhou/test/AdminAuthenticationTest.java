@@ -79,6 +79,7 @@ class AdminAuthenticationTest {
                 JwtTokenAdminInterceptor.class, JwtTokenUserInterceptor.class, GlobalExceptionHandler.class, Probe.class);
         context.refresh();
         jdbc = new JdbcTemplate(context.getBean(DataSource.class));
+        jdbc.execute("create table tenant(id bigint primary key,status int); insert into tenant values(1,1)");
         jdbc.execute("create table employee (id bigint primary key, tenant_id bigint not null, username varchar(32), name varchar(32), "
                 + "password varchar(64), phone varchar(32), sex varchar(2), id_number varchar(32), status int, "
                 + "create_time timestamp, update_time timestamp, create_user bigint, update_user bigint)");
@@ -358,6 +359,8 @@ class AdminAuthenticationTest {
             includeFilters=@ComponentScan.Filter(type=FilterType.REGEX,
                     pattern={"com\\.junzhou\\.service\\.impl\\.EmployeeServiceImpl", "com\\.junzhou\\.service\\.impl\\.AdminSessionServiceImpl"}))
     static class DatabaseConfiguration {
+        @Bean com.junzhou.service.RbacService rbacService(){return org.mockito.Mockito.mock(com.junzhou.service.RbacService.class);}
+
         @Bean DataSource dataSource() {
             JdbcDataSource source = new JdbcDataSource();
             source.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1");

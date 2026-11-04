@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { canVisit } from '@/stores/workspace'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
@@ -34,7 +35,7 @@ const activeMenu = computed(() => route.meta.activeMenu || route.path)
     </RouterLink>
     <nav aria-label="主导航">
       <RouterLink
-        v-for="item in primaryNavigation"
+        v-for="item in primaryNavigation.filter(item=>canVisit(item.path))"
         :key="item.path"
         :to="item.path"
         class="nav-link"

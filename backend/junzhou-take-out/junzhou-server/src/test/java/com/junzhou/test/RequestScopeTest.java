@@ -16,8 +16,11 @@ class RequestScopeTest {
     @Test void adminScopeComesFromEmployeeAndAllowsOnlyItsSingleStore() {
         TenantScopeMapper mapper = mock(TenantScopeMapper.class);
         when(mapper.activeEmployeeTenant(42L)).thenReturn(7L);
-        when(mapper.singleActiveStore(7L)).thenReturn(9L);
+
         TenantScopeService service = new TenantScopeServiceImpl(mapper);
+        com.junzhou.service.RbacService rbac=mock(com.junzhou.service.RbacService.class);
+        when(rbac.accessibleStores(7L,42L)).thenReturn(java.util.Collections.singleton(9L));
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"rbac",rbac);
         RequestScope scope = service.forEmployee(42L, 9L);
         assertEquals(42L, scope.getEmployeeId());
         assertEquals(7L, scope.getTenantId());
@@ -30,6 +33,8 @@ class RequestScopeTest {
     @Test void ambiguousOrInactiveEmployeeAndInvalidStoreAreRejected() {
         TenantScopeMapper mapper = mock(TenantScopeMapper.class);
         TenantScopeService service = new TenantScopeServiceImpl(mapper);
+        com.junzhou.service.RbacService rbac=mock(com.junzhou.service.RbacService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"rbac",rbac);
         when(mapper.activeEmployeeTenant(42L)).thenReturn(null);
         when(mapper.singleActiveStore(7L)).thenReturn(null);
         when(mapper.activeStoreTenant(99L)).thenReturn(null);

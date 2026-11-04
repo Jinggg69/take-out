@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import StoreSelector from './components/StoreSelector.vue'
+import { workspace } from '@/stores/workspace'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElButton, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage } from 'element-plus'
@@ -23,6 +25,7 @@ let active = true
 onUnmounted(() => { active = false })
 onMounted(async () => {
   try {
+    if(!workspace.can('shop:read'))return
     const { data } = await authApi.getStatus()
     if (!active) return
     if (String(data.code) !== '1' || ![0, 1].includes(data.data)) throw new Error(data.msg || '获取营业状态失败')
@@ -59,12 +62,15 @@ async function accountCommand(command: string) {
       >{{ route.meta.pageTitle || '管理系统' }}</span>
     </div>
     <div class="toolbar-actions">
+      <StoreSelector />
       <span
+        v-if="workspace.can('shop:read')"
         class="business-status"
         :data-state="status"
         role="status"
       >{{ statusLoading ? '获取状态中' : status === 1 ? '营业中' : status === 0 ? '打烊中' : '状态未知' }}</span>
       <ElButton
+        v-if="workspace.can('shop:update')"
         text
         class="shop-settings toolbar-icon"
         aria-label="营业状态设置"
@@ -127,7 +133,7 @@ async function accountCommand(command: string) {
 @media (max-width: 767px) {
   .toolbar { padding-inline: var(--jz-space-3); gap: var(--jz-space-2); }
   .toolbar-location, .toolbar-actions { gap: var(--jz-space-1); }
-  .settings-label { display: none; }
+  .settings-label, .current-location { display: none; }
   .account-name { max-width: 64px; }
   .toolbar-icon, .account-trigger { min-height: 44px; min-width: 44px; padding-inline: var(--jz-space-2); }
 }

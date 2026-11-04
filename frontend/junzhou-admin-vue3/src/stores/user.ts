@@ -1,3 +1,4 @@
+import { workspace } from './workspace.ts'
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { AuthApi } from '../api/auth.ts'
@@ -14,6 +15,7 @@ export function createUserStore(api: AuthApi, storage: SessionStorage) {
       ? userInfo.value.name : username.value || '员工')
 
     async function login(payload: LoginPayload) {
+      workspace.reset()
       const name = payload.username.trim()
       username.value = name
       storage.setUsername(name)
@@ -28,6 +30,7 @@ export function createUserStore(api: AuthApi, storage: SessionStorage) {
     }
 
     function clearSession() {
+      workspace.reset()
       storage.clearSession()
       token.value = ''
       username.value = ''

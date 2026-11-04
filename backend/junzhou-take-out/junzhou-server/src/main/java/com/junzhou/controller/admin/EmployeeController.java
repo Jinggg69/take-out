@@ -1,4 +1,5 @@
 package com.junzhou.controller.admin;
+import com.junzhou.security.*;
 
 import com.junzhou.context.BaseContext;
 import com.junzhou.dto.EmployeeDTO;
@@ -59,6 +60,7 @@ public class EmployeeController {
      * @return
      */
     @PostMapping("/logout")
+    @RequireActions({})
     public Result<String> logout(HttpServletRequest request) {
         adminSessionService.logout((String) request.getAttribute(AdminSessionService.SESSION_ATTRIBUTE), BaseContext.getCurrentId());
         return Result.success();
@@ -66,6 +68,7 @@ public class EmployeeController {
 
     @PutMapping("/editPassword")
     @ApiOperation("修改当前登录员工密码")
+    @RequireActions({})
     public Result<Void> editPassword(@RequestBody PasswordEditDTO passwordEditDTO) {
         employeeService.editPassword(passwordEditDTO);
         return Result.success();
@@ -73,6 +76,7 @@ public class EmployeeController {
 
     @PostMapping
     @ApiOperation("新增员工")
+    @RequireActions({PermissionAction.EMPLOYEE_CREATE})
     public Result save(@RequestBody EmployeeDTO employeeDTO) {
         log.info("新增员工：{}",employeeDTO);
         employeeService.save(employeeDTO);
@@ -81,6 +85,7 @@ public class EmployeeController {
 
     @GetMapping("/page")
     @ApiOperation("员工分页查询")
+    @RequireActions({PermissionAction.EMPLOYEE_READ})
     public Result<PageResult> page(EmployeePageQueryDTO employeePageQueryDTO){
         log.info("员工分页查询，参数为：{}",employeePageQueryDTO);
         PageResult pageResult = employeeService.pageQuery(employeePageQueryDTO);
@@ -89,6 +94,7 @@ public class EmployeeController {
 
     @PostMapping("/status/{status}")
     @ApiOperation("启用禁用员工账号")
+    @RequireActions({PermissionAction.EMPLOYEE_STATUS})
     public Result startOrStop(@PathVariable Integer status,Long id) {
         log.info("启用禁用员工账号：{}{}",status,id);
         employeeService.startOrStop(status,id);
@@ -97,6 +103,7 @@ public class EmployeeController {
 
     @GetMapping("/{id}")
     @ApiOperation("根据id查询员工信息")
+    @RequireActions({PermissionAction.EMPLOYEE_READ})
     public Result<Employee> getById(@PathVariable Long id) {
         log.info("根据id查询员工信息:{}",id);
         Employee employee = employeeService.getById(id);
@@ -105,6 +112,7 @@ public class EmployeeController {
 
     @PutMapping
     @ApiOperation("编辑员工信息")
+    @RequireActions({PermissionAction.EMPLOYEE_UPDATE})
     public Result update(@RequestBody EmployeeDTO employeeDTO){
         log.info("编辑员工信息:{}",employeeDTO);
         employeeService.update(employeeDTO);

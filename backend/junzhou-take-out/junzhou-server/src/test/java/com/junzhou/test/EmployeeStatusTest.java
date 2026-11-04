@@ -73,6 +73,7 @@ class EmployeeStatusTest {
         RequestScope.set(new RequestScope(1L,null,1L,1L,java.util.Collections.singleton(1L)));
         mapper = session.getMapper(EmployeeMapper.class);
         service = new EmployeeServiceImpl();
+        ReflectionTestUtils.setField(service,"rbac",org.mockito.Mockito.mock(com.junzhou.service.RbacService.class));
         ReflectionTestUtils.setField(service, "employeeMapper", mapper);
         ReflectionTestUtils.setField(service, "adminSessionMapper", session.getMapper(AdminSessionMapper.class));
         EmployeeController controller = new EmployeeController();

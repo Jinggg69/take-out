@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { workspace } from '@/stores/workspace'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElButton, ElInput, ElMessage, ElMessageBox, ElTable, ElTableColumn } from 'element-plus'
@@ -46,6 +47,7 @@ async function changeStatus(row: EmployeeRecord) {
   <div class="employee-list-page">
     <PageHeader title="员工管理">
       <ElButton
+        v-if="workspace.can('employee:create')"
         type="primary"
         @click="router.push('/employee/add')"
       >
@@ -146,6 +148,7 @@ async function changeStatus(row: EmployeeRecord) {
             <template #default="{ row }">
               <div class="management-row-actions">
                 <ElButton
+                  v-if="workspace.can('employee:update')"
                   link
                   type="primary"
                   :disabled="!canManageEmployee(row)"
@@ -155,6 +158,7 @@ async function changeStatus(row: EmployeeRecord) {
                   修改
                 </ElButton>
                 <ElButton
+                  v-if="workspace.can('employee:status')"
                   link
                   :type="String(row.status) === '1' ? 'danger' : 'primary'"
                   :disabled="!canManageEmployee(row) || changingId !== null"

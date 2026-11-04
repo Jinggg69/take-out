@@ -5,6 +5,10 @@ import org.apache.ibatis.annotations.*;
 /** Stores session identifiers, never bearer tokens or passwords. */
 @Mapper
 public interface AdminSessionMapper {
+    /** Serialize login issuance with tenant authorization changes, before employee locking. */
+    @Select("select id from tenant where id=#{tenantId} and status=1 for update")
+    Long lockTenantForIssue(Long tenantId);
+
     /** Authentication bootstrap issuance; tenant is obtained from the credential-locked employee. */
     @Insert("insert into admin_session (session_id,employee_id,expires_at) select #{sessionId},id,#{expiresAt} from employee where id=#{employeeId} and tenant_id=#{tenantId} and status=1")
     int insert(@Param("sessionId") String sessionId, @Param("employeeId") Long employeeId,
@@ -17,10 +21,10 @@ public interface AdminSessionMapper {
     int countActive(@Param("sessionId") String sessionId, @Param("employeeId") Long employeeId,
                     @Param("now") long now);
 
-    @Delete("<script><bind name='_tenant' value='@com.junzhou.context.RequestScope@requireEmployeeTenantId()'/> delete from admin_session where session_id=#{sessionId} and employee_id=#{employeeId} and exists (select 1 from employee e where e.id=employee_id and e.tenant_id=#{_tenant})</script>")
+    @Delete("<script><bind name='_tenant' value='@com.junzhou.context.RequestScope@requireAuthenticatedEmployeeTenantId()'/> delete from admin_session where session_id=#{sessionId} and employee_id=#{employeeId} and exists (select 1 from employee e where e.id=employee_id and e.tenant_id=#{_tenant})</script>")
     int deleteCurrent(@Param("sessionId") String sessionId, @Param("employeeId") Long employeeId);
 
-    @Delete("<script><bind name='_tenant' value='@com.junzhou.context.RequestScope@requireEmployeeTenantId()'/> delete from admin_session where employee_id=#{employeeId} and exists (select 1 from employee e where e.id=employee_id and e.tenant_id=#{_tenant})</script>")
+    @Delete("<script><bind name='_tenant' value='@com.junzhou.context.RequestScope@requireAuthenticatedEmployeeTenantId()'/> delete from admin_session where employee_id=#{employeeId} and exists (select 1 from employee e where e.id=employee_id and e.tenant_id=#{_tenant})</script>")
     int deleteByEmployeeId(Long employeeId);
 
     /** Authentication bootstrap cleanup, tenant comes from the credential-locked employee. */

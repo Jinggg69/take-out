@@ -1,4 +1,5 @@
 package com.junzhou.controller.admin;
+import com.junzhou.security.*;
 
 import com.junzhou.dto.DishDTO;
 import com.junzhou.dto.DishPageQueryDTO;
@@ -34,6 +35,7 @@ public class DishController {
      */
     @PostMapping
     @ApiOperation("新增菜品")
+    @RequireActions({PermissionAction.DISH_CREATE})
     public Result save(@RequestBody DishDTO dishDTO) {
         log.info("新增菜品：{}",dishDTO);
         RequestScope.requireStoreId();
@@ -51,6 +53,7 @@ public class DishController {
      */
     @GetMapping("/page")
     @ApiOperation("菜品分页查询")
+    @RequireActions({PermissionAction.DISH_READ})
     public Result<PageResult> page(DishPageQueryDTO dishPageQueryDTO) {
         log.info("菜品分页查询：{}", dishPageQueryDTO);
         PageResult pageResult = dishService.pageQuery(dishPageQueryDTO);
@@ -64,6 +67,7 @@ public class DishController {
      */
     @DeleteMapping
     @ApiOperation("批量删除菜品")
+    @RequireActions({PermissionAction.DISH_DELETE})
     public Result delete(@RequestParam("ids") List<Long> ids) {
         log.info("批量删除菜品：{}", ids);
         RequestScope.requireStoreId();
@@ -81,6 +85,7 @@ public class DishController {
      */
     @GetMapping("/{id}")
     @ApiOperation("根据id查询菜品")
+    @RequireActions({PermissionAction.DISH_READ})
     public Result<DishVO> getById(@PathVariable Long id) {
         log.info("根据id查询菜品：{}", id);
         DishVO dishVO = dishService.getByIdWithFlavor(id);
@@ -94,6 +99,7 @@ public class DishController {
      */
     @GetMapping("/list")
     @ApiOperation("根据分类id查询在售菜品")
+    @RequireActions({PermissionAction.DISH_READ})
     public Result<List<Dish>> list(@RequestParam Long categoryId) {
         log.info("根据分类id查询在售菜品：{}", categoryId);
         return Result.success(dishService.list(categoryId));
@@ -106,6 +112,7 @@ public class DishController {
      */
     @PutMapping()
     @ApiOperation("修改菜品")
+    @RequireActions({PermissionAction.DISH_UPDATE})
     public Result update(@RequestBody DishDTO dishDTO) {
         log.info("修改菜品：{}", dishDTO);
         RequestScope.requireStoreId();
@@ -123,6 +130,7 @@ public class DishController {
      */
     @PostMapping("/status/{status}")
     @ApiOperation("菜品起售、停售")
+    @RequireActions({PermissionAction.DISH_STATUS})
     public Result startOrStop(@PathVariable Integer status, @RequestParam Long id) {
         log.info("菜品起售停售：status={}, id={}", status, id);
         RequestScope.requireStoreId();
