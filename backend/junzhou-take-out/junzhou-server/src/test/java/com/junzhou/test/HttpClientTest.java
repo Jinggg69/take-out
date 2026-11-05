@@ -7,9 +7,7 @@ import com.junzhou.dto.EmployeeLoginDTO;
 import com.junzhou.entity.Employee;
 import com.junzhou.handler.GlobalExceptionHandler;
 import com.junzhou.json.JacksonObjectMapper;
-import com.junzhou.properties.JwtProperties;
 import com.junzhou.service.EmployeeService;
-import com.junzhou.service.AdminSessionService;
 import java.util.HashMap;
 import java.util.Collections;
 import com.junzhou.utils.JwtUtil;
@@ -62,19 +60,14 @@ public class HttpClientTest {
     @Test
     public void testPost() throws Exception {
         EmployeeService employees = mock(EmployeeService.class);
-        Employee employee = Employee.builder().id(42L).username("admin").name("测试管理员").build();
-        when(employees.login(argThat((EmployeeLoginDTO login) -> login != null
+        String issued = JwtUtil.createJWT(SECRET, 60000L,
+                new HashMap<>(Collections.singletonMap(JwtClaimsConstant.EMP_ID, 42L)));
+        when(employees.loginWithSession(argThat((EmployeeLoginDTO login) -> login != null
                 && "admin".equals(login.getUsername()) && "test-password".equals(login.getPassword()))))
-                .thenReturn(employee);
-        JwtProperties jwt = new JwtProperties();
-        jwt.setAdminSecretKey(SECRET);
-        jwt.setAdminTtl(60000L);
+                .thenReturn(com.junzhou.vo.EmployeeLoginVO.builder().id(42L).userName("admin")
+                        .name("测试管理员").token(issued).build());
         EmployeeController controller = new EmployeeController();
         ReflectionTestUtils.setField(controller, "employeeService", employees);
-        AdminSessionService sessions = mock(AdminSessionService.class);
-        when(sessions.issue(employee)).thenReturn(JwtUtil.createJWT(SECRET, 60000L,
-                new HashMap<>(Collections.singletonMap(JwtClaimsConstant.EMP_ID, 42L))));
-        ReflectionTestUtils.setField(controller, "adminSessionService", sessions);
 
         MvcResult result = mvc(controller).perform(post("/admin/employee/login")
                 .contentType(MediaType.APPLICATION_JSON)

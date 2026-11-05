@@ -40,17 +40,8 @@ public class EmployeeController {
      */
     @PostMapping("/login")
     public Result<EmployeeLoginVO> login(@RequestBody EmployeeLoginDTO employeeLoginDTO) {
-        Employee employee = employeeService.login(employeeLoginDTO);
-        String token = adminSessionService.issue(employee);
-        log.info("员工登录成功，employeeId={}", employee.getId());
-
-        EmployeeLoginVO employeeLoginVO = EmployeeLoginVO.builder()
-                .id(employee.getId())
-                .userName(employee.getUsername())
-                .name(employee.getName())
-                .token(token)
-                .build();
-
+        EmployeeLoginVO employeeLoginVO = employeeService.loginWithSession(employeeLoginDTO);
+        log.info("员工登录成功，employeeId={}", employeeLoginVO.getId());
         return Result.success(employeeLoginVO);
     }
 

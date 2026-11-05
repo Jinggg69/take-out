@@ -5,9 +5,13 @@ import com.junzhou.dto.EmployeeLoginDTO;
 import com.junzhou.dto.EmployeePageQueryDTO;
 import com.junzhou.dto.PasswordEditDTO;
 import com.junzhou.entity.Employee;
+import com.junzhou.vo.EmployeeLoginVO;
 import com.junzhou.result.PageResult;
 
 public interface EmployeeService {
+
+    /** 验证凭据，在同一事务内签发会话并升级存量密码。 */
+    EmployeeLoginVO loginWithSession(EmployeeLoginDTO input);
 
     /** 修改当前认证员工密码，客户端不能选择其他员工。 */
     void editPassword(PasswordEditDTO passwordEditDTO);

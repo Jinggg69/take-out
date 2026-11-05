@@ -22,11 +22,14 @@ import com.junzhou.service.EmployeeService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.util.DigestUtils;
+import com.junzhou.service.PasswordHashService;
+import com.junzhou.service.AdminSessionService;
+import com.junzhou.vo.EmployeeLoginVO;
+import com.junzhou.exception.LoginFailedException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.nio.charset.StandardCharsets;
+
 
 @Service
 public class EmployeeServiceImpl implements EmployeeService {
@@ -38,6 +41,24 @@ public class EmployeeServiceImpl implements EmployeeService {
     private AdminSessionMapper adminSessionMapper;
 
     @Autowired private com.junzhou.service.RbacService rbac;
+    @Autowired private PasswordHashService passwordHashes;
+    @Autowired private AdminSessionService adminSessions;
+
+    @Override
+    @Transactional
+    public EmployeeLoginVO loginWithSession(EmployeeLoginDTO input) {
+        Employee employee = login(input);
+        String verified = employee.getPassword();
+        String replacement = passwordHashes.needsUpgrade(verified) ? passwordHashes.encode(input.getPassword()) : null;
+        // issue rechecks the credential while holding the tenant and employee row locks.
+        String token = adminSessions.issue(employee);
+        if (replacement != null && adminSessionMapper.upgradeVerifiedPassword(
+                employee.getId(), employee.getTenantId(), verified, replacement) != 1) {
+            throw new LoginFailedException("账号状态已变化，请重新登录");
+        }
+        return EmployeeLoginVO.builder().id(employee.getId()).userName(employee.getUsername())
+                .name(employee.getName()).token(token).build();
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -52,8 +73,11 @@ public class EmployeeServiceImpl implements EmployeeService {
                 || input.getNewPassword() == null || !input.getNewPassword().matches("[0-9A-Za-z]{6,20}")) {
             throw new PasswordEditFailedException("请提供原密码和6至20位数字或字母的新密码");
         }
-        String oldHash = DigestUtils.md5DigestAsHex(input.getOldPassword().getBytes(StandardCharsets.UTF_8));
-        String newHash = DigestUtils.md5DigestAsHex(input.getNewPassword().getBytes(StandardCharsets.UTF_8));
+        String oldHash = employeeMapper.getCurrentPassword(employeeId);
+        if (!passwordHashes.matches(input.getOldPassword(), oldHash)) {
+            throw new PasswordEditFailedException("原密码错误或账号不可用，请重试");
+        }
+        String newHash = passwordHashes.encode(input.getNewPassword());
         // Compare-and-set prevents an old password from overwriting a concurrent password change.
         if (employeeMapper.updatePassword(employeeId, oldHash, newHash) != 1) {
             throw new PasswordEditFailedException("原密码错误或账号不可用，请重试");
@@ -82,9 +106,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
 
         //密码比对
-        // TODO 后期需要进行md5加密，然后再进行比对
-        password = DigestUtils.md5DigestAsHex(password.getBytes());
-        if (!password.equals(employee.getPassword())) {
+        if (!passwordHashes.matches(password, employee.getPassword())) {
             //密码错误
             throw new PasswordErrorException(MessageConstant.PASSWORD_ERROR);
         }
@@ -113,7 +135,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         employee.setStatus(StatusConstant.ENABLE);
 
         //设置密码,默认为123456
-        employee.setPassword(DigestUtils.md5DigestAsHex(PasswordConstant.DEFAULT_PASSWORD.getBytes()));
+        employee.setPassword(passwordHashes.encode(PasswordConstant.DEFAULT_PASSWORD));
 
         //设置当前记录的创建时间和修改时间
         // employee.setCreateTime(LocalDateTime.now());

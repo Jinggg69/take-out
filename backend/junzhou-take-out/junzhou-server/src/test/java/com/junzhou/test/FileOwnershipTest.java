@@ -5,6 +5,7 @@ import com.junzhou.context.RequestScope;
 import com.junzhou.entity.FileAsset;
 import com.junzhou.mapper.FileAssetMapper;
 import com.junzhou.service.FileAssetService;
+import com.junzhou.service.impl.FileAssetServiceImpl;
 import com.junzhou.exception.BaseException;
 import org.junit.jupiter.api.*;
 import org.springframework.mock.web.MockMultipartFile;
@@ -43,7 +44,7 @@ class FileOwnershipTest {
         jdbc.execute(migration); jdbc.execute(migration);
         oss=mock(AliOssUtil.class);
         when(oss.upload(any(),anyString())).thenAnswer(i -> "https://bucket.test/"+i.getArgument(1));
-        files=new FileAssetService(session.getMapper(FileAssetMapper.class),oss);
+        files=new FileAssetServiceImpl(session.getMapper(FileAssetMapper.class),oss);
         controller=new CommonController(); ReflectionTestUtils.setField(controller,"files",files);
     }
     @AfterEach void clear() { RequestScope.clear(); if(session!=null) session.close(); }

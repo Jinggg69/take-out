@@ -59,7 +59,7 @@ class EmployeeStatusTest {
         session.getConnection();
         jdbc = new JdbcTemplate(dataSource);
         jdbc.execute("create table employee (id bigint primary key, tenant_id bigint not null, username varchar(32), "
-                + "name varchar(32), password varchar(64), phone varchar(32), sex varchar(2), "
+                + "name varchar(32), password varchar(255), phone varchar(32), sex varchar(2), "
                 + "id_number varchar(32), status int, create_time timestamp, update_time timestamp, "
                 + "create_user bigint, update_user bigint)");
         jdbc.execute("create table admin_session (session_id varchar(36) primary key, employee_id bigint, expires_at bigint)");
@@ -73,6 +73,7 @@ class EmployeeStatusTest {
         RequestScope.set(new RequestScope(1L,null,1L,1L,java.util.Collections.singleton(1L)));
         mapper = session.getMapper(EmployeeMapper.class);
         service = new EmployeeServiceImpl();
+        ReflectionTestUtils.setField(service, "passwordHashes", new com.junzhou.service.impl.PasswordHashServiceImpl());
         ReflectionTestUtils.setField(service,"rbac",org.mockito.Mockito.mock(com.junzhou.service.RbacService.class));
         ReflectionTestUtils.setField(service, "employeeMapper", mapper);
         ReflectionTestUtils.setField(service, "adminSessionMapper", session.getMapper(AdminSessionMapper.class));

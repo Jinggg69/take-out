@@ -9,6 +9,11 @@ public interface AdminSessionMapper {
     @Select("select id from tenant where id=#{tenantId} and status=1 for update")
     Long lockTenantForIssue(Long tenantId);
 
+    /** Login transaction only. The caller already holds the tenant and credential-verified employee locks. */
+    @Update("update employee set password=#{replacement} where id=#{employeeId} and tenant_id=#{tenantId} and status=1 and password=#{verified}")
+    int upgradeVerifiedPassword(@Param("employeeId") Long employeeId, @Param("tenantId") Long tenantId,
+                                @Param("verified") String verified, @Param("replacement") String replacement);
+
     /** Authentication bootstrap issuance; tenant is obtained from the credential-locked employee. */
     @Insert("insert into admin_session (session_id,employee_id,expires_at) select #{sessionId},id,#{expiresAt} from employee where id=#{employeeId} and tenant_id=#{tenantId} and status=1")
     int insert(@Param("sessionId") String sessionId, @Param("employeeId") Long employeeId,

@@ -137,7 +137,7 @@ CREATE TABLE `employee` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
   `name` varchar(32) COLLATE utf8_bin NOT NULL COMMENT '姓名',
   `username` varchar(32) COLLATE utf8_bin NOT NULL COMMENT '用户名',
-  `password` varchar(64) COLLATE utf8_bin NOT NULL COMMENT '密码',
+  `password` varchar(255) COLLATE utf8_bin NOT NULL COMMENT '密码',
   `phone` varchar(11) COLLATE utf8_bin NOT NULL COMMENT '手机号',
   `sex` varchar(2) COLLATE utf8_bin NOT NULL COMMENT '性别',
   `id_number` varchar(18) COLLATE utf8_bin NOT NULL COMMENT '身份证号',
@@ -150,7 +150,7 @@ CREATE TABLE `employee` (
   UNIQUE KEY `idx_username` (`username`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb3 COLLATE=utf8_bin COMMENT='员工信息';
 
-INSERT INTO `employee` VALUES (1,'管理员','admin','123456','13812312312','1','110101199001010047',1,'2022-02-15 15:51:20','2022-02-17 09:16:20',10,1);
+INSERT INTO `employee` VALUES (1,'管理员','admin','{bcrypt}$2a$12$TtEZixOt6RQex3alq7Ze8OpV5tzQLwNFx1GW7jsd3vpmzlWIj3h9C','13812312312','1','110101199001010047',1,'2022-02-15 15:51:20','2022-02-17 09:16:20',10,1);
 
 DROP TABLE IF EXISTS `order_detail`;
 CREATE TABLE `order_detail` (

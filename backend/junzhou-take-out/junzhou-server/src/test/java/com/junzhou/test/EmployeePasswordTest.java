@@ -70,7 +70,7 @@ class EmployeePasswordTest {
         session.getConnection();
         jdbc = new JdbcTemplate(source);
         jdbc.execute("create table employee (id bigint primary key, tenant_id bigint not null, username varchar(32), name varchar(32), "
-                + "password varchar(64), phone varchar(32), sex varchar(2), id_number varchar(32), status int, "
+                + "password varchar(255), phone varchar(32), sex varchar(2), id_number varchar(32), status int, "
                 + "create_time timestamp, update_time timestamp, create_user bigint, update_user bigint)");
         jdbc.execute("create table admin_session (session_id varchar(36) primary key, employee_id bigint, expires_at bigint)");
         for (long id : new long[]{42, 84}) {
@@ -78,6 +78,7 @@ class EmployeePasswordTest {
                     + "values (1, ?, ?, ?, ?, 1, 99, 99)", id, "employee" + id, "Employee " + id, hash("Old123"));
         }
         service = new EmployeeServiceImpl();
+        ReflectionTestUtils.setField(service, "passwordHashes", new com.junzhou.service.impl.PasswordHashServiceImpl());
         ReflectionTestUtils.setField(service, "employeeMapper", session.getMapper(EmployeeMapper.class));
         ReflectionTestUtils.setField(service, "adminSessionMapper", session.getMapper(AdminSessionMapper.class));
         EmployeeController controller = new EmployeeController();
@@ -109,7 +110,8 @@ class EmployeePasswordTest {
     void signedEmployeeCanChangeOwnPasswordWithoutSendingAnEmployeeId() throws Exception {
         Map<String, Object> other = jdbc.queryForMap("select * from employee where id = 84");
         change(42, "{\"oldPassword\":\"Old123\",\"newPassword\":\"New456\"}", 1);
-        assertEquals(hash("New456"), password(42));
+        assertTrue(new com.junzhou.service.impl.PasswordHashServiceImpl().matches("New456", password(42)));
+        assertTrue(password(42).startsWith("{bcrypt}"));
         assertEquals(other, jdbc.queryForMap("select * from employee where id = 84"));
         assertEquals("Employee 42", jdbc.queryForObject("select name from employee where id=42", String.class));
         assertEquals(99L, jdbc.queryForObject("select create_user from employee where id=42", Long.class));
@@ -162,7 +164,8 @@ class EmployeePasswordTest {
     void aConsumedOldPasswordCannotOverwriteTheNewPassword() throws Exception {
         change(42, "{\"oldPassword\":\"Old123\",\"newPassword\":\"New456\"}", 1);
         change(42, "{\"oldPassword\":\"Old123\",\"newPassword\":\"Other789\"}", 0);
-        assertEquals(hash("New456"), password(42));
+        assertTrue(new com.junzhou.service.impl.PasswordHashServiceImpl().matches("New456", password(42)));
+        assertTrue(password(42).startsWith("{bcrypt}"));
     }
 
     @Test

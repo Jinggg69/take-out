@@ -81,7 +81,7 @@ class AdminAuthenticationTest {
         jdbc = new JdbcTemplate(context.getBean(DataSource.class));
         jdbc.execute("create table tenant(id bigint primary key,status int); insert into tenant values(1,1)");
         jdbc.execute("create table employee (id bigint primary key, tenant_id bigint not null, username varchar(32), name varchar(32), "
-                + "password varchar(64), phone varchar(32), sex varchar(2), id_number varchar(32), status int, "
+                + "password varchar(255), phone varchar(32), sex varchar(2), id_number varchar(32), status int, "
                 + "create_time timestamp, update_time timestamp, create_user bigint, update_user bigint)");
         jdbc.execute("create table admin_session (session_id varchar(36) primary key, employee_id bigint not null, "
                 + "expires_at bigint not null)");
@@ -101,9 +101,28 @@ class AdminAuthenticationTest {
     }
 
     @Test
+    void failedLoginAndFailedUpgradeKeepLegacyCredentialAndIssueNoSession() {
+        EmployeeLoginDTO input = new EmployeeLoginDTO();
+        input.setUsername("employee42");
+        input.setPassword("incorrect");
+        assertThrows(com.junzhou.exception.PasswordErrorException.class, () -> employees.loginWithSession(input));
+        input.setPassword("Old123");
+        jdbc.update("update employee set status=0 where id=42");
+        assertThrows(com.junzhou.exception.AccountLockedException.class, () -> employees.loginWithSession(input));
+        jdbc.update("update employee set status=1 where id=42");
+        jdbc.execute("alter table employee add constraint legacy_only check(length(password)=32)");
+        assertThrows(org.springframework.dao.DataAccessException.class, () -> employees.loginWithSession(input));
+        assertEquals(hash("Old123"), jdbc.queryForObject("select password from employee where id=42", String.class));
+        assertEquals(0, jdbc.queryForObject("select count(*) from admin_session", Integer.class));
+    }
+
+    @Test
     void loginCreatesIndependentPersistentSessionIdentifiers() throws Exception {
         String first = login(42, "Old123");
+        String upgraded = jdbc.queryForObject("select password from employee where id=42", String.class);
+        assertTrue(upgraded.startsWith("{bcrypt}"));
         String second = login(42, "Old123");
+        assertEquals(upgraded, jdbc.queryForObject("select password from employee where id=42", String.class));
         Claims one = JwtUtil.parseJWT(SECRET, first);
         Claims two = JwtUtil.parseJWT(SECRET, second);
         assertNotNull(one.getId());
@@ -232,6 +251,7 @@ class AdminAuthenticationTest {
     @Test
     void failedSessionRevocationRollsBackPasswordChange() throws Exception {
         String token = login(42, "Old123");
+        String storedBefore = jdbc.queryForObject("select password from employee where id=42", String.class);
         rejectSessionDeletes();
         BaseContext.setCurrentId(42L);
         RequestScope.set(new RequestScope(42L,null,1L,1L,java.util.Collections.singleton(1L)));
@@ -239,7 +259,7 @@ class AdminAuthenticationTest {
         input.setOldPassword("Old123");
         input.setNewPassword("New456");
         assertThrows(RuntimeException.class, () -> employees.editPassword(input));
-        assertEquals(hash("Old123"), jdbc.queryForObject("select password from employee where id=42", String.class));
+        assertEquals(storedBefore, jdbc.queryForObject("select password from employee where id=42", String.class));
         accepted(token, 42);
     }
 
@@ -255,8 +275,8 @@ class AdminAuthenticationTest {
 
     @Test
     void aPasswordChangeBetweenCredentialCheckAndIssuanceRejectsTheOldSnapshot() throws Exception {
-        Employee snapshot = authenticatedEmployee();
         String token = login(42, "Old123");
+        Employee snapshot = authenticatedEmployee();
         mvc.perform(put("/admin/employee/editPassword").header("token", token)
                 .contentType("application/json").content("{\"oldPassword\":\"Old123\",\"newPassword\":\"New456\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(1));
@@ -266,8 +286,8 @@ class AdminAuthenticationTest {
 
     @Test
     void concurrentIssuanceWaitsForEmployeeLockAndCannotEscapeDisable() throws Exception {
-        Employee snapshot = authenticatedEmployee();
         login(42, "Old123");
+        Employee snapshot = authenticatedEmployee();
         AdminSessionService sessions = context.getBean(AdminSessionService.class);
         ExecutorService executor = Executors.newSingleThreadExecutor();
         CompletableFuture<String> issued = new CompletableFuture<>();
@@ -279,18 +299,7 @@ class AdminAuthenticationTest {
                     try { issued.complete(sessions.issue(snapshot)); }
                     catch (Throwable ex) { issued.completeExceptionally(ex); }
                 });
-                // Observe an actual database lock wait rather than infer it from a slow thread.
-                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-                boolean blocked = false;
-                while (System.nanoTime() < deadline && !issued.isDone()) {
-                    if (jdbc.queryForObject("select count(*) from information_schema.sessions "
-                            + "where blocker_id is not null", Integer.class) > 0) {
-                        blocked = true;
-                        break;
-                    }
-                    Thread.yield();
-                }
-                assertTrue(blocked, "Session issuance must wait for the employee row lock");
+                awaitLockWait(issued);
                 RequestScope.set(new RequestScope(42L,null,1L,1L,java.util.Collections.singleton(1L)));
         employees.startOrStop(0, 42L);
                 return null;
@@ -302,6 +311,57 @@ class AdminAuthenticationTest {
             executor.shutdownNow();
             assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
         }
+    }
+
+    @Test
+    void firstLegacyLoginCannotOverwriteConcurrentPasswordChange() throws Exception {
+        EmployeeLoginDTO login = new EmployeeLoginDTO();
+        login.setUsername("employee42");
+        login.setPassword("Old123");
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CompletableFuture<Void> attempt = new CompletableFuture<>();
+        try {
+            TransactionTemplate transaction = new TransactionTemplate(context.getBean(PlatformTransactionManager.class));
+            transaction.execute(status -> {
+                jdbc.queryForObject("select id from tenant where id=1 for update", Long.class);
+                executor.submit(() -> {
+                    try {
+                        employees.loginWithSession(login);
+                        attempt.complete(null);
+                    } catch (Throwable ex) {
+                        attempt.completeExceptionally(ex);
+                    }
+                });
+                // The old credential is verified; the login is now waiting to sign its session.
+                awaitLockWait(attempt);
+                BaseContext.setCurrentId(42L);
+                RequestScope.set(new RequestScope(42L, null, 1L, null, java.util.Collections.emptySet()));
+                PasswordEditDTO change = new PasswordEditDTO();
+                change.setOldPassword("Old123");
+                change.setNewPassword("New456");
+                employees.editPassword(change);
+                return null;
+            });
+            ExecutionException failure = assertThrows(ExecutionException.class, () -> attempt.get(5, TimeUnit.SECONDS));
+            assertInstanceOf(LoginFailedException.class, failure.getCause());
+            assertEquals(0, jdbc.queryForObject("select count(*) from admin_session", Integer.class));
+            BaseContext.removeCurrentId();
+            RequestScope.clear();
+            accepted(login(42, "New456"), 42);
+        } finally {
+            executor.shutdownNow();
+            assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+        }
+    }
+
+    private void awaitLockWait(CompletableFuture<?> attempt) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < deadline && !attempt.isDone()) {
+            if (jdbc.queryForObject("select count(*) from information_schema.sessions where blocker_id is not null",
+                    Integer.class) > 0) return;
+            java.util.concurrent.locks.LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
+        }
+        fail("Expected the login transaction to wait for a database lock");
     }
 
     private Employee authenticatedEmployee() {
@@ -359,6 +419,7 @@ class AdminAuthenticationTest {
             includeFilters=@ComponentScan.Filter(type=FilterType.REGEX,
                     pattern={"com\\.junzhou\\.service\\.impl\\.EmployeeServiceImpl", "com\\.junzhou\\.service\\.impl\\.AdminSessionServiceImpl"}))
     static class DatabaseConfiguration {
+        @Bean com.junzhou.service.PasswordHashService passwordHashes() { return new com.junzhou.service.impl.PasswordHashServiceImpl(); }
         @Bean com.junzhou.service.RbacService rbacService(){return org.mockito.Mockito.mock(com.junzhou.service.RbacService.class);}
 
         @Bean DataSource dataSource() {
