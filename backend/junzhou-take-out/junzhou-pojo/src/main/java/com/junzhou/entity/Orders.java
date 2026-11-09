@@ -24,6 +24,7 @@ public class Orders implements Serializable {
     private String pickupCredential;
     private LocalDateTime pickupVerifiedAt;
     private Long pickupVerifiedBy;
+    private String diningSessionId;
     private Long tenantId;
     private Long storeId;
     private String paymentAccountId;

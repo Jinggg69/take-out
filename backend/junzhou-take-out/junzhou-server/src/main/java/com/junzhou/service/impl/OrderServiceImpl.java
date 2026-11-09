@@ -57,6 +57,7 @@ import java.util.UUID;
  */
 @Service
 public class OrderServiceImpl implements OrderService {
+    @Autowired private com.junzhou.service.DiningService dining;
     @Autowired private com.junzhou.service.StoreSettingsService storeSettings;
     @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
     @Autowired private CartAccessService cartAccessService;
@@ -172,7 +173,8 @@ public class OrderServiceImpl implements OrderService {
                     || !Objects.equals(checkedAddress.getConsignee(),addressBook.getConsignee()))
                 throw new OrderBusinessException("收货地址已变化，请重新提交");
         } else if (com.junzhou.payment.Fulfillment.DINE_IN.equals(type)) {
-            tableName=orderMapper.lockDiningTable(ordersSubmitDTO.getTableId());
+            com.junzhou.entity.DiningTable table=dining.validate(ordersSubmitDTO.getTableId(),ordersSubmitDTO.getDiningSessionId(),ordersSubmitDTO.getDiningToken());
+            tableName=table.getName();
             if (tableName==null) throw new OrderBusinessException("桌台不存在、已停用或不属于当前门店");
         }
         OrderQuoteVO quote = orderPricingService.quote(type);
@@ -197,6 +199,7 @@ public class OrderServiceImpl implements OrderService {
         if (tableName!=null) {
             order.setTableId(ordersSubmitDTO.getTableId());
             order.setTableSnapshot(tableName);
+            order.setDiningSessionId(ordersSubmitDTO.getDiningSessionId());
         }
         order.setPayMethod(ordersSubmitDTO.getPayMethod());
         order.setRemark(ordersSubmitDTO.getRemark());

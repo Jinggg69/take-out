@@ -11,6 +11,7 @@ import java.util.List;
 
 @Mapper
 public interface OrderMapper {
+    int dineComplete(Long id);
     int pickupReady(Long id);
     int pickupVerify(@Param("id") Long id,@Param("credential") String credential,@Param("employeeId") Long employeeId,@Param("now") LocalDateTime now);
     @org.apache.ibatis.annotations.Select("<script><bind name='tenant' value='@com.junzhou.context.RequestScope@requireTenantId()'/><bind name='store' value='@com.junzhou.context.RequestScope@requireStoreId()'/>select name from store_dining_table where id=#{id} and tenant_id=#{tenant} and store_id=#{store} and enabled=1 for update</script>")

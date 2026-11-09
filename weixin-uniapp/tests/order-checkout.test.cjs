@@ -406,3 +406,17 @@ test('切换自取重新报价且保留未知结果的原提交意图', async ()
   assert.equal(page.fulfillmentType, 'PICKUP')
   assert.equal(page.pendingSubmission.clientRequestId, 'original')
 })
+
+
+test('扫码堂食提交桌台和桌次，不传地址与配送时间', async () => {
+  const { page, store, requests } = createCheckout()
+  store.state.diningContext = { id: 7, storeId: 1, currentSessionId: 'session-a', token: 'opaque-code' }
+  page.fulfillmentType='DINE_IN';page.address='';page.quotedDeliveryFee=0;page.packFee=0;page.orderDishPrice=119
+  await page.payOrderHandle()
+  assert.equal(requests.length,1)
+  assert.equal(requests[0].tableId,7)
+  assert.equal(requests[0].diningSessionId,'session-a')
+  assert.equal(requests[0].diningToken,'opaque-code')
+  assert.equal(requests[0].addressBookId,undefined)
+  assert.equal(requests[0].estimatedDeliveryTime,undefined)
+})

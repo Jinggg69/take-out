@@ -13,7 +13,7 @@ import { errorMessage } from '@/utils/error-message'
 import { createOrderList } from '../order/list-state'
 
 const visibleOrderActions=(row:OrderRecord)=>orderActions(row.status,row).filter(action=>{
- const code=({accept:'accept',reject:'reject',cancel:'cancel',delivery:'deliver',complete:'complete',ready:'pickup:ready',verify:'pickup:verify'} as const)[action]
+ const code=({accept:'accept',reject:'reject',cancel:'cancel',delivery:'deliver',complete:'complete',ready:'pickup:ready',verify:'pickup:verify',dineComplete:'dine:complete'} as const)[action]
  return workspace.can('order:'+code) && (!['reject','cancel'].includes(action)||workspace.can('order:refund'))
 })
 const list = createOrderList(api)

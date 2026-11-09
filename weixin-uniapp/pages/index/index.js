@@ -24,7 +24,7 @@ import {
 	getShopStatus,
 	// 获取店铺联系方式
 	getMerchantInfo,
-	getStores,
+	getStores, resolveDining, joinDining,
 } from "../api/api.js"
 import { mapState, mapMutations } from "vuex"
 import { baseUrl } from "../../utils/env"
@@ -151,6 +151,28 @@ export default {
 		}
 	},
 	methods: {
+        scanDining() {
+            if (!this.$store.state.token) { uni.showToast({ title: '请先登录后扫码', icon: 'none' }); return }
+            uni.scanCode({ onlyFromCamera: false, scanType: ['qrCode'], success: async result => {
+                const match = /^JZ:([0-9a-f]{32})$/.exec(result.result || '')
+                if (!match) { uni.showToast({ title: '请扫描本店堂食桌码', icon: 'none' }); return }
+                try {
+                    const resolved = await resolveDining(match[1]); const table = resolved.data
+                    uni.showModal({ title: '确认堂食桌台', content: `${table.storeName} · ${table.name}，确认后在该桌点餐`, success: async answer => {
+                        if (!answer.confirm) return
+                        try {
+                            this.$store.commit('selectStore', table.storeId)
+                            const joined = await joinDining(match[1])
+                            this.$store.commit('setDiningContext', { ...joined.data, token: match[1], storeName: table.storeName })
+                            this.typeListData = []; this.dishListData = []; this.dishListItems = []
+                            this.openOrderCartList = false; this.openMoreNormPop = false
+                            await this.init()
+                        } catch(error) { uni.showToast({ title: error.msg || '加入桌次失败，请重新扫码', icon: 'none' }) }
+                    } })
+                } catch(error) { uni.showToast({ title: error.msg || '桌码已失效，请联系店员', icon: 'none' }) }
+            } })
+        },
+        leaveDining() { this.$store.commit('setDiningContext', null) },
 		switchStore(event) {
 			const selected = this.stores[Number(event.detail.value)]
 			if (!selected || String(selected.id) === String(this.$store.state.selectedStoreId)) return

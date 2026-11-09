@@ -39,6 +39,7 @@ logging:
     com.junzhou.mapper.EmployeeMapper: info
     com.junzhou.mapper.AdminSessionMapper: info
     com.junzhou.mapper.OrderMapper: info
+    com.junzhou.mapper.DiningMapper: info
     com.junzhou.mapper.RefundRequestMapper: info
     org.apache.http.wire: 'OFF'
     org.apache.http.headers: 'OFF'

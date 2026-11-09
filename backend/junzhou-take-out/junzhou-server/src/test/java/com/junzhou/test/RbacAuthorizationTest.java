@@ -10,6 +10,17 @@ import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 class RbacAuthorizationTest {
  @AfterEach void clear(){RequestScope.clear();}
+ @Test void diningActionsAreIndependentlyAuthorized() throws Exception {
+  RbacService service=mock(RbacService.class);com.junzhou.interceptor.RbacInterceptor interceptor=new com.junzhou.interceptor.RbacInterceptor(service);
+  Object controller=new com.junzhou.controller.admin.DiningController(mock(com.junzhou.service.DiningService.class));
+  for(java.lang.reflect.Method method:controller.getClass().getDeclaredMethods()) {
+   RequireActions required=method.getAnnotation(RequireActions.class);if(required==null)continue;
+   for(PermissionAction action:required.value())doThrow(new SecurityException()).when(service).require(action);
+   org.springframework.mock.web.MockHttpServletResponse response=new org.springframework.mock.web.MockHttpServletResponse();
+   assertFalse(interceptor.preHandle(new org.springframework.mock.web.MockHttpServletRequest(),response,new org.springframework.web.method.HandlerMethod(controller,method)));
+   assertEquals(403,response.getStatus());
+  }
+ }
  @Test void pickupEndpointsRejectClerksWithoutTheirSpecificAction() throws Exception {
   RbacService service=mock(RbacService.class);
   com.junzhou.interceptor.RbacInterceptor interceptor=new com.junzhou.interceptor.RbacInterceptor(service);

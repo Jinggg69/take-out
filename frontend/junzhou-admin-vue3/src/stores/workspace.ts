@@ -11,5 +11,5 @@ export function createWorkspace() {
 }
 export const pendingWrites=ref(0)
 export const workspace=createWorkspace()
-export const pagePermissions:Record<string,string>={dashboard:'workspace:read',statistics:'report:read',order:'order:read',dish:'dish:read',setmeal:'setmeal:read',category:'category:read',employee:'employee:read',access:'employee:manage',store:'shop:read'}
+export const pagePermissions:Record<string,string>={dining:'dining:read',dashboard:'workspace:read',statistics:'report:read',order:'order:read',dish:'dish:read',setmeal:'setmeal:read',category:'category:read',employee:'employee:read',access:'employee:manage',store:'shop:read'}
 export function canVisit(path:string){const section=path.split('/')[1]??'';const action=path.includes('/add')?section+':'+(path.includes('id=')?'update':'create'):pagePermissions[section];return !!action && workspace.can(action)}

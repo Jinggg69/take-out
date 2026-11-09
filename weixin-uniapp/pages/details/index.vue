@@ -22,6 +22,11 @@
           <button v-if="orderDetailsData.pickupToken" @click="copyPickupToken">复制核销凭证</button>
           <button @click="getBaseData(orderDetailsData.id)">刷新取餐状态</button>
         </view>
+        <view v-if="orderDetailsData.fulfillmentType === 'DINE_IN'" class="box boxPad">
+          <view>堂食 · {{ pickupStore.name }} · {{ orderDetailsData.tableSnapshot }}</view>
+          <view>桌次：{{ orderDetailsData.diningSessionId || '历史订单' }}</view>
+          <view>本单独立支付及退款；加菜请返回首页继续点餐，或重新扫码确认当前桌次。</view>
+        </view>
         <!-- 订单详情 -->
         <order-detail :orderDataes="orderDataes" :orderDetailsData="orderDetailsData"
           :showDisplay="showDisplay"></order-detail>
@@ -33,7 +38,7 @@
             联系商家
           </button>
           <!-- 4 派送中 5 派送中 -->
-          <button class="call-rider" v-if="orderDetailsData.fulfillmentType !== 'PICKUP' && [4, 5].includes(orderDetailsData.status)"
+          <button class="call-rider" v-if="(!orderDetailsData.fulfillmentType || orderDetailsData.fulfillmentType === 'DELIVERY') && [4, 5].includes(orderDetailsData.status)"
             @click="handlePhone('bottom', orderDetailsData.courierTelephone)">
             <view class="phoneIcon"></view>
             联系骑手
@@ -41,7 +46,7 @@
         </view>
         <!-- end -->
         <!-- 配送信息 -->
-        <delivery-info v-if="orderDetailsData.fulfillmentType !== 'PICKUP'" :orderDetailsData="orderDetailsData"></delivery-info>
+        <delivery-info v-if="(!orderDetailsData.fulfillmentType || orderDetailsData.fulfillmentType === 'DELIVERY')" :orderDetailsData="orderDetailsData"></delivery-info>
         <!-- end -->
         <!-- 订单信息 -->
         <order-info :orderDetailsData="orderDetailsData"></order-info>

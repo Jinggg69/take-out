@@ -5,7 +5,7 @@ import vue from 'eslint-plugin-vue'
 import vueParser from 'vue-eslint-parser'
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', '.npm-cache/**', '.verification/**'] },
+  { ignores: ['src/vendor/**', 'dist/**', 'node_modules/**', '.npm-cache/**', '.verification/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...vue.configs['flat/recommended'],

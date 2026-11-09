@@ -43,6 +43,14 @@ public class OrderController {
     }
 
 
+    @Autowired private com.junzhou.service.DiningService dining;
+    @PutMapping("/dine/complete/{id}")
+    @RequireActions({PermissionAction.ORDER_DINE_COMPLETE})
+    public Result<Void> dineComplete(@PathVariable Long id) {
+        dining.complete(id);
+        return Result.success();
+    }
+
     @PostMapping("/{id}/refund/retry")
     @ApiOperation("按原退款单号核验或重试已有退款")
     @RequireActions({PermissionAction.ORDER_REFUND})

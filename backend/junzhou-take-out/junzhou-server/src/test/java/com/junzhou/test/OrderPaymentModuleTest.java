@@ -454,9 +454,96 @@ class OrderPaymentModuleTest {
             .andExpect(jsonPath("$.code").value(0));
     }
 
+    @ParameterizedTest @ValueSource(strings={"DELIVERY","PICKUP","DINE_IN"})
+    void threeTypesKeepVerifiedPaymentCancellationAndRefundLifecycle(String type) throws Exception {
+        jdbc.update("update orders set fulfillment_type=? where id=10",type);
+        mvc.perform(signedNotification("/notify/paySuccess",paymentResource("order-10","wx-10"),"TRANSACTION.SUCCESS"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.code").value("SUCCESS"));
+        assertEquals(1,paymentState(10));assertEquals(2,statusOf(10));
+        adminPut("/admin/order/cancel","{\"id\":10,\"cancelReason\":\"异常退款\"}",1);
+        mvc.perform(signedNotification("/notify/refundSuccess",refundResource("SUCCESS"),"REFUND.SUCCESS")).andExpect(status().isOk());
+        assertEquals(2,paymentState(10));assertEquals(6,statusOf(10));
+        assertEquals("CANCELLED",jdbc.queryForObject("select fulfillment_status from orders where id=10",String.class));
+    }
+    @Test void diningCloseAndSubmissionCannotBothSucceed() throws Exception {
+        String session=joinDining();ExecutorService pool=Executors.newFixedThreadPool(2);CountDownLatch start=new CountDownLatch(1);
+        try {
+            Future<Boolean> submit=pool.submit(()->{
+                RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
+                try{start.await();context.getBean(OrderService.class).orderSubmit(JSON.parseObject(diningBody(session,"race"),OrdersSubmitDTO.class));return true;}
+                catch(com.junzhou.exception.OrderBusinessException ex){return false;}finally{RequestScope.clear();}
+            });
+            Future<Boolean> close=pool.submit(()->{
+                RequestScope.set(new RequestScope(1L,null,1L,1L,Collections.singleton(1L)));
+                try{start.await();context.getBean(com.junzhou.service.DiningService.class).close(7L);return true;}
+                catch(com.junzhou.exception.OrderBusinessException ex){return false;}finally{RequestScope.clear();}
+            });
+            start.countDown();assertNotEquals(submit.get(15,TimeUnit.SECONDS),close.get(15,TimeUnit.SECONDS));
+        }finally{pool.shutdownNow();}
+    }
+
+    private String joinDining() throws Exception {
+        jdbc.update("insert into store_dining_table(id,tenant_id,store_id,name,enabled,qr_token) values(7,1,1,'A7',1,'0123456789abcdef0123456789abcdef')");
+        String json=mvc.perform(post("/user/dining/join").header("authentication",token()).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"token\":\"0123456789abcdef0123456789abcdef\"}")).andExpect(jsonPath("$.code").value(1)).andReturn().getResponse().getContentAsString();
+        return JSON.parseObject(json).getJSONObject("data").getString("currentSessionId");
+    }
+    private String diningBody(String session,String request) {
+        return "{\"fulfillmentType\":\"DINE_IN\",\"tableId\":7,\"diningSessionId\":\""+session+"\",\"diningToken\":\"0123456789abcdef0123456789abcdef\",\"payMethod\":1,\"amount\":25,\"clientRequestId\":\""+request+"\"}";
+    }
+    @Test void diningSessionCompletesAndNextGuestsCannotUseOldSession() throws Exception {
+        String session=joinDining();
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(diningBody(session,"dining-first"))).andExpect(jsonPath("$.code").value(1));
+        Long id=jdbc.queryForObject("select id from orders where id<>10",Long.class);
+        assertEquals(session,jdbc.queryForObject("select dining_session_id from orders where id=?",String.class,id));
+        adminPut("/admin/dining/7/close","{}",0);
+        adminPut("/admin/order/dine/complete/"+id,"{}",0);
+        jdbc.update("update orders set status=2,pay_status=1,fulfillment_status='AWAITING_ACCEPTANCE' where id=?",id);
+        adminPut("/admin/order/confirm","{\"id\":"+id+"}",1);
+        adminPut("/admin/order/delivery/"+id,"{}",0);
+        adminPut("/admin/order/dine/complete/"+id,"{}",1);
+        adminPut("/admin/order/dine/complete/"+id,"{}",0);
+        adminPut("/admin/dining/7/close","{}",1);
+        mvc.perform(post("/user/dining/join").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content("{\"token\":\"0123456789abcdef0123456789abcdef\"}")).andExpect(jsonPath("$.code").value(1));
+        String next=jdbc.queryForObject("select current_session_id from store_dining_table where id=7",String.class);
+        assertNotEquals(session,next);
+        jdbc.update("insert into shopping_cart(user_id,dish_id,number,amount) values(42,5,2,12.50)");
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(diningBody(session,"old-session"))).andExpect(jsonPath("$.code").value(0));
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(diningBody(next,"new-session"))).andExpect(jsonPath("$.code").value(1));
+    }
+    @ParameterizedTest @ValueSource(strings={"enabled=0","qr_token='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'","current_session_id=null","store_id=2","tenant_id=2"})
+    void diningRejectsRevokedAndCrossScopeTables(String change) throws Exception {
+        String session=joinDining();jdbc.update("update store_dining_table set "+change+" where id=7");
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(diningBody(session,"bad-scope"))).andExpect(jsonPath("$.code").value(0));
+        assertEquals(1,jdbc.queryForObject("select count(*) from orders",Integer.class));
+    }
+    @Test void diningMembershipIsRequiredAndForgedCodesAreRejected() throws Exception {
+        String session=joinDining();jdbc.update("delete from dining_session_member where user_id=42");
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(diningBody(session,"outsider"))).andExpect(jsonPath("$.code").value(0));
+        mvc.perform(post("/user/dining/resolve").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content("{\"token\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}")).andExpect(jsonPath("$.code").value(0));
+        mvc.perform(post("/user/dining/resolve").contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isUnauthorized());
+    }
+    @Test void diningExtraDishesAreSeparateOrdersAndIdempotentRetryKeepsTheFirst() throws Exception {
+        String session=joinDining();String first=diningBody(session,"first-dishes");
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(first)).andExpect(jsonPath("$.code").value(1));
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(first)).andExpect(jsonPath("$.code").value(1));
+        jdbc.update("insert into shopping_cart(user_id,dish_id,number,amount) values(42,5,2,12.50)");
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(diningBody(session,"extra-dishes"))).andExpect(jsonPath("$.code").value(1));
+        assertEquals(2,jdbc.queryForObject("select count(*) from orders where dining_session_id=?",Integer.class,session));
+        assertEquals(2,jdbc.queryForObject("select count(distinct number) from orders where dining_session_id=?",Integer.class,session));
+    }
+
+    @Test
+    void dineInCannotBypassScanWithOnlyATableId() throws Exception {
+        jdbc.update("insert into store_dining_table(id,tenant_id,store_id,name,enabled) values(7,1,1,'A7',1)");
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"fulfillmentType\":\"DINE_IN\",\"tableId\":7,\"payMethod\":1,\"amount\":25}"))
+            .andExpect(jsonPath("$.code").value(0));
+    }
+
     @Test
     void dineInRequiresAnEnabledTableInTheCurrentStoreAndHasNoPackingFee() throws Exception {
-        jdbc.update("insert into store_dining_table values(7,1,1,'A7',1),(8,1,2,'B8',1),(9,1,1,'A9',0),(11,2,1,'C11',1)");
+        jdbc.update("insert into store_dining_table(id,tenant_id,store_id,name,enabled) values(7,1,1,'A7',1),(8,1,2,'B8',1),(9,1,1,'A9',0),(11,2,1,'C11',1)");
         deliveryDistance=999999;
         mvc.perform(get("/user/order/quote").header("authentication",token()).param("fulfillmentType","DINE_IN"))
             .andExpect(jsonPath("$.data.amount").value(25)).andExpect(jsonPath("$.data.packFee").value(0));
@@ -465,8 +552,11 @@ class OrderPaymentModuleTest {
                 .content("{\"fulfillmentType\":\"DINE_IN\",\"tableId\":"+table+",\"payMethod\":1,\"amount\":25}"))
                 .andExpect(jsonPath("$.code").value(0));
         }
+        jdbc.update("update store_dining_table set qr_token='0123456789abcdef0123456789abcdef' where id=7");
+        String joined=mvc.perform(post("/user/dining/join").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content("{\"token\":\"0123456789abcdef0123456789abcdef\"}")).andReturn().getResponse().getContentAsString();
+        String session=JSON.parseObject(joined).getJSONObject("data").getString("currentSessionId");
         mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON)
-            .content("{\"fulfillmentType\":\"DINE_IN\",\"tableId\":7,\"payMethod\":1,\"amount\":25}"))
+            .content("{\"fulfillmentType\":\"DINE_IN\",\"tableId\":7,\"diningSessionId\":\""+session+"\",\"diningToken\":\"0123456789abcdef0123456789abcdef\",\"payMethod\":1,\"amount\":25}"))
             .andExpect(jsonPath("$.code").value(1));
         assertEquals("A7",jdbc.queryForObject("select table_snapshot from orders where id<>10",String.class));
         assertNull(jdbc.queryForObject("select address_book_id from orders where id<>10",Long.class));
@@ -1558,7 +1648,11 @@ class OrderPaymentModuleTest {
     @ComponentScan(basePackages = "com.junzhou.controller", useDefaultFilters = false,
             includeFilters = @ComponentScan.Filter(type = org.springframework.context.annotation.FilterType.REGEX,
                     pattern = {"com\\.junzhou\\.controller\\.notify\\..*", "com\\.junzhou\\.controller\\.admin\\.OrderController"}))
+    @org.springframework.context.annotation.Import({com.junzhou.service.impl.DiningServiceImpl.class,
+        com.junzhou.controller.admin.DiningController.class,com.junzhou.controller.user.DiningController.class})
     static class PaymentTestConfiguration {
+        @Bean DiningMapper diningMapper(SqlSessionFactory f) { f.getConfiguration().addMapper(DiningMapper.class); return new SqlSessionTemplate(f).getMapper(DiningMapper.class); }
+
         @Bean com.junzhou.service.StoreSettingsService storeSettingsService() {
             return new com.junzhou.service.StoreSettingsService();
         }

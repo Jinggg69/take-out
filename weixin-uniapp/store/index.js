@@ -8,6 +8,7 @@ const store = new Vuex.Store({
 	state: {
 		selectedStoreId: (typeof uni !== 'undefined' && uni.getStorageSync('selectedStoreId')) || 1,
 		storeGeneration: 0,
+        diningContext: null,
 		storeInfo: {}, // 店铺请求的id信息
 		shopInfo: '',  // 店铺详细信息
 		orderListData: [],// 购物车列表信息
@@ -27,8 +28,10 @@ const store = new Vuex.Store({
 		gender: 0 // 收货地址对应的 性别  0 先生  1 女士
 	},
 	mutations: {
+        setDiningContext(state, value) { state.diningContext = value },
 		selectStore(state, id) {
 			if (!id || String(id) === String(state.selectedStoreId)) return
+            state.diningContext = null
 			state.selectedStoreId = id
 			state.storeGeneration++
 			if (typeof uni !== 'undefined') uni.setStorageSync('selectedStoreId', id)
@@ -80,6 +83,7 @@ const store = new Vuex.Store({
 
 		},
 		setToken(state, provider) {
+            if (!provider) state.diningContext = null
 			state.token = provider
 		},
 		setArrivalTime(state, provider) {

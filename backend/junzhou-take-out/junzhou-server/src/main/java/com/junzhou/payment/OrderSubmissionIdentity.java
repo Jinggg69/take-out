@@ -26,6 +26,9 @@ public final class OrderSubmissionIdentity {
         context.add(com.junzhou.context.RequestScope.requireStoreId());
         context.add(Fulfillment.type(input.getFulfillmentType()));
         context.add(input.getContactName()); context.add(input.getContactPhone()); context.add(input.getTableId());
+        if (Fulfillment.DINE_IN.equals(Fulfillment.type(input.getFulfillmentType()))) {
+            context.add(input.getDiningSessionId());context.add(input.getDiningToken());
+        }
         context.add(input.getConfigVersion()); context.add(cartFingerprint);
         return digest(base+":"+context.toJSONString());
     }

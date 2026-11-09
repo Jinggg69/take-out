@@ -4,6 +4,10 @@
     <navBar></navBar>
     <!-- end -->
     <view class="home_content" :style="{ paddingTop: ht + 'px' }" @touchmove.stop.prevent="disabledScroll">
+      <view class="restaurant_info_box">
+        <button @click="scanDining">扫码堂食</button>
+        <view v-if="$store.state.diningContext">堂食：{{ $store.state.diningContext.storeName }} · {{ $store.state.diningContext.name }}<button @click="leaveDining">退出堂食点餐</button></view>
+      </view>
       <!-- 店铺基本信息 -->
       <view class="restaurant_info_box">
         <view class="restaurant_info">

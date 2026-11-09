@@ -1,0 +1,1 @@
+Vendored from qrcode-terminal 0.12.0 vendor/QRCode, installed in the local HBuilderX uniapp-cli distribution. QRCode by Kazuhiko Arase (2009), MIT; qrcode-terminal distribution Apache-2.0 (included). The only source transformation is CommonJS require/module.exports to ES module import/export. No network QR service receives table tokens.

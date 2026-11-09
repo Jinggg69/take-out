@@ -3,6 +3,13 @@ DROP PROCEDURE IF EXISTS _junzhou_stage5b;
 DELIMITER $$
 CREATE PROCEDURE _junzhou_stage5b()
 BEGIN
+  -- RBAC originally accepted only resource:action; pickup uses resource:subresource:action.
+  IF EXISTS(SELECT 1 FROM information_schema.table_constraints WHERE constraint_schema=DATABASE() AND table_name='rbac_permission' AND constraint_name='ck_permission_action') THEN
+    ALTER TABLE rbac_permission DROP CHECK ck_permission_action,
+      ADD CONSTRAINT ck_permission_action CHECK(REGEXP_LIKE(code,'^[a-z]+:[a-z]+(:[a-z]+)?$','c'));
+  ELSE
+    ALTER TABLE rbac_permission ADD CONSTRAINT ck_permission_action CHECK(REGEXP_LIKE(code,'^[a-z]+:[a-z]+(:[a-z]+)?$','c'));
+  END IF;
   IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='orders' AND column_name='pickup_credential') THEN
     ALTER TABLE orders ADD pickup_number VARCHAR(32) NULL,
       ADD pickup_credential VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,

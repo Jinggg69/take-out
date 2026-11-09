@@ -14,7 +14,7 @@ import { errorMessage } from '@/utils/error-message'
 import { createOrderList } from './list-state'
 
 const visibleOrderActions=(row:OrderRecord)=>orderActions(row.status,row).filter(action=>{
- const code=({accept:'accept',reject:'reject',cancel:'cancel',delivery:'deliver',complete:'complete',ready:'pickup:ready',verify:'pickup:verify'} as const)[action]
+ const code=({accept:'accept',reject:'reject',cancel:'cancel',delivery:'deliver',complete:'complete',ready:'pickup:ready',verify:'pickup:verify',dineComplete:'dine:complete'} as const)[action]
  return workspace.can('order:'+code) && (!['reject','cancel'].includes(action)||workspace.can('order:refund'))
 })
 const list = createOrderList(api)
@@ -303,7 +303,7 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
             min-width="150"
           >
             <template #default="{ row }">
-              {{ row.fulfillmentType === 'PICKUP' ? '自取 · ' + (row.pickupNumber || '—') : row.fulfillmentType === 'DINE_IN' ? '堂食' : '外卖' }}<br />{{ orderStatusLabel(row.status,row) }}
+              {{ row.fulfillmentType === 'PICKUP' ? '自取 · ' + (row.pickupNumber || '—') : row.fulfillmentType === 'DINE_IN' ? '堂食 · ' + (row.tableSnapshot || '—') : '外卖' }}<br />{{ orderStatusLabel(row.status,row) }}
             </template>
           </ElTableColumn>
           <ElTableColumn
@@ -502,6 +502,9 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
           <dt>履约方式</dt><dd>{{ detail.fulfillmentType === 'PICKUP' ? '到店自取' : detail.fulfillmentType === 'DINE_IN' ? '堂食' : '外卖' }}</dd>
           <template v-if="detail.fulfillmentType === 'PICKUP'">
             <dt>取餐号</dt><dd>{{ detail.pickupNumber || '—' }}</dd><dt>核销时间</dt><dd>{{ detail.pickupVerifiedAt || '未核销' }}</dd>
+          </template>
+          <template v-if="detail.fulfillmentType === 'DINE_IN'">
+            <dt>桌号</dt><dd>{{ detail.tableSnapshot }}</dd><dt>桌次</dt><dd>{{ detail.diningSessionId || '历史订单' }}</dd>
           </template>
           <dt>用户名</dt><dd>{{ detail.contactName || detail.consignee || detail.userName || '—' }}</dd>
           <dt>手机号</dt><dd>{{ detail.phone || '—' }}</dd>

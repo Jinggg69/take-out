@@ -86,5 +86,5 @@ test('pickup actions follow fulfillment and payment state', () => {
   assert.deepEqual(orderActions(3, { fulfillmentType: 'PICKUP', fulfillmentStatus: 'PREPARING', payStatus: 1 }), ['ready', 'cancel'])
   assert.deepEqual(orderActions(3, { fulfillmentType: 'PICKUP', fulfillmentStatus: 'READY', payStatus: 1 }), ['verify', 'cancel'])
   assert.deepEqual(orderActions(3, { fulfillmentType: 'PICKUP', fulfillmentStatus: 'READY', payStatus: 2 }), ['cancel'])
-  assert.deepEqual(orderActions(3, { fulfillmentType: 'DINE_IN', payStatus: 1 }), ['cancel'])
+  assert.deepEqual(orderActions(3, { fulfillmentType: 'DINE_IN', payStatus: 1 }), ['dineComplete','cancel'])
 })

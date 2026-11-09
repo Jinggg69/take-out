@@ -374,3 +374,6 @@ export const queryOrdersCheckStatus = (params) =>
 
 // 同租户可选门店
 export const getStores = () => request({ url: '/user/stores', method: 'GET' })
+
+export const resolveDining = token => request({ url: '/user/dining/resolve', method: 'POST', params: { token } })
+export const joinDining = token => request({ url: '/user/dining/join', method: 'POST', params: { token } })

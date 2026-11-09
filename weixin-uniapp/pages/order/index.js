@@ -152,6 +152,8 @@ export default {
 		DishInfo
 	},
 	async onLoad(options) {
+        const dining = this.$store.state.diningContext
+        if (dining && String(dining.storeId) === String(this.$store.state.selectedStoreId)) this.fulfillmentType = 'DINE_IN'
 		this.checkoutScope = this.currentScope()
 		const scope = this.currentScope()
 		this.initPlatform()
@@ -212,6 +214,7 @@ export default {
 			this.quoteReady = false; this.quotePromise = null; this.quoteVersion = null
 			this.pendingSubmission = null; this.submissionComplete = false; this.isHandlePy = false
 			this.quotedDeliveryFee = 0; this.packFee = 0; this.packAmount = 0; this.orderDishPrice = 0; this.orderDishNumber = 0
+            if (this.fulfillmentType === 'DINE_IN' && !this.$store.state.diningContext) this.fulfillmentType = 'DELIVERY'
 			this.remark = ''; this.arrivalTime = '立即派送'; this.orderTime = ''
 			this.address = ''; this.addressBookId = ''; this.addressList = []
 			this.tablewareData = '无需餐具'; this.tableware = ''; this.status = 0; this.num = 0
@@ -227,6 +230,9 @@ export default {
 		// Quote failures must never leave an earlier price eligible for submission.
         async changeFulfillment(type) {
             if (this.isHandlePy || this.pendingSubmission || this.quotePromise || this.submissionComplete || type === this.fulfillmentType) return
+            if (type === 'DINE_IN' && !this.$store.state.diningContext) {
+                uni.showToast({ title: '请先在首页扫码确认桌台', icon: 'none' }); return
+            }
             this.fulfillmentType = type
             this.quoteReady = false
             await this.refreshQuote()
@@ -427,11 +433,14 @@ export default {
 					clientRequestId: createClientRequestId(),
 					payMethod: 1,
 					fulfillmentType: this.fulfillmentType,
+                    tableId: this.fulfillmentType === 'DINE_IN' ? this.$store.state.diningContext && this.$store.state.diningContext.id : undefined,
+                    diningSessionId: this.fulfillmentType === 'DINE_IN' ? this.$store.state.diningContext && this.$store.state.diningContext.currentSessionId : undefined,
+                    diningToken: this.fulfillmentType === 'DINE_IN' ? this.$store.state.diningContext && this.$store.state.diningContext.token : undefined,
                     contactName: this.fulfillmentType === 'PICKUP' ? this.contactName.trim() : undefined,
                     contactPhone: this.fulfillmentType === 'PICKUP' ? this.contactPhone : undefined,
                     addressBookId: this.fulfillmentType === 'DELIVERY' ? this.addressBookId : undefined,
 					remark: this.remark,
-					estimatedDeliveryTime: this.fulfillmentType === 'PICKUP' ? undefined : this.arrivalTime === '立即派送' ? presentFormat() : dateFormat(this.isTomorrow,
+					estimatedDeliveryTime: this.fulfillmentType !== 'DELIVERY' ? undefined : this.arrivalTime === '立即派送' ? presentFormat() : dateFormat(this.isTomorrow,
 						this.arrivalTime),
 					deliveryStatus: this.arrivalTime === '立即派送' ? 1 : 0,
 					tablewareStatus: this.status,

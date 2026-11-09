@@ -18,7 +18,9 @@
         <view class="box boxPad">
           <button :disabled="isHandlePy || !!pendingSubmission || !!quotePromise" :aria-pressed="fulfillmentType === 'DELIVERY'" @click="changeFulfillment('DELIVERY')">外卖配送</button>
           <button :disabled="isHandlePy || !!pendingSubmission || !!quotePromise" :aria-pressed="fulfillmentType === 'PICKUP'" @click="changeFulfillment('PICKUP')">到店自取</button>
-          <view>当前方式：{{ fulfillmentType === 'PICKUP' ? '到店自取，无配送费' : '外卖配送' }}</view>
+          <button v-if="$store.state.diningContext" :disabled="isHandlePy || !!pendingSubmission || !!quotePromise" @click="changeFulfillment('DINE_IN')">堂食点餐</button>
+          <view v-if="fulfillmentType === 'DINE_IN'">{{ $store.state.diningContext.storeName }} · {{ $store.state.diningContext.name }}，仅商品金额，无打包及配送费。请核对桌号后支付。</view>
+          <view>当前方式：{{ fulfillmentType === 'DINE_IN' ? '堂食' : fulfillmentType === 'PICKUP' ? '到店自取，无配送费' : '外卖配送' }}</view>
         </view>
         <view v-if="fulfillmentType === 'PICKUP'" class="box boxPad">
           <view>到店自取 · 制作完成后凭核销凭证取餐</view>

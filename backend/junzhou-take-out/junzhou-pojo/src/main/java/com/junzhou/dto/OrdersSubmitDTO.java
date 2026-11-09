@@ -36,5 +36,8 @@ public class OrdersSubmitDTO implements Serializable {
     private String contactName;
     private String contactPhone;
     private Long tableId;
+    private String diningSessionId;
+    @lombok.ToString.Exclude
+    private String diningToken;
 
 }

@@ -226,3 +226,12 @@ store_dining_table 是当前门店有效桌台的基础登记，使用复合外�
 阶段 5B，在 5A 后执行。增加展示取餐号、随机核销凭证及核销员工/时间，已有自取单回填独立随机凭证；重跑保留现有值。新增 order:pickup:ready 和 order:pickup:verify 权限目录，不自动给角色授权。发布后由商户管理员配置角色动作和门店任职；未授权店员不能制作完成或核销。
 
 验证入口 python scripts/test-order-pickup-migration.py，只修改随机临时库；当前会话受自动审批额度限制，尚未运行 MySQL 演练。业务库未变更。详见 [5B 契约](../order-pickup-stage5b.md)。
+
+
+## 20261109_05_dining_session.sql
+
+阶段5C，在已更新的5B迁移后执行。新增桌码、当前桌次、桌次成员及订单桌次快照，使用复合外键约束归属；重跑保留已有桌码和桌次。5B前置脚本同步修正了权限格式约束，使其接受 order:pickup:verify / order:dine:complete 等三段动作；即使已升级5B，也应先重跑修正版5B脚本。
+
+新权限 dining:read、dining:manage、dining:close、order:dine:complete 仅加入权限目录，由商户管理员按角色和门店配置。桌码为小程序内扫码内容，轮换后重新下载桌牌。详见 [5C 契约](../dining-stage5c.md)。
+
+python scripts/test-dining-session-migration.py 与 python scripts/test-order-pickup-migration.py 均已在随机临时MySQL库通过；包含回填、重跑、外键拒绝跨店关系和新库初始化。临时库已清理，业务库未迁移。

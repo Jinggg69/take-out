@@ -2,7 +2,7 @@ import type { AxiosInstance } from 'axios'
 import type { ApiResult } from './types.ts'
 
 export type OrderId = string | number
-export type OrderAction = 'accept' | 'reject' | 'cancel' | 'delivery' | 'complete' | 'ready' | 'verify'
+export type OrderAction = 'accept' | 'reject' | 'cancel' | 'delivery' | 'complete' | 'ready' | 'verify' | 'dineComplete'
 export type RefundStatus = 'REQUESTED' | 'PROCESSING' | 'VERIFYING' | 'SUCCESS' | 'CLOSED' | 'ABNORMAL'
 export interface OrderItem { id?: OrderId; name: string; number: number; amount: number | string; dishFlavor?: string }
 export interface OrderRecord {
@@ -12,7 +12,7 @@ export interface OrderRecord {
   cancelReason?: string; rejectionReason?: string; remark?: string; orderDishes?: string
   tablewareNumber?: number; tablewareStatus?: number; packAmount?: number | string; payMethod?: number
   orderDetailList?: OrderItem[]
-  fulfillmentType?: string; fulfillmentStatus?: string; pickupNumber?: string; contactName?: string; contactPhone?: string; pickupVerifiedAt?: string
+  fulfillmentType?: string; fulfillmentStatus?: string; pickupNumber?: string; contactName?: string; contactPhone?: string; pickupVerifiedAt?: string; tableSnapshot?: string; diningSessionId?: string
   pricingSnapshot?: string | null
   payStatus?: number | string; refundStatus?: RefundStatus | string | null
 }
@@ -48,6 +48,7 @@ export function createOrderApi(client: AxiosInstance) {
     reject: (data: { id: OrderId; rejectionReason: string }) => write('/order/rejection', { ...data }),
     cancel: (data: { id: OrderId; cancelReason: string }) => write('/order/cancel', { ...data }),
     delivery: (id: OrderId) => write(`/order/delivery/${encodeURIComponent(id)}`),
+    dineComplete: (id: OrderId) => write(`/order/dine/complete/${encodeURIComponent(id)}`),
     ready: (id: OrderId) => write(`/order/pickup/ready/${encodeURIComponent(id)}`),
     verify: (id: OrderId, credential: string) => write(`/order/pickup/verify/${encodeURIComponent(id)}`, { credential }),
     complete: (id: OrderId) => write(`/order/complete/${encodeURIComponent(id)}`),
