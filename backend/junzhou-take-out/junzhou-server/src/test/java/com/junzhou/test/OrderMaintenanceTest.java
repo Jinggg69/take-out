@@ -55,6 +55,7 @@ class OrderMaintenanceTest {
                 + "order_time timestamp, dispatch_time timestamp, delivery_time timestamp, checkout_time timestamp, "
                 + "cancel_time timestamp, cancel_reason varchar(255), remark varchar(255), amount decimal(10,2))");
         jdbc.execute("alter table orders add (tenant_id bigint default 1, store_id bigint default 1, user_id bigint default 42)");
+        jdbc.execute("alter table orders add (fulfillment_type varchar(16) default 'DELIVERY',fulfillment_status varchar(32))");
         jdbc.execute("create table tenant(id bigint primary key,status int)");
         jdbc.execute("create table store(id bigint primary key,tenant_id bigint,status int)");
         jdbc.execute("insert into tenant values(1,1)"); jdbc.execute("insert into store values(1,1,1)");
@@ -113,6 +114,17 @@ class OrderMaintenanceTest {
         Map<String, Object>[] before = snapshots(6);
         task.processTimeoutOrders();
         assertSnapshotsUnchanged(before);
+    }
+
+    @Test
+    void automaticCompletionExcludesPickupAndDineInEvenWithLegacyDispatchState() {
+        add(1,4,1,NOW.minusHours(5),NOW.minusHours(2));
+        add(2,4,1,NOW.minusHours(5),NOW.minusHours(2));
+        jdbc.update("update orders set fulfillment_type='PICKUP' where id=1");
+        jdbc.update("update orders set fulfillment_type='DINE_IN' where id=2");
+        task.processDeliveryOrders();
+        assertEquals(4,status(1)); assertEquals(4,status(2));
+
     }
 
     @Test

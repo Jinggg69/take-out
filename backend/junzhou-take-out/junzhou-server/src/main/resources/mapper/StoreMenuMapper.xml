@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.junzhou.mapper.StoreMenuMapper">
+    <sql id="scope">
+        <bind name="tenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
+        <bind name="store" value="@com.junzhou.context.RequestScope@requireStoreId()"/>
+    </sql>
+    <select id="lockStore" resultType="java.lang.Long">
+        <include refid="scope"/>
+        SELECT id FROM store WHERE tenant_id=#{tenant} AND id=#{store} AND status=1 FOR UPDATE
+    </select>
+    <select id="dishes" resultType="com.junzhou.entity.StoreMenuItem">
+        <include refid="scope"/>
+        SELECT p.id,p.name,p.price,COALESCE(m.on_sale,0) on_sale,COALESCE(m.sold_out,0) sold_out,
+               m.override_price,COALESCE(m.sort,0) sort
+        FROM dish p LEFT JOIN store_dish m ON m.tenant_id=p.tenant_id AND m.dish_id=p.id AND m.store_id=#{store}
+        WHERE p.tenant_id=#{tenant} ORDER BY COALESCE(m.sort,0),p.id
+    </select>
+    <select id="setmeals" resultType="com.junzhou.entity.StoreMenuItem">
+        <include refid="scope"/>
+        SELECT p.id,p.name,p.price,COALESCE(m.on_sale,0) on_sale,COALESCE(m.sold_out,0) sold_out,
+               m.override_price,COALESCE(m.sort,0) sort
+        FROM setmeal p LEFT JOIN store_setmeal m ON m.tenant_id=p.tenant_id AND m.setmeal_id=p.id AND m.store_id=#{store}
+        WHERE p.tenant_id=#{tenant} ORDER BY COALESCE(m.sort,0),p.id
+    </select>
+    <insert id="saveDish">
+        <include refid="scope"/>
+        INSERT INTO store_dish(tenant_id,store_id,dish_id,on_sale,sold_out,override_price,sort)
+        SELECT #{tenant},#{store},p.id,#{onSale},#{soldOut},#{overridePrice},#{sort}
+        FROM dish p WHERE p.tenant_id=#{tenant} AND p.id=#{id}
+        ON DUPLICATE KEY UPDATE on_sale=VALUES(on_sale),sold_out=VALUES(sold_out),override_price=VALUES(override_price),sort=VALUES(sort)
+    </insert>
+    <insert id="saveSetmeal">
+        <include refid="scope"/>
+        INSERT INTO store_setmeal(tenant_id,store_id,setmeal_id,on_sale,sold_out,override_price,sort)
+        SELECT #{tenant},#{store},p.id,#{onSale},#{soldOut},#{overridePrice},#{sort}
+        FROM setmeal p WHERE p.tenant_id=#{tenant} AND p.id=#{id}
+        ON DUPLICATE KEY UPDATE on_sale=VALUES(on_sale),sold_out=VALUES(sold_out),override_price=VALUES(override_price),sort=VALUES(sort)
+    </insert>
+    <select id="publicDishes" resultType="com.junzhou.entity.Dish">
+        <include refid="scope"/>
+        SELECT p.id,p.name,p.category_id,p.image,p.description,p.status,p.update_time,COALESCE(m.override_price,p.price) price
+        FROM dish p JOIN store_dish m ON m.tenant_id=p.tenant_id AND m.dish_id=p.id
+        JOIN store s ON s.tenant_id=m.tenant_id AND s.id=m.store_id JOIN tenant t ON t.id=s.tenant_id
+        WHERE p.tenant_id=#{tenant} AND s.id=#{store} AND s.status=1 AND t.status=1
+          AND p.status=1 AND m.on_sale=1 AND m.sold_out=0
+        <if test="categoryId != null">AND p.category_id=#{categoryId}</if>
+        ORDER BY m.sort,p.id
+    </select>
+    <select id="publicSetmeals" resultType="com.junzhou.entity.Setmeal">
+        <include refid="scope"/>
+        SELECT p.id,p.name,p.category_id,p.image,p.description,p.status,p.update_time,COALESCE(m.override_price,p.price) price
+        FROM setmeal p JOIN store_setmeal m ON m.tenant_id=p.tenant_id AND m.setmeal_id=p.id
+        JOIN store s ON s.tenant_id=m.tenant_id AND s.id=m.store_id JOIN tenant t ON t.id=s.tenant_id
+        WHERE p.tenant_id=#{tenant} AND s.id=#{store} AND s.status=1 AND t.status=1
+          AND p.status=1 AND m.on_sale=1 AND m.sold_out=0
+        <if test="categoryId != null">AND p.category_id=#{categoryId}</if>
+        ORDER BY m.sort,p.id
+    </select>
+</mapper>

@@ -82,9 +82,9 @@ public class OrderServiceImpl implements OrderService {
     private WebSocketServer webSocketServer;
 
     @Override
-    public OrderQuoteVO quote() {
-        return orderPricingService.quote();
-    }
+    public OrderQuoteVO quote() { return orderPricingService.quote(); }
+    @Override
+    public OrderQuoteVO quote(String type) { return orderPricingService.quote(type); }
 
     /**
      * 用户下单
@@ -100,28 +100,58 @@ public class OrderServiceImpl implements OrderService {
         if(ordersSubmitDTO.getPayMethod()!=1) throw new OrderBusinessException("当前仅支持微信支付");
         if (ordersSubmitDTO.getStoreId() != null && !ordersSubmitDTO.getStoreId().equals(com.junzhou.context.RequestScope.requireStoreId()))
             throw new OrderBusinessException("门店已切换，请重新结算");
+        String type=com.junzhou.payment.Fulfillment.type(ordersSubmitDTO.getFulfillmentType());
         String fingerprint=OrderSubmissionIdentity.fingerprint(ordersSubmitDTO);
         Long userId = cartAccessService.currentUserId();
         OrderSubmitVO previous = previousSubmission(userId, ordersSubmitDTO, fingerprint);
         if (previous != null) return previous;
-        AddressBook addressBook = addressBookMapper.getByIdAndUserId(ordersSubmitDTO.getAddressBookId(), userId);
-        if (addressBook == null) throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_IS_NULL);
-        String address = fullAddress(addressBook);
+        AddressBook addressBook = null;
+        if (com.junzhou.payment.Fulfillment.DELIVERY.equals(type)) {
+            addressBook = addressBookMapper.getByIdAndUserId(ordersSubmitDTO.getAddressBookId(), userId);
+            if (addressBook == null) throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_IS_NULL);
+        } else if (com.junzhou.payment.Fulfillment.PICKUP.equals(type)) {
+            if (ordersSubmitDTO.getContactName()==null || ordersSubmitDTO.getContactName().trim().isEmpty()
+                    || ordersSubmitDTO.getContactName().length()>32 || ordersSubmitDTO.getContactPhone()==null
+                    || !ordersSubmitDTO.getContactPhone().matches("1[0-9]{10}"))
+                throw new OrderBusinessException("请填写有效的自取联系人和手机号");
+        } else if (ordersSubmitDTO.getTableId()==null || ordersSubmitDTO.getTableId()<=0) {
+            throw new OrderBusinessException("请选择有效桌台");
+        }
         com.junzhou.entity.StoreSettings settings = storeSettings.requireOpen();
         if (ordersSubmitDTO.getConfigVersion() != null && !ordersSubmitDTO.getConfigVersion().equals(settings.getVersion()))
             throw new OrderBusinessException("门店配置已变化，请重新确认订单");
-        deliveryRangeService.validate(address, settings);
+        if (addressBook != null) deliveryRangeService.validate(fullAddress(addressBook), settings);
+        final AddressBook checkedAddress=addressBook;
         org.springframework.transaction.support.TransactionTemplate transaction =
                 new org.springframework.transaction.support.TransactionTemplate(transactionManager);
         transaction.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_READ_COMMITTED);
-        return transaction.execute(status -> submitValidated(ordersSubmitDTO, fingerprint, addressBook, settings));
+        return transaction.execute(status -> submitValidated(ordersSubmitDTO, fingerprint, checkedAddress, settings));
     }
 
     private OrderSubmitVO previousSubmission(Long userId, OrdersSubmitDTO input, String fingerprint) {
         if (input.getClientRequestId() == null) return null;
         Orders existing = orderMapper.getBySubmission(userId, input.getClientRequestId());
         if (existing == null) return null;
-        if (!fingerprint.equals(existing.getSubmitFingerprint())) throw new OrderBusinessException("该请求标识已用于不同订单内容");
+        if (!Objects.equals(existing.getTenantId(),com.junzhou.context.RequestScope.requireTenantId())
+                || !Objects.equals(existing.getStoreId(),com.junzhou.context.RequestScope.requireStoreId()))
+            throw new OrderBusinessException("该请求标识已用于不同订单内容");
+        java.util.List<ShoppingCart> cart=shoppingCartMapper.list(ShoppingCart.builder().userId(userId).build());
+        String cartKey=cart==null || cart.isEmpty() ? existing.getCartFingerprint() : OrderSubmissionIdentity.cartFingerprint(cart);
+        if (existing.getCartFingerprint()==null && (!com.junzhou.payment.Fulfillment.DELIVERY.equals(com.junzhou.payment.Fulfillment.type(input.getFulfillmentType()))
+                || input.getContactName()!=null || input.getContactPhone()!=null || input.getTableId()!=null))
+            throw new OrderBusinessException("该请求标识已用于不同订单内容");
+        if (existing.getCartFingerprint()==null && cart!=null && !cart.isEmpty()) {
+            List<ShoppingCart> historicalCart=new ArrayList<>();
+            for (OrderDetail detail : orderDetailMapper.getByOrderId(existing.getId())) {
+                ShoppingCart item=new ShoppingCart();
+                BeanUtils.copyProperties(detail,item);
+                historicalCart.add(item);
+            }
+            if (!OrderSubmissionIdentity.cartFingerprint(historicalCart).equals(cartKey))
+                throw new OrderBusinessException("该请求标识已用于不同订单内容");
+        }
+        String actual=existing.getCartFingerprint()==null ? fingerprint : OrderSubmissionIdentity.fingerprint(input,cartKey);
+        if (!actual.equals(existing.getSubmitFingerprint())) throw new OrderBusinessException("该请求标识已用于不同订单内容");
         return OrderSubmitVO.builder().id(existing.getId()).orderTime(existing.getOrderTime())
                 .orderNumber(existing.getNumber()).orderAmount(existing.getAmount()).build();
     }
@@ -132,12 +162,20 @@ public class OrderServiceImpl implements OrderService {
         OrderSubmitVO previous = previousSubmission(userId, ordersSubmitDTO, fingerprint);
         if (previous != null) return previous;
         storeSettings.lockVersion(settings.getVersion());
-        AddressBook addressBook = addressBookMapper.getByIdAndUserId(ordersSubmitDTO.getAddressBookId(), userId);
-        if (addressBook == null || !fullAddress(checkedAddress).equals(fullAddress(addressBook))) {
-            throw new OrderBusinessException("收货地址已变化，请重新提交");
+        String type=com.junzhou.payment.Fulfillment.type(ordersSubmitDTO.getFulfillmentType());
+        AddressBook addressBook = null;
+        String tableName = null;
+        if (com.junzhou.payment.Fulfillment.DELIVERY.equals(type)) {
+            addressBook=addressBookMapper.getByIdAndUserId(ordersSubmitDTO.getAddressBookId(),userId);
+            if (addressBook==null || !fullAddress(checkedAddress).equals(fullAddress(addressBook))
+                    || !Objects.equals(checkedAddress.getPhone(),addressBook.getPhone())
+                    || !Objects.equals(checkedAddress.getConsignee(),addressBook.getConsignee()))
+                throw new OrderBusinessException("收货地址已变化，请重新提交");
+        } else if (com.junzhou.payment.Fulfillment.DINE_IN.equals(type)) {
+            tableName=orderMapper.lockDiningTable(ordersSubmitDTO.getTableId());
+            if (tableName==null) throw new OrderBusinessException("桌台不存在、已停用或不属于当前门店");
         }
-        String address = fullAddress(addressBook);
-        OrderQuoteVO quote = orderPricingService.quote();
+        OrderQuoteVO quote = orderPricingService.quote(type);
         if (ordersSubmitDTO.getAmount().compareTo(quote.getAmount()) != 0) {
             throw new OrderBusinessException("商品价格或数量已变化，请重新确认订单金额");
         }
@@ -145,12 +183,22 @@ public class OrderServiceImpl implements OrderService {
         //向订单表插入一条数据
         Orders order = new Orders();
         // Explicit client-owned fields only. Monetary values come exclusively from the server quotation.
-        order.setAddressBookId(ordersSubmitDTO.getAddressBookId());
+        order.setAddressBookId(addressBook==null ? null : addressBook.getId());
+        order.setFulfillmentType(type);
+        order.setFulfillmentStatus("AWAITING_PAYMENT");
+        if (com.junzhou.payment.Fulfillment.PICKUP.equals(type)) {
+            order.setContactName(ordersSubmitDTO.getContactName().trim());
+            order.setContactPhone(ordersSubmitDTO.getContactPhone());
+        }
+        if (tableName!=null) {
+            order.setTableId(ordersSubmitDTO.getTableId());
+            order.setTableSnapshot(tableName);
+        }
         order.setPayMethod(ordersSubmitDTO.getPayMethod());
         order.setRemark(ordersSubmitDTO.getRemark());
         order.setEstimatedDeliveryTime(ordersSubmitDTO.getEstimatedDeliveryTime());
-        order.setDeliveryStatus(ordersSubmitDTO.getDeliveryStatus());
-        order.setTablewareStatus(ordersSubmitDTO.getTablewareStatus());
+        order.setDeliveryStatus(ordersSubmitDTO.getDeliveryStatus()==null ? 1 : ordersSubmitDTO.getDeliveryStatus());
+        order.setTablewareStatus(ordersSubmitDTO.getTablewareStatus()==null ? 1 : ordersSubmitDTO.getTablewareStatus());
         if (ordersSubmitDTO.getTablewareNumber() != null) order.setTablewareNumber(ordersSubmitDTO.getTablewareNumber());
         order.setAmount(quote.getAmount());
         order.setStoreSnapshot(JSON.toJSONString(settings));
@@ -167,10 +215,13 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(Orders.PENDING_PAYMENT);
         order.setNumber(UUID.randomUUID().toString().replace("-",""));
         order.setClientRequestId(ordersSubmitDTO.getClientRequestId());
-        order.setSubmitFingerprint(fingerprint);
-        order.setPhone(addressBook.getPhone());
-        order.setAddress(address);
-        order.setConsignee(addressBook.getConsignee());
+        order.setCartFingerprint(OrderSubmissionIdentity.cartFingerprint(quote.getItems()));
+        order.setSubmitFingerprint(OrderSubmissionIdentity.fingerprint(ordersSubmitDTO,order.getCartFingerprint()));
+        if (addressBook!=null) {
+            order.setPhone(addressBook.getPhone());
+            order.setAddress(fullAddress(addressBook));
+            order.setConsignee(addressBook.getConsignee());
+        }
         order.setUserId(userId);
 
         order.setPaymentAccountId(paymentAccounts.currentAccountId());
@@ -387,6 +438,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public void confirm(OrdersConfirmDTO ordersConfirmDTO) {
         Orders order = requireOrder(ordersConfirmDTO.getId(), true);
+        if (Orders.CONFIRMED.equals(order.getStatus()) && Orders.PAID.equals(order.getPayStatus())) return;
         requireStatus(order, Orders.TO_BE_CONFIRMED);
         if (!Orders.PAID.equals(order.getPayStatus())) {
             throw new OrderBusinessException(MessageConstant.ORDER_STATUS_ERROR);
@@ -461,7 +513,11 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public void delivery(Long id) {
         Orders order = requireOrder(id, true);
+        if (!com.junzhou.payment.Fulfillment.DELIVERY.equals(com.junzhou.payment.Fulfillment.type(order.getFulfillmentType())))
+            throw new OrderBusinessException("仅外卖订单可派送");
+        if (Orders.DELIVERY_IN_PROGRESS.equals(order.getStatus())) return;
         requireStatus(order, Orders.CONFIRMED);
+        if (!Orders.PAID.equals(order.getPayStatus())) throw new OrderBusinessException(MessageConstant.ORDER_STATUS_ERROR);
         orderMapper.update(Orders.builder().id(id).status(Orders.DELIVERY_IN_PROGRESS).dispatchTime(LocalDateTime.now()).build());
     }
 
@@ -473,7 +529,11 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public void complete(Long id) {
         Orders order = requireOrder(id, true);
+        if (!com.junzhou.payment.Fulfillment.DELIVERY.equals(com.junzhou.payment.Fulfillment.type(order.getFulfillmentType())))
+            throw new OrderBusinessException("自取和堂食不能通过配送接口完成");
+        if (Orders.COMPLETED.equals(order.getStatus())) return;
         requireStatus(order, Orders.DELIVERY_IN_PROGRESS);
+        if (!Orders.PAID.equals(order.getPayStatus())) throw new OrderBusinessException(MessageConstant.ORDER_STATUS_ERROR);
         orderMapper.update(Orders.builder().id(id).status(Orders.COMPLETED)
                 .deliveryTime(LocalDateTime.now()).build());
     }

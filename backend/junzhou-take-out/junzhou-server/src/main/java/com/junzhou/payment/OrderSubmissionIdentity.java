@@ -9,6 +9,33 @@ import java.security.MessageDigest;
 /** A digest of client-owned business inputs, independent of JSON field order or decimal formatting. */
 public final class OrderSubmissionIdentity {
     private OrderSubmissionIdentity() {}
+    public static String cartFingerprint(java.util.List<com.junzhou.entity.ShoppingCart> cart) {
+        java.util.TreeMap<String, Long> lines = new java.util.TreeMap<>();
+        for (com.junzhou.entity.ShoppingCart row : cart) {
+            String flavor = row.getDishId()==null ? "" : (row.getDishFlavor()==null ? "" : row.getDishFlavor().trim());
+            String key = (row.getDishId()==null ? "S:"+row.getSetmealId() : "D:"+row.getDishId())+":"+flavor.length()+":"+flavor;
+            lines.merge(key, row.getNumber().longValue(), Long::sum);
+        }
+        return digest(lines.toString());
+    }
+    public static String fingerprint(OrdersSubmitDTO input, String cartFingerprint) {
+        String base=fingerprint(input);
+        if (base==null) return null;
+        com.alibaba.fastjson.JSONArray context=new com.alibaba.fastjson.JSONArray();
+        context.add(com.junzhou.context.RequestScope.requireTenantId());
+        context.add(com.junzhou.context.RequestScope.requireStoreId());
+        context.add(Fulfillment.type(input.getFulfillmentType()));
+        context.add(input.getContactName()); context.add(input.getContactPhone()); context.add(input.getTableId());
+        context.add(input.getConfigVersion()); context.add(cartFingerprint);
+        return digest(base+":"+context.toJSONString());
+    }
+    private static String digest(String text) {
+        try {
+            byte[] bytes=MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex=new StringBuilder(); for(byte part:bytes) hex.append(String.format("%02x",part & 255));
+            return hex.toString();
+        } catch(java.security.NoSuchAlgorithmException ex) { throw new IllegalStateException(ex); }
+    }
     public static String fingerprint(OrdersSubmitDTO input) {
         BigDecimal amount=input.getAmount();
         if(amount==null || amount.signum()<=0 || amount.compareTo(new BigDecimal("99999999.99"))>0

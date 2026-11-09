@@ -11,6 +11,8 @@ import java.util.List;
 
 @Mapper
 public interface OrderMapper {
+    @org.apache.ibatis.annotations.Select("<script><bind name='tenant' value='@com.junzhou.context.RequestScope@requireTenantId()'/><bind name='store' value='@com.junzhou.context.RequestScope@requireStoreId()'/>select name from store_dining_table where id=#{id} and tenant_id=#{tenant} and store_id=#{store} and enabled=1 for update</script>")
+    String lockDiningTable(Long id);
     Orders getBySubmission(@Param("userId") Long userId,@Param("requestId") String requestId);
 
     List<Orders> cancelledPaymentsToCheck(LocalDateTime before);

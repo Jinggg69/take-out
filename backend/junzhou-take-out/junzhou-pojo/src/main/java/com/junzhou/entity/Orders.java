@@ -114,6 +114,14 @@ public class Orders implements Serializable {
     private String submitFingerprint;
     private String storeSnapshot;
     private String pricingSnapshot;
+    private String fulfillmentType;
+    private String contactName;
+    private String contactPhone;
+    private Long tableId;
+    private String tableSnapshot;
+    private String fulfillmentStatus;
+    private String cartFingerprint;
+
 
     //打包费
     private int packAmount;

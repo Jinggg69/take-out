@@ -45,8 +45,8 @@ public class OrderController {
 
     @GetMapping("/quote")
     @ApiOperation("获取当前用户购物车的结算报价")
-    public Result<OrderQuoteVO> quote() {
-        return Result.success(orderService.quote());
+    public Result<OrderQuoteVO> quote(@RequestParam(required = false) String fulfillmentType) {
+        return Result.success(orderService.quote(fulfillmentType));
     }
 
     /**

@@ -19,6 +19,7 @@ import com.junzhou.vo.OrderQuoteVO;
 public interface OrderService {
     /** Read-only quotation for the authenticated user's cart. */
     OrderQuoteVO quote();
+    OrderQuoteVO quote(String fulfillmentType);
 
     /**
      * 用户下单

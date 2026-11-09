@@ -370,6 +370,91 @@ class OrderPaymentModuleTest {
     }
 
     @Test
+    void pickupQuoteAndSubmitSkipDeliveryAddressAndRange() throws Exception {
+        deliveryDistance = 999999;
+        mvc.perform(get("/user/order/quote").header("authentication",token()).param("fulfillmentType","PICKUP"))
+            .andExpect(jsonPath("$.data.deliveryFee").value(0)).andExpect(jsonPath("$.data.amount").value(27));
+        String body="{\"fulfillmentType\":\"PICKUP\",\"contactName\":\"张三\",\"contactPhone\":\"13800000000\",\"payMethod\":1,\"amount\":27,\"clientRequestId\":\"pickup-42\"}";
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(jsonPath("$.code").value(1));
+        assertEquals("PICKUP",jdbc.queryForObject("select fulfillment_type from orders where id<>10",String.class));
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(jsonPath("$.code").value(1));
+    }
+
+    @Test
+    void invalidFulfillmentAndMissingPickupContactAreRejected() throws Exception {
+        mvc.perform(get("/user/order/quote").header("authentication",token()).param("fulfillmentType","UNKNOWN"))
+            .andExpect(jsonPath("$.code").value(0));
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"fulfillmentType\":\"PICKUP\",\"addressBookId\":101,\"payMethod\":1,\"amount\":33}"))
+            .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    void dineInRequiresAnEnabledTableInTheCurrentStoreAndHasNoPackingFee() throws Exception {
+        jdbc.update("insert into store_dining_table values(7,1,1,'A7',1),(8,1,2,'B8',1),(9,1,1,'A9',0),(11,2,1,'C11',1)");
+        deliveryDistance=999999;
+        mvc.perform(get("/user/order/quote").header("authentication",token()).param("fulfillmentType","DINE_IN"))
+            .andExpect(jsonPath("$.data.amount").value(25)).andExpect(jsonPath("$.data.packFee").value(0));
+        for (int table : new int[]{8,9,11,999}) {
+            mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fulfillmentType\":\"DINE_IN\",\"tableId\":"+table+",\"payMethod\":1,\"amount\":25}"))
+                .andExpect(jsonPath("$.code").value(0));
+        }
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"fulfillmentType\":\"DINE_IN\",\"tableId\":7,\"payMethod\":1,\"amount\":25}"))
+            .andExpect(jsonPath("$.code").value(1));
+        assertEquals("A7",jdbc.queryForObject("select table_snapshot from orders where id<>10",String.class));
+        assertNull(jdbc.queryForObject("select address_book_id from orders where id<>10",Long.class));
+    }
+
+    @Test
+    void changedTypeStoreOrCartCannotReuseRequestIdEvenWhenAmountMatches() throws Exception {
+        String body="{\"addressBookId\":101,\"payMethod\":1,\"amount\":33,\"clientRequestId\":\"identity-42\"}";
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(jsonPath("$.code").value(1));
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON)
+            .content(body.replace("\"payMethod\"","\"fulfillmentType\":\"PICKUP\",\"payMethod\"")))
+            .andExpect(jsonPath("$.code").value(0));
+        jdbc.update("insert into shopping_cart (user_id,dish_id,number,amount) values(42,6,2,12.50)");
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(jsonPath("$.code").value(0));
+        OrdersSubmitDTO dto=JSON.parseObject(body,OrdersSubmitDTO.class);
+        RequestScope.set(new RequestScope(null,42L,1L,2L,Collections.emptySet()));
+        assertThrows(com.junzhou.exception.OrderBusinessException.class,()->context.getBean(OrderService.class).orderSubmit(dto));
+        RequestScope.clear();
+        assertEquals(2,jdbc.queryForObject("select count(*) from orders",Integer.class));
+    }
+
+    @Test
+    void pickupCannotBeDispatchedOrAutomaticallyCompletedAndRefundDoesNotReopenIt() throws Exception {
+        jdbc.update("update orders set fulfillment_type='PICKUP',status=3,pay_status=1,fulfillment_status='PREPARING' where id=10");
+        adminPut("/admin/order/delivery/10","{}",0);
+        assertEquals("PREPARING",jdbc.queryForObject("select fulfillment_status from orders where id=10",String.class));
+        adminPut("/admin/order/cancel","{\"id\":10,\"cancelReason\":\"取消\"}",1);
+        assertEquals("CANCELLED",jdbc.queryForObject("select fulfillment_status from orders where id=10",String.class));
+        RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
+        context.getBean(PaymentLifecycleService.class).confirmPayment(paymentResource("order-10","late-pickup"));
+        RequestScope.clear();
+        assertEquals("CANCELLED",jdbc.queryForObject("select fulfillment_status from orders where id=10",String.class));
+    }
+
+    @Test
+    void legacyRequestHashRetriesButRejectsANewDifferentCart() throws Exception {
+        String body="{\"addressBookId\":101,\"payMethod\":1,\"amount\":33,\"clientRequestId\":\"legacy-hash-42\"}";
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(jsonPath("$.code").value(1));
+        String legacy=com.junzhou.payment.OrderSubmissionIdentity.fingerprint(JSON.parseObject(body,OrdersSubmitDTO.class));
+        jdbc.update("update orders set cart_fingerprint=null,submit_fingerprint=? where id<>10",legacy);
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(jsonPath("$.code").value(1));
+        jdbc.update("insert into shopping_cart (user_id,dish_id,number,amount) values(42,6,2,12.50)");
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
     void repeatedSubmissionReturnsOriginalOrderAfterTheCartWasConsumed() throws Exception {
         String body="{\"addressBookId\":101,\"payMethod\":1,\"amount\":33,\"tablewareNumber\":2,\"clientRequestId\":\"test-submit-42\"}";
         String first=mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))

@@ -32,4 +32,9 @@ public class OrdersSubmitDTO implements Serializable {
     private String clientRequestId;
     private Long storeId;
     private Long configVersion;
+    private String fulfillmentType;
+    private String contactName;
+    private String contactPhone;
+    private Long tableId;
+
 }

@@ -37,7 +37,12 @@ public class OrderPricingServiceImpl implements OrderPricingService {
     /** {@inheritDoc} */
     @Transactional(readOnly = true)
     @Override
-    public OrderQuoteVO quote() {
+    public OrderQuoteVO quote() { return quote(null); }
+
+    @Transactional(readOnly = true)
+    @Override
+    public OrderQuoteVO quote(String fulfillmentType) {
+        String type = com.junzhou.payment.Fulfillment.type(fulfillmentType);
         Long userId = com.junzhou.context.RequestScope.requireUserId();
         if (userId == null) throw new OrderBusinessException(MessageConstant.USER_NOT_LOGIN);
         List<ShoppingCart> cart = shoppingCartMapper.list(ShoppingCart.builder().userId(userId).build());
@@ -58,19 +63,22 @@ public class OrderPricingServiceImpl implements OrderPricingService {
             count += item.getNumber();
             items.add(item);
         }
-        if (goods.compareTo(settings.getMinimumOrderAmount()) < 0) {
+        if (com.junzhou.payment.Fulfillment.DELIVERY.equals(type) && goods.compareTo(settings.getMinimumOrderAmount()) < 0) {
             throw new OrderBusinessException("商品金额未达到门店起送价");
         }
         if (count > Integer.MAX_VALUE) throw new OrderBusinessException("商品数量超出允许范围");
-        BigDecimal packFee = settings.getPackFeePerItem().multiply(BigDecimal.valueOf(count));
+        BigDecimal packFee = com.junzhou.payment.Fulfillment.DINE_IN.equals(type) ? new BigDecimal("0.00") : settings.getPackFeePerItem().multiply(BigDecimal.valueOf(count));
         BigDecimal deliveryFee = settings.getDeliveryFee();
         if (settings.getFreeDeliveryThreshold() != null && goods.compareTo(settings.getFreeDeliveryThreshold()) >= 0)
             deliveryFee = new BigDecimal("0.00");
+        if (!com.junzhou.payment.Fulfillment.DELIVERY.equals(type)) deliveryFee = new BigDecimal("0.00");
         BigDecimal total = goods.add(packFee).add(deliveryFee);
         if (total.compareTo(MAX_ORDER_AMOUNT) > 0) {
             throw new OrderBusinessException("订单金额超出允许范围，请减少商品数量");
         }
-        return new OrderQuoteVO(items, goods, (int) count, deliveryFee, total, packFee, settings.getId(), settings.getVersion());
+        OrderQuoteVO result = new OrderQuoteVO(items, goods, (int) count, deliveryFee, total, packFee, settings.getId(), settings.getVersion());
+        result.setFulfillmentType(type);
+        return result;
     }
 
     /** {@inheritDoc} */

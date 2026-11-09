@@ -212,3 +212,10 @@ SHOW CREATE TABLE admin_session;
 旧租户 1、门店 1 在尚未填写坐标时，配送校验沿用已有部署的门店地址配置。其他门店必须先在管理端填写坐标。保存任何门店配置都要求完整地址和坐标。上线前需检查地图密钥、门店实际营业时间和配送规则。
 
 验证脚本 python scripts/test-store-fulfillment-migration.py 只使用临时 MySQL 库，覆盖升级默认值、重跑保留配置、数据库校验和跨租户关系拒绝。后端测试覆盖费用快照、配置冲突、营业时段、门店坐标和地图调用期间的购物车并发。管理端已完成构建、测试与桌面/手机宽度浏览器检查；小程序已完成 Node 测试和 HBuilderX 微信小程序编译。
+## 20261109_03_order_fulfillment.sql
+
+阶段 5A，先完成此前所有迁移。停旧实例并备份，执行本脚本后统一发布后端。增加独立 fulfillment_type、fulfillment_status、联系人/桌台快照及购物车摘要；历史类型回填 DELIVERY，按旧 status 回填履约状态，原 status/pay_status 数值不变。address_book_id 改为可空，但外卖仍由服务端强制校验地址归属。
+
+store_dining_table 是当前门店有效桌台的基础登记，使用复合外键限制租户和门店归属。本阶段不提供桌台管理、二维码或桌次；不在小程序开放新的履约入口。重复迁移保留已存在的订单类型、状态和桌台。详细计费、接口参数、状态转换和后续阶段边界见 [阶段 5A 契约](../order-fulfillment-stage5a.md)。部署开放新类型后不可回退到旧版应用。
+
+本地验证：python scripts/test-order-fulfillment-migration.py，仅创建和清理随机临时 MySQL 库，覆盖历史回填、重跑、枚举约束、桌台归属与新库初始化。业务库尚未执行该增量迁移。

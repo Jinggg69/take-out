@@ -10,6 +10,7 @@ public interface OrderPricingService {
      * @return 订单报价
      */
     OrderQuoteVO quote();
+    OrderQuoteVO quote(String fulfillmentType);
 
     /**
      * 刷新购物车商品的信息和价格。
