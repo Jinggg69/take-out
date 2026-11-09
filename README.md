@@ -309,3 +309,15 @@ node --test tests/*.test.cjs
 - 小程序功能与结算说明：[小程序说明](weixin-uniapp/README.md)；本地运行与联调：[小程序开发流程](weixin-uniapp/小程序开发流程.md)。
 
 
+
+
+### 阶段 5A 统一履约契约
+
+后端报价与提交支持 DELIVERY、PICKUP、DINE_IN，旧请求默认外卖。地址及地图仅用于外卖，自取验证联系人，堂食验证当前门店启用桌台；费用由服务端按类型计算，金额变化仍要求重新确认。履约状态独立保存，保留旧 status/payStatus；派送和自动完成仅处理外卖。提交幂等覆盖租户、门店、类型、履约参数及购物车内容。
+
+部署前执行 [5A 增量迁移](database/migrations/20261109_03_order_fulfillment.sql)。接口、状态表与兼容规则见 [5A 契约](database/order-fulfillment-stage5a.md)。自取核销、二维码/桌次和新类型的前端入口属于后续 5B/5C。
+
+
+### 阶段 5B 到店自取
+
+已实现自取下单、制作完成、待取及店员凭证核销；管理端支持履约筛选，小程序展示取餐号、门店、凭证及履约状态。独立核销权限、门店隔离与条件更新保证核销仅一次成功。部署前执行 [5B 迁移](database/migrations/20261109_04_order_pickup.sql)，并为员工角色配置新权限；完整接口与验证边界见 [5B 契约](database/order-pickup-stage5b.md)。当前业务库未迁移，MySQL 演练及真机验收尚待执行。

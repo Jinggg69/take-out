@@ -219,3 +219,10 @@ SHOW CREATE TABLE admin_session;
 store_dining_table 是当前门店有效桌台的基础登记，使用复合外键限制租户和门店归属。本阶段不提供桌台管理、二维码或桌次；不在小程序开放新的履约入口。重复迁移保留已存在的订单类型、状态和桌台。详细计费、接口参数、状态转换和后续阶段边界见 [阶段 5A 契约](../order-fulfillment-stage5a.md)。部署开放新类型后不可回退到旧版应用。
 
 本地验证：python scripts/test-order-fulfillment-migration.py，仅创建和清理随机临时 MySQL 库，覆盖历史回填、重跑、枚举约束、桌台归属与新库初始化。业务库尚未执行该增量迁移。
+
+
+## 20261109_04_order_pickup.sql
+
+阶段 5B，在 5A 后执行。增加展示取餐号、随机核销凭证及核销员工/时间，已有自取单回填独立随机凭证；重跑保留现有值。新增 order:pickup:ready 和 order:pickup:verify 权限目录，不自动给角色授权。发布后由商户管理员配置角色动作和门店任职；未授权店员不能制作完成或核销。
+
+验证入口 python scripts/test-order-pickup-migration.py，只修改随机临时库；当前会话受自动审批额度限制，尚未运行 MySQL 演练。业务库未变更。详见 [5B 契约](../order-pickup-stage5b.md)。

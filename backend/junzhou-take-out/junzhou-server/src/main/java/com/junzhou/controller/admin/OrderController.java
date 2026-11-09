@@ -28,6 +28,20 @@ public class OrderController {
     @Autowired
     private OrderService orderService;
     @Autowired private PaymentRecoveryService refundWorker;
+    @Autowired private com.junzhou.service.PickupService pickup;
+
+    @PutMapping("/pickup/ready/{id}")
+    @RequireActions({PermissionAction.ORDER_PICKUP_READY})
+    public Result<Void> pickupReady(@PathVariable Long id) {
+        pickup.ready(id); return Result.success();
+    }
+
+    @PutMapping("/pickup/verify/{id}")
+    @RequireActions({PermissionAction.ORDER_PICKUP_VERIFY})
+    public Result<Void> pickupVerify(@PathVariable Long id,@RequestBody java.util.Map<String,String> body) {
+        pickup.verify(id,body.get("credential")); return Result.success();
+    }
+
 
     @PostMapping("/{id}/refund/retry")
     @ApiOperation("按原退款单号核验或重试已有退款")

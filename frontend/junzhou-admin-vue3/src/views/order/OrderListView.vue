@@ -2,7 +2,7 @@
 import { workspace } from '@/stores/workspace'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { ElButton, ElCheckbox, ElDatePicker, ElDialog, ElForm, ElFormItem, ElInput, ElMessage, ElOption, ElSelect, ElTable, ElTableColumn, ElTag } from 'element-plus'
+import { ElButton, ElCheckbox, ElDatePicker, ElDialog, ElForm, ElFormItem, ElInput, ElMessage, ElMessageBox, ElOption, ElSelect, ElTable, ElTableColumn, ElTag } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import DataState from '@/components/DataState.vue'
@@ -13,8 +13,8 @@ import { actionLabels, cancellationReasons, orderActions, orderBill, orderMoney,
 import { errorMessage } from '@/utils/error-message'
 import { createOrderList } from './list-state'
 
-const visibleOrderActions=(status:number|string)=>orderActions(status).filter(action=>{
- const code=({accept:'accept',reject:'reject',cancel:'cancel',delivery:'deliver',complete:'complete'} as const)[action]
+const visibleOrderActions=(row:OrderRecord)=>orderActions(row.status,row).filter(action=>{
+ const code=({accept:'accept',reject:'reject',cancel:'cancel',delivery:'deliver',complete:'complete',ready:'pickup:ready',verify:'pickup:verify'} as const)[action]
  return workspace.can('order:'+code) && (!['reject','cancel'].includes(action)||workspace.can('order:refund'))
 })
 const list = createOrderList(api)
@@ -76,11 +76,19 @@ function openReason(row: OrderRecord, kind: 'reject' | 'cancel', fromDetail: boo
   selectedReason.value = ''; customReason.value = ''; reasonError.value = ''; reasonVisible.value = true
 }
 async function perform(row: OrderRecord, action: OrderAction, fromDetail = false, reason?: string) {
-  if (busy.value || !visibleOrderActions(row.status).includes(action)) return
+  if (busy.value || !visibleOrderActions(row).includes(action)) return
   if ((action === 'reject' || action === 'cancel') && reason === undefined) { openReason(row, action, fromDetail); return }
+  let credential = ''
+  if (action === 'verify') {
+    try {
+      const result = await ElMessageBox.prompt('请核对顾客订单并输入其出示的核销凭证', '核销取餐', { inputPattern: /^[0-9a-f]{32}$/, inputErrorMessage: '请输入32位核销凭证', confirmButtonText: '确认核销', cancelButtonText: '取消' })
+      credential = result.value
+    } catch { return }
+    if (!alive || busy.value) return
+  }
   busy.value = true; actionError.value = ''; reasonError.value = ''
   try {
-    const { data } = await (action === 'reject' ? api.reject({ id: row.id, rejectionReason: reason! }) : action === 'cancel' ? api.cancel({ id: row.id, cancelReason: reason! }) : api[action](row.id))
+    const { data } = await (action === 'reject' ? api.reject({ id: row.id, rejectionReason: reason! }) : action === 'cancel' ? api.cancel({ id: row.id, cancelReason: reason! }) : action === 'verify' ? api.verify(row.id, credential) : api[action](row.id))
     if (!alive) return
     if (String(data.code) !== '1') throw new Error(data.msg || `${actionLabels[action]}失败，请重试`)
     ElMessage.success('操作成功'); reasonVisible.value = false
@@ -172,6 +180,45 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
         @submit.prevent="list.load"
       >
         <div class="management-filter-field">
+          <label for="order-fulfillment-type">履约方式</label>
+          <ElSelect
+            id="order-fulfillment-type"
+            v-model="state.fulfillmentType"
+            clearable
+            :disabled="busy"
+            @change="list.search"
+          >
+            <ElOption
+              label="外卖"
+              value="DELIVERY"
+            /><ElOption
+              label="到店自取"
+              value="PICKUP"
+            /><ElOption
+              label="堂食"
+              value="DINE_IN"
+            />
+          </ElSelect>
+        </div>
+        <div class="management-filter-field">
+          <label for="order-fulfillment-status">制作进度</label>
+          <ElSelect
+            id="order-fulfillment-status"
+            v-model="state.fulfillmentStatus"
+            clearable
+            :disabled="busy"
+            @change="list.search"
+          >
+            <ElOption
+              label="制作中"
+              value="PREPARING"
+            /><ElOption
+              label="待取餐"
+              value="READY"
+            />
+          </ElSelect>
+        </div>
+        <div class="management-filter-field">
           <label for="order-search-number">订单号</label>
           <ElInput
             id="order-search-number"
@@ -252,6 +299,14 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
           stripe
         >
           <ElTableColumn
+            label="履约 / 取餐号"
+            min-width="150"
+          >
+            <template #default="{ row }">
+              {{ row.fulfillmentType === 'PICKUP' ? '自取 · ' + (row.pickupNumber || '—') : row.fulfillmentType === 'DINE_IN' ? '堂食' : '外卖' }}<br />{{ orderStatusLabel(row.status,row) }}
+            </template>
+          </ElTableColumn>
+          <ElTableColumn
             prop="number"
             label="订单号"
             min-width="190"
@@ -269,7 +324,7 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
           >
             <template #default="{ row }">
               <ElTag :type="Number(row.status) === 6 ? 'danger' : Number(row.status) === 5 ? 'success' : 'warning'">
-                {{ orderStatusLabel(row.status) }}
+                {{ orderStatusLabel(row.status,row) }}
               </ElTag>
               <div v-if="orderRefundLabel(row)">
                 {{ orderRefundLabel(row) }}
@@ -359,7 +414,7 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
             <template #default="{ row }">
               <div class="management-row-actions">
                 <ElButton
-                  v-for="action in visibleOrderActions(row.status)"
+                  v-for="action in visibleOrderActions(row)"
                   :key="action"
                   link
                   :type="['cancel', 'reject'].includes(action) ? 'danger' : 'primary'"
@@ -437,14 +492,18 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
           :message="actionError"
         />
         <div class="order-detail-heading">
-          <strong>订单号：{{ detail.number }}</strong><ElTag>{{ orderStatusLabel(detail.status) }}</ElTag>
+          <strong>订单号：{{ detail.number }}</strong><ElTag>{{ orderStatusLabel(detail.status,detail) }}</ElTag>
         </div>
         <dl class="order-detail-grid">
           <dt>下单时间</dt><dd>{{ detail.orderTime || '—' }}</dd>
           <template v-if="orderRefundLabel(detail)">
             <dt>退款状态</dt><dd>{{ orderRefundLabel(detail) }}</dd>
           </template>
-          <dt>用户名</dt><dd>{{ detail.consignee || detail.userName || '—' }}</dd>
+          <dt>履约方式</dt><dd>{{ detail.fulfillmentType === 'PICKUP' ? '到店自取' : detail.fulfillmentType === 'DINE_IN' ? '堂食' : '外卖' }}</dd>
+          <template v-if="detail.fulfillmentType === 'PICKUP'">
+            <dt>取餐号</dt><dd>{{ detail.pickupNumber || '—' }}</dd><dt>核销时间</dt><dd>{{ detail.pickupVerifiedAt || '未核销' }}</dd>
+          </template>
+          <dt>用户名</dt><dd>{{ detail.contactName || detail.consignee || detail.userName || '—' }}</dd>
           <dt>手机号</dt><dd>{{ detail.phone || '—' }}</dd>
           <dt>地址</dt><dd>{{ detail.address || '—' }}</dd>
           <template v-if="[2, 3, 4, 5].includes(Number(detail.status))">
@@ -513,7 +572,7 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
             </ElButton>
             <template v-if="detail && !detailLoading && !detailError">
               <ElButton
-                v-for="action in visibleOrderActions(detail.status).filter(action => Number(detail?.status) === 1 || action !== 'cancel')"
+                v-for="action in visibleOrderActions(detail).filter(action => Number(detail?.status) === 1 || action !== 'cancel')"
                 :key="action"
                 :type="['cancel', 'reject'].includes(action) ? 'danger' : 'primary'"
                 :disabled="busy"

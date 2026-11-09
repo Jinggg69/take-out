@@ -31,6 +31,7 @@ export default {
 	data() {
 		return {
 			platform: 'ios',
+            fulfillmentType: 'DELIVERY', contactName: '', contactPhone: '',
 			orderDishPrice: 0,
 			orderPriceError: '',
 			quoteReady: false,
@@ -224,6 +225,12 @@ export default {
 			return this.refreshQuote()
 		},
 		// Quote failures must never leave an earlier price eligible for submission.
+        async changeFulfillment(type) {
+            if (this.isHandlePy || this.pendingSubmission || this.quotePromise || this.submissionComplete || type === this.fulfillmentType) return
+            this.fulfillmentType = type
+            this.quoteReady = false
+            await this.refreshQuote()
+        },
 		refreshQuote() {
 			this.ensureCurrentScope()
 			const scope = this.currentScope()
@@ -232,7 +239,7 @@ export default {
 			this.orderPriceError = '正在获取最新价格'
 			this.quotePromise = (async () => {
 				try {
-					const result = await getOrderQuote()
+					const result = await getOrderQuote({ fulfillmentType: this.fulfillmentType })
 					if (scope !== this.currentScope()) return false
 					const quote = result && result.data
 					if (!result || ![1, 200].includes(Number(result.code)) || !quote || !Array.isArray(quote.items) || !quote.items.length) {
@@ -284,7 +291,7 @@ export default {
 			this.arrivalTime = '立即派送'
 			this.orderTime = ''
 			const shop = this.shopInfo()
-			if (!shop || !shop.shopId || !this.address) return
+			if (this.fulfillmentType !== 'DELIVERY' || !shop || !shop.shopId || !this.address) return
 			try {
 				const result = await getEstimatedDeliveryTime({ shopId: shop.shopId, customerAddress: this.address })
 				if (result && result.data && dayjs(result.data).isValid()) {
@@ -391,13 +398,16 @@ export default {
 			if (this.ensureCurrentScope()) return false
 			const scope = this.currentScope()
 			if (this.isHandlePy || this.submissionComplete) return
-			if (!this.pendingSubmission && !this.address) {
+			if (!this.pendingSubmission && this.fulfillmentType === 'DELIVERY' && !this.address) {
 				uni.showToast({
 					title: '请选择收货地址',
 					icon: 'none',
 				})
 				return false
 			}
+            if (!this.pendingSubmission && this.fulfillmentType === 'PICKUP' && (!this.contactName.trim() || this.contactName.length > 32 || !/^1[0-9]{10}$/.test(this.contactPhone))) {
+                uni.showToast({ title: '请填写有效的取餐联系人和手机号', icon: 'none' }); return false
+            }
 			if (!this.pendingSubmission && !this.quoteReady) {
 				this.isHandlePy = true
 				try {
@@ -416,9 +426,12 @@ export default {
 				const params = this.pendingSubmission || {
 					clientRequestId: createClientRequestId(),
 					payMethod: 1,
-					addressBookId: this.addressBookId,
+					fulfillmentType: this.fulfillmentType,
+                    contactName: this.fulfillmentType === 'PICKUP' ? this.contactName.trim() : undefined,
+                    contactPhone: this.fulfillmentType === 'PICKUP' ? this.contactPhone : undefined,
+                    addressBookId: this.fulfillmentType === 'DELIVERY' ? this.addressBookId : undefined,
 					remark: this.remark,
-					estimatedDeliveryTime: this.arrivalTime === '立即派送' ? presentFormat() : dateFormat(this.isTomorrow,
+					estimatedDeliveryTime: this.fulfillmentType === 'PICKUP' ? undefined : this.arrivalTime === '立即派送' ? presentFormat() : dateFormat(this.isTomorrow,
 						this.arrivalTime),
 					deliveryStatus: this.arrivalTime === '立即派送' ? 1 : 0,
 					tablewareStatus: this.status,

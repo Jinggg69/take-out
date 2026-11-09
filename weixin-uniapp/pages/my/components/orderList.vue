@@ -108,7 +108,10 @@ export default {
     // 支付状态
     statusWord(order, time) {
       this.$emit("statusWord", { status: order.status, time: time });
-      return orderRefundLabel(order) || statusWord(order.status, time);
+      if (order.fulfillmentType === 'PICKUP') {
+        return orderRefundLabel(order) || ({ 1: '待付款', 2: '等待商家接单', 3: order.fulfillmentStatus === 'READY' ? '待取餐' : '制作中', 5: '已取餐', 6: '已取消' })[Number(order.status)] || '状态待刷新';
+      }
+      return orderRefundLabel(order) || statusWord(order.status);
     },
   },
 };

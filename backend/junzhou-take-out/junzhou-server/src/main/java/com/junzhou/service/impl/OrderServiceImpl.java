@@ -189,6 +189,10 @@ public class OrderServiceImpl implements OrderService {
         if (com.junzhou.payment.Fulfillment.PICKUP.equals(type)) {
             order.setContactName(ordersSubmitDTO.getContactName().trim());
             order.setContactPhone(ordersSubmitDTO.getContactPhone());
+            order.setPickupNumber(UUID.randomUUID().toString().substring(0,8).toUpperCase(java.util.Locale.ROOT));
+            order.setPickupCredential(UUID.randomUUID().toString().replace("-",""));
+            order.setPhone(ordersSubmitDTO.getContactPhone());
+            order.setConsignee(ordersSubmitDTO.getContactName().trim());
         }
         if (tableName!=null) {
             order.setTableId(ordersSubmitDTO.getTableId());
@@ -319,6 +323,9 @@ public class OrderServiceImpl implements OrderService {
                 && ordersPageQueryDTO.getBeginTime().isAfter(ordersPageQueryDTO.getEndTime()))) {
             throw new OrderBusinessException("订单查询参数错误");
         }
+        if (ordersPageQueryDTO.getFulfillmentType()!=null) com.junzhou.payment.Fulfillment.type(ordersPageQueryDTO.getFulfillmentType());
+        if (ordersPageQueryDTO.getFulfillmentStatus()!=null && !java.util.Arrays.asList("AWAITING_PAYMENT","AWAITING_ACCEPTANCE","PREPARING","READY","OUT_FOR_DELIVERY","COMPLETED","CANCELLED").contains(ordersPageQueryDTO.getFulfillmentStatus()))
+            throw new OrderBusinessException("履约状态错误");
         try {
             PageHelper.startPage(ordersPageQueryDTO.getPage(), ordersPageQueryDTO.getPageSize());
             Page<Orders> orders = orderMapper.pageQuery(ordersPageQueryDTO);
@@ -343,7 +350,11 @@ public class OrderServiceImpl implements OrderService {
     public OrderVO userOrderDetail(Long id) {
         Orders order = requireOrder(id, false);
         requireUserOrder(order);
-        return toOrderVO(order);
+        OrderVO vo=toOrderVO(order);
+        if ("PICKUP".equals(order.getFulfillmentType()) && Orders.PAID.equals(order.getPayStatus())
+                && order.getRefundStatus()==null && !Orders.CANCELLED.equals(order.getStatus())
+                && !Orders.COMPLETED.equals(order.getStatus())) vo.setPickupToken(order.getPickupCredential());
+        return vo;
     }
 
     /**

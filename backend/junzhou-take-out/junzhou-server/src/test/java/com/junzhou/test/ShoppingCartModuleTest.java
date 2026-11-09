@@ -50,7 +50,7 @@ class ShoppingCartModuleTest {
         context.setServletContext(new MockServletContext());
         context.register(com.junzhou.test.support.LegacyMvcScopeConfiguration.class);
         context.register(OrderPaymentModuleTest.PaymentTestConfiguration.class, WebMvcConfiguration.class,
-                ShoppingCartController.class, ShoppingCartServiceImpl.class, OrderServiceImpl.class,
+                ShoppingCartController.class, ShoppingCartServiceImpl.class, OrderServiceImpl.class, com.junzhou.service.impl.PickupServiceImpl.class,
                 com.junzhou.service.impl.OrderPricingServiceImpl.class, GlobalExceptionHandler.class, JwtTokenUserInterceptor.class,
                 JwtTokenAdminInterceptor.class, com.junzhou.service.impl.AdminSessionServiceImpl.class, WebSocketServer.class, com.junzhou.service.impl.CartAccessServiceImpl.class);
         context.refresh();

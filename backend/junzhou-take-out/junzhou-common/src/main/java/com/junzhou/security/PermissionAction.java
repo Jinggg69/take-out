@@ -23,6 +23,8 @@ public enum PermissionAction {
     ORDER_DELIVER("order:deliver"),
     ORDER_COMPLETE("order:complete"),
     ORDER_REFUND("order:refund"),
+    ORDER_PICKUP_READY("order:pickup:ready"),
+    ORDER_PICKUP_VERIFY("order:pickup:verify"),
     REPORT_READ("report:read"),
     REPORT_EXPORT("report:export"),
     EMPLOYEE_READ("employee:read"),

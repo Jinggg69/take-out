@@ -22,6 +22,7 @@ public final class PaymentTestSchema {
         jdbc.execute("alter table orders add (store_snapshot text,pricing_snapshot text)");
         jdbc.execute("alter table orders modify address_book_id bigint null");
         jdbc.execute("alter table orders add (fulfillment_type varchar(16) default 'DELIVERY', fulfillment_status varchar(32) default 'AWAITING_PAYMENT', contact_name varchar(32), contact_phone varchar(11), table_id bigint, table_snapshot varchar(64), cart_fingerprint varchar(64))");
+        jdbc.execute("alter table orders add (pickup_number varchar(32),pickup_credential varchar(32),pickup_verified_at timestamp,pickup_verified_by bigint)");
         jdbc.execute("create table store_dining_table(id bigint primary key,tenant_id bigint,store_id bigint,name varchar(64),enabled int)");
         jdbc.execute("alter table orders add payment_account_id varchar(64) default 'legacy'");
         jdbc.execute("create unique index uk_order_number on orders(number)");

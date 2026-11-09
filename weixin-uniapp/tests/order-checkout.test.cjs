@@ -30,7 +30,7 @@ function createCheckout(submit = () => Promise.resolve({ code: 1, data: { id: 7 
   const component = load('pages/order/index.js', {
     mapState, mapMutations, Pikers: {}, AddressPop: {}, DishDetail: {}, DishInfo: {}, dayjs,
     submitOrderSubmit: params => { requests.push(params); return submit(params) },
-    getOrderQuote: () => { quoteRequests.push({}); return quote() },
+    getOrderQuote: params => { quoteRequests.push(params); return quote() },
     presentFormat: () => '2026-10-19 14:30:00', dateFormat: () => '2026-10-20 09:30:00',
     uni: { showToast: options => toasts.push(options), navigateTo: options => navigation.push(options) },
   })
@@ -370,4 +370,39 @@ test('quote for another store never becomes payable', async () => {
   } }))
   assert.equal(await page.refreshQuote(), false)
   assert.equal(page.quoteReady, false)
+})
+
+
+test('自取无需地址并提交联系人及履约类型', async () => {
+  const { page, requests } = createCheckout()
+  page.fulfillmentType = 'PICKUP'; page.address = ''; page.addressBookId = ''
+  page.contactName = '张三'; page.contactPhone = '13800000000'
+  page.quotedDeliveryFee = 0; page.orderDishPrice = 120
+  await page.payOrderHandle()
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].fulfillmentType, 'PICKUP')
+  assert.equal(requests[0].contactName, '张三')
+  assert.equal(requests[0].contactPhone, '13800000000')
+  assert.equal(requests[0].addressBookId, undefined)
+})
+
+test('自取缺少有效联系人时不能提交', async () => {
+  const { page, requests } = createCheckout()
+  page.fulfillmentType = 'PICKUP'; page.contactName = ''; page.contactPhone = '123'
+  await page.payOrderHandle()
+  assert.equal(requests.length, 0)
+})
+
+
+test('切换自取重新报价且保留未知结果的原提交意图', async () => {
+  const { page, quoteRequests } = createCheckout(undefined, () => Promise.resolve({ code: 1, data: {
+    items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, packFee: 1, storeId: 1, configVersion: 0, deliveryFee: 0, amount: 120,
+  } }))
+  await page.changeFulfillment('PICKUP')
+  assert.equal(quoteRequests[0].fulfillmentType, 'PICKUP')
+  assert.equal(page.orderDishPrice, 120)
+  page.pendingSubmission = { fulfillmentType: 'PICKUP', clientRequestId: 'original' }
+  await page.changeFulfillment('DELIVERY')
+  assert.equal(page.fulfillmentType, 'PICKUP')
+  assert.equal(page.pendingSubmission.clientRequestId, 'original')
 })

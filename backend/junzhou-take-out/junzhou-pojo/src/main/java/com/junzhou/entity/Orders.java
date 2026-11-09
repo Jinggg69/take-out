@@ -18,6 +18,12 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class Orders implements Serializable {
     // Loaded from the scoped order row; notifications must retain ownership after commit.
+    private String pickupNumber;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @lombok.ToString.Exclude
+    private String pickupCredential;
+    private LocalDateTime pickupVerifiedAt;
+    private Long pickupVerifiedBy;
     private Long tenantId;
     private Long storeId;
     private String paymentAccountId;

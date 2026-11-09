@@ -110,7 +110,7 @@ class OrderPaymentModuleTest {
         context = new AnnotationConfigWebApplicationContext();
         context.setServletContext(new MockServletContext());
         context.register(com.junzhou.test.support.LegacyMvcScopeConfiguration.class);
-        context.register(WebMvcConfiguration.class, OrderController.class, OrderServiceImpl.class,
+        context.register(WebMvcConfiguration.class, OrderController.class, OrderServiceImpl.class, com.junzhou.service.impl.PickupServiceImpl.class,
                 GlobalExceptionHandler.class, JwtTokenUserInterceptor.class, JwtTokenAdminInterceptor.class,
                 PaymentTestConfiguration.class, WebSocketServer.class, com.junzhou.service.impl.AdminSessionServiceImpl.class, com.junzhou.service.impl.OrderPricingServiceImpl.class,
                 com.junzhou.service.impl.CartAccessServiceImpl.class, ShoppingCartServiceImpl.class);
@@ -367,6 +367,69 @@ class OrderPaymentModuleTest {
         assertEquals(6,statusOf(10));
         assertEquals(3,jdbc.queryForObject("select pay_status from orders where id=10",Integer.class));
         assertEquals("order-10",jdbc.queryForObject("select out_refund_no from refund_request where order_id=10",String.class));
+    }
+
+    @Test
+    void pickupCredentialIsPrivateAndVerificationIsSingleUse() throws Exception {
+        String body="{\"fulfillmentType\":\"PICKUP\",\"contactName\":\"张三\",\"contactPhone\":\"13800000000\",\"payMethod\":1,\"amount\":27}";
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(jsonPath("$.code").value(1));
+        Long id=jdbc.queryForObject("select id from orders where id<>10",Long.class);
+        jdbc.update("update orders set status=3,pay_status=1,fulfillment_status='PREPARING' where id=?",id);
+        String user=mvc.perform(get("/user/order/orderDetail/"+id).header("authentication",token())).andReturn().getResponse().getContentAsString();
+        String credential=JSON.parseObject(user).getJSONObject("data").getString("pickupToken");
+        assertNotNull(credential);
+        assertTrue(credential.matches("[0-9a-f]{32}"));
+        mvc.perform(get("/admin/order/details/"+id).header("token",adminToken()))
+            .andExpect(jsonPath("$.data.pickupToken").doesNotExist()).andExpect(jsonPath("$.data.pickupCredential").doesNotExist());
+        adminPut("/admin/order/pickup/verify/"+id,"{\"credential\":\""+credential+"\"}",0);
+        adminPut("/admin/order/pickup/ready/"+id,"{}",1);
+        adminPut("/admin/order/pickup/verify/"+id,"{\"credential\":\"wrong\"}",0);
+        adminPut("/admin/order/pickup/verify/"+id,"{\"credential\":\""+credential+"\"}",1);
+        java.sql.Timestamp verified=jdbc.queryForObject("select pickup_verified_at from orders where id=?",java.sql.Timestamp.class,id);
+        adminPut("/admin/order/pickup/verify/"+id,"{\"credential\":\""+credential+"\"}",0);
+        assertEquals(verified,jdbc.queryForObject("select pickup_verified_at from orders where id=?",java.sql.Timestamp.class,id));
+        assertEquals(5,statusOf(id));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings={"status=1,pay_status=0", "status=6,pay_status=1", "pay_status=2", "pay_status=3", "pay_status=4", "refund_status='REQUESTED'", "fulfillment_type='DELIVERY'", "store_id=2", "tenant_id=2"})
+    void invalidPickupCannotBeVerified(String change) throws Exception {
+        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_credential='0123456789abcdef0123456789abcdef' where id=10");
+        jdbc.update("update orders set "+change+" where id=10");
+        adminPut("/admin/order/pickup/verify/10","{\"credential\":\"0123456789abcdef0123456789abcdef\"}",0);
+        assertNull(jdbc.queryForObject("select pickup_verified_at from orders where id=10",java.sql.Timestamp.class));
+    }
+
+    @Test
+    void concurrentPickupVerificationChangesExactlyOneRow() throws Exception {
+        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_credential='0123456789abcdef0123456789abcdef' where id=10");
+        ExecutorService pool=Executors.newFixedThreadPool(6);
+        CountDownLatch start=new CountDownLatch(1);
+        java.util.List<Future<Boolean>> results=new java.util.ArrayList<>();
+        try {
+            for(int i=0;i<6;i++) results.add(pool.submit(()->{
+                RequestScope.set(new RequestScope(1L,null,1L,1L,Collections.singleton(1L)));
+                try { start.await(); context.getBean(com.junzhou.service.PickupService.class).verify(10L,"0123456789abcdef0123456789abcdef");return true; }
+                catch(com.junzhou.exception.OrderBusinessException ex){return false;}
+                finally{RequestScope.clear();}
+            }));
+            start.countDown();int successes=0;
+            for(Future<Boolean> result:results) if(result.get(15,TimeUnit.SECONDS))successes++;
+            assertEquals(1,successes);assertEquals(5,statusOf(10));
+            assertEquals(1L,jdbc.queryForObject("select pickup_verified_by from orders where id=10",Long.class));
+        } finally { pool.shutdownNow(); }
+    }
+
+    @Test
+    void pickupFiltersAndCredentialVisibilityRespectOwnership() throws Exception {
+        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_credential='0123456789abcdef0123456789abcdef' where id=10");
+        mvc.perform(get("/admin/order/conditionSearch").header("token",adminToken()).param("page","1").param("pageSize","10").param("fulfillmentType","PICKUP").param("fulfillmentStatus","PREPARING"))
+            .andExpect(jsonPath("$.data.total").value(0));
+        mvc.perform(get("/admin/order/conditionSearch").header("token",adminToken()).param("page","1").param("pageSize","10").param("fulfillmentType","PICKUP").param("fulfillmentStatus","READY"))
+            .andExpect(jsonPath("$.data.total").value(1)).andExpect(jsonPath("$.data.records[0].pickupCredential").doesNotExist()).andExpect(jsonPath("$.data.records[0].pickupToken").doesNotExist());
+        jdbc.update("update orders set user_id=84 where id=10");
+        mvc.perform(get("/user/order/orderDetail/10").header("authentication",token())).andExpect(jsonPath("$.code").value(0));
     }
 
     @Test

@@ -15,8 +15,18 @@
     <!-- end -->
     <view class="order_content" @touchstart="touchstart">
       <view class="order_content_box">
+        <view class="box boxPad">
+          <button :disabled="isHandlePy || !!pendingSubmission || !!quotePromise" :aria-pressed="fulfillmentType === 'DELIVERY'" @click="changeFulfillment('DELIVERY')">外卖配送</button>
+          <button :disabled="isHandlePy || !!pendingSubmission || !!quotePromise" :aria-pressed="fulfillmentType === 'PICKUP'" @click="changeFulfillment('PICKUP')">到店自取</button>
+          <view>当前方式：{{ fulfillmentType === 'PICKUP' ? '到店自取，无配送费' : '外卖配送' }}</view>
+        </view>
+        <view v-if="fulfillmentType === 'PICKUP'" class="box boxPad">
+          <view>到店自取 · 制作完成后凭核销凭证取餐</view>
+          <label>取餐联系人<input v-model="contactName" maxlength="32" placeholder="请填写取餐联系人" :disabled="isHandlePy || !!pendingSubmission" /></label>
+          <label>联系手机号<input v-model="contactPhone" type="number" maxlength="11" placeholder="请填写11位手机号" :disabled="isHandlePy || !!pendingSubmission" /></label>
+        </view>
         <!-- 地址 -->
-        <address-pop
+        <address-pop v-if="fulfillmentType === 'DELIVERY'"
           :address="address"
           :tagLabel="tagLabel"
           :addressLabel="addressLabel"

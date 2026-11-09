@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { workspace } from '@/stores/workspace'
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
-import { ElButton, ElCheckbox, ElDialog, ElForm, ElFormItem, ElInput, ElMessage, ElOption, ElSelect, ElTable, ElTableColumn, ElTag } from 'element-plus'
+import { ElButton, ElCheckbox, ElDialog, ElForm, ElFormItem, ElInput, ElMessage, ElMessageBox, ElOption, ElSelect, ElTable, ElTableColumn, ElTag } from 'element-plus'
 import PaginationBar from '@/components/PaginationBar.vue'
 import DataState from '@/components/DataState.vue'
 import FormFeedback from '@/components/FormFeedback.vue'
@@ -11,10 +12,14 @@ import { actionLabels, cancellationReasons, orderActions, orderMoney, orderReaso
 import { errorMessage } from '@/utils/error-message'
 import { createOrderList } from '../order/list-state'
 
+const visibleOrderActions=(row:OrderRecord)=>orderActions(row.status,row).filter(action=>{
+ const code=({accept:'accept',reject:'reject',cancel:'cancel',delivery:'deliver',complete:'complete',ready:'pickup:ready',verify:'pickup:verify'} as const)[action]
+ return workspace.can('order:'+code) && (!['reject','cancel'].includes(action)||workspace.can('order:refund'))
+})
 const list = createOrderList(api)
 const { state } = list
 const emit = defineEmits<{ changed: [] }>()
-const dashboardTabs = [{ value: 2, label: '待接单' }, { value: 3, label: '待派送' }]
+const dashboardTabs = [{ value: 2, label: '待接单' }, { value: 3, label: '制作 / 待履约' }]
 const statistics = ref<OrderStatistics | null>(null)
 const statisticsError = ref('')
 const detailVisible = ref(false); const detail = ref<OrderRecord | null>(null)
@@ -70,11 +75,19 @@ function openReason(row: OrderRecord, kind: 'reject' | 'cancel', fromDetail: boo
   selectedReason.value = ''; customReason.value = ''; reasonError.value = ''; reasonVisible.value = true
 }
 async function perform(row: OrderRecord, action: OrderAction, fromDetail = false, reason?: string) {
-  if (busy.value || !orderActions(row.status).includes(action)) return
+  if (busy.value || !visibleOrderActions(row).includes(action)) return
   if ((action === 'reject' || action === 'cancel') && reason === undefined) { openReason(row, action, fromDetail); return }
+  let credential = ''
+  if (action === 'verify') {
+    try {
+      const result = await ElMessageBox.prompt('请核对顾客订单并输入其出示的核销凭证', '核销取餐', { inputPattern: /^[0-9a-f]{32}$/, inputErrorMessage: '请输入32位核销凭证', confirmButtonText: '确认核销', cancelButtonText: '取消' })
+      credential = result.value
+    } catch { return }
+    if (!alive || busy.value) return
+  }
   busy.value = true; actionError.value = ''; reasonError.value = ''
   try {
-    const { data } = await (action === 'reject' ? api.reject({ id: row.id, rejectionReason: reason! }) : action === 'cancel' ? api.cancel({ id: row.id, cancelReason: reason! }) : api[action](row.id))
+    const { data } = await (action === 'reject' ? api.reject({ id: row.id, rejectionReason: reason! }) : action === 'cancel' ? api.cancel({ id: row.id, cancelReason: reason! }) : action === 'verify' ? api.verify(row.id, credential) : api[action](row.id))
     if (!alive) return
     if (String(data.code) !== '1') throw new Error(data.msg || `${actionLabels[action]}失败，请重试`)
     ElMessage.success('操作成功'); reasonVisible.value = false
@@ -239,7 +252,7 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
           <template #default="{ row }">
             <div class="management-row-actions">
               <ElButton
-                v-for="action in orderActions(row.status)"
+                v-for="action in visibleOrderActions(row)"
                 :key="action"
                 link
                 :type="['cancel', 'reject'].includes(action) ? 'danger' : 'primary'"
@@ -308,7 +321,7 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
           :message="actionError"
         />
         <div class="order-detail-heading">
-          <strong>订单号：{{ detail.number }}</strong><ElTag>{{ orderStatusLabel(detail.status) }}</ElTag>
+          <strong>订单号：{{ detail.number }}</strong><ElTag>{{ orderStatusLabel(detail.status,detail) }}</ElTag>
         </div>
         <dl class="order-detail-grid">
           <dt>下单时间</dt><dd>{{ detail.orderTime || '—' }}</dd>
@@ -384,7 +397,7 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
             </ElButton>
             <template v-if="detail && !detailLoading && !detailError">
               <ElButton
-                v-for="action in orderActions(detail.status).filter(action => Number(detail?.status) === 1 || action !== 'cancel')"
+                v-for="action in visibleOrderActions(detail).filter(action => Number(detail?.status) === 1 || action !== 'cancel')"
                 :key="action"
                 :type="['cancel', 'reject'].includes(action) ? 'danger' : 'primary'"
                 :disabled="busy"

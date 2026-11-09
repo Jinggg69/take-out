@@ -204,8 +204,8 @@ export const queryOrderUserPage = (params) => {
 
 
 // 用户下单
-export const getOrderQuote = () => {
-	return request({ url: '/user/order/quote', method: 'GET' })
+export const getOrderQuote = (params) => {
+	return request({ url: '/user/order/quote', method: 'GET', params })
 }
 
 export const submitOrderSubmit = (params) => {

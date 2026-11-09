@@ -13,6 +13,9 @@ import java.util.List;
 @AllArgsConstructor
 public class OrderVO extends Orders implements Serializable {
 
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    private String pickupToken;
+
     //订单菜品信息
     private String orderDishes;
 

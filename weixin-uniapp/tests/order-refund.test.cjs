@@ -39,3 +39,12 @@ test('退款页保留分页并调用兼容查询，不把退款状态当订单st
   assert.deepEqual(JSON.parse(JSON.stringify(requests)), [{ pageSize: 10, page: 1, payStatus: 2 }])
   assert.equal(page.recentOrdersList[0].refundStatus, 'PROCESSING')
 })
+
+for (const file of ['pages/details/components/status.vue', 'pages/historyOrder/historyOrder.vue', 'pages/my/components/orderList.vue']) {
+  for (const [status, fulfillmentStatus, label] of [[3,'PREPARING','制作中'],[3,'READY','待取餐'],[5,'COMPLETED','已取餐'],[6,'CANCELLED','已取消']]) {
+    test(`${file} 自取状态 ${fulfillmentStatus}`, () => {
+      const view = component(file, { mapMutations: () => ({}), Empty: {}, ReachBottom: {} })
+      assert.equal(view.methods.statusWord.call({ $emit() {} }, { status, fulfillmentType: 'PICKUP', fulfillmentStatus }), label)
+    })
+  }
+}

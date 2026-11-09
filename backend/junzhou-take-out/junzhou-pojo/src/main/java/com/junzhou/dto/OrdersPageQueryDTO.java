@@ -27,5 +27,7 @@ public class OrdersPageQueryDTO implements Serializable {
 
     private Long userId;
     private Boolean refundOnly;
+    private String fulfillmentType;
+    private String fulfillmentStatus;
 
 }

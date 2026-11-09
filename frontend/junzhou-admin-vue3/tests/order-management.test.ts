@@ -21,7 +21,7 @@ test('order query uses full-day bounds and omits all-status and empty fields', (
   assert.deepEqual(buildOrderQuery({ page: 1, pageSize: 10, number: '001', phone: '138', dates: ['2026-10-01', '2026-10-23'], status: 2 }), { page: 1, pageSize: 10, number: '001', phone: '138', beginTime: '2026-10-01 00:00:00', endTime: '2026-10-23 23:59:59', status: 2 })
 })
 test('order actions retain original status permissions including completed cancellation', () => {
-  assert.deepEqual([1, 2, 3, 4, 5, 6].map(orderActions), [['cancel'], ['accept', 'reject'], ['delivery', 'cancel'], ['complete', 'cancel'], ['cancel'], []])
+  assert.deepEqual([1, 2, 3, 4, 5, 6].map(status => orderActions(status)), [['cancel'], ['accept', 'reject'], ['delivery', 'cancel'], ['complete', 'cancel'], ['cancel'], []])
 })
 test('custom rejection and cancellation reasons are required, trimmed and limited to 20 characters', () => {
   assert.throws(() => orderReason('', '', '取消'), /请选择取消原因/)
@@ -79,4 +79,12 @@ test('disposed order list ignores pending reads and stops further requests', asy
   const list = createOrderList({ getPage: () => { calls++; return new Promise(resolve => { complete = resolve }) } })
   const loading = list.load(); list.dispose(); complete(response()); await loading; await list.load()
   assert.equal(calls, 1); assert.equal(list.state.loading, false); assert.equal(list.state.records.length, 0)
+})
+
+
+test('pickup actions follow fulfillment and payment state', () => {
+  assert.deepEqual(orderActions(3, { fulfillmentType: 'PICKUP', fulfillmentStatus: 'PREPARING', payStatus: 1 }), ['ready', 'cancel'])
+  assert.deepEqual(orderActions(3, { fulfillmentType: 'PICKUP', fulfillmentStatus: 'READY', payStatus: 1 }), ['verify', 'cancel'])
+  assert.deepEqual(orderActions(3, { fulfillmentType: 'PICKUP', fulfillmentStatus: 'READY', payStatus: 2 }), ['cancel'])
+  assert.deepEqual(orderActions(3, { fulfillmentType: 'DINE_IN', payStatus: 1 }), ['cancel'])
 })

@@ -34,6 +34,9 @@ export default {
 	},
 
 	computed: {
+        pickupStore() {
+            try { return JSON.parse(this.orderDetailsData.storeSnapshot || '{}') || {} } catch (error) { return {} }
+        },
 		orderListDataes: function () {
 			return this.orderListData()
 		},
@@ -62,6 +65,9 @@ export default {
 	},
 
 	methods: {
+        copyPickupToken() {
+            if (this.orderDetailsData.pickupToken) uni.setClipboardData({ data: this.orderDetailsData.pickupToken })
+        },
 		...mapMutations(['setOrderData', 'initdishListMut']),
 		...mapState(['shopInfo', 'orderListData', 'shopPhone', 'orderData']),
 		// 获取订单详情
