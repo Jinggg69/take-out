@@ -104,4 +104,15 @@
         and (select count(*) from (select id, tenant_id from dish group by id, tenant_id) owned where owned.tenant_id = #{scopeTenant} and owned.id in
         <foreach collection="ids" item="requestedId" separator="," open="(" close=")">#{requestedId}</foreach>) = #{requestedCount}
     </delete>
+    <select id="getAvailableForStore" resultType="com.junzhou.entity.Dish">
+        <bind name="tenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
+        <bind name="store" value="@com.junzhou.context.RequestScope@requireStoreId()"/>
+        SELECT p.id, p.name, p.image, COALESCE(m.override_price, p.price) AS price
+        FROM dish p
+        JOIN store_dish m ON m.tenant_id = p.tenant_id AND m.dish_id = p.id
+        JOIN store s ON s.tenant_id = m.tenant_id AND s.id = m.store_id
+        JOIN tenant t ON t.id = s.tenant_id
+        WHERE p.id = #{id} AND p.tenant_id = #{tenant} AND s.id = #{store}
+          AND t.status = 1 AND s.status = 1 AND p.status = 1 AND m.on_sale = 1 AND m.sold_out = 0
+    </select>
 </mapper>

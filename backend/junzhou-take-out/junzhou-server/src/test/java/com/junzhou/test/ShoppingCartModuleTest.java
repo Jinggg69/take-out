@@ -68,6 +68,13 @@ class ShoppingCartModuleTest {
         jdbc.execute("insert into setmeal_dish (setmeal_id,dish_id,copies) values (5,5,2)");
         seed(84, "微辣", 7);
         carts = context.getBean(ShoppingCartService.class);
+        jdbc.execute("create table tenant(id bigint,status int); insert into tenant values(1,1)");
+        jdbc.execute("create table store(id bigint,tenant_id bigint,status int); insert into store values(1,1,1)");
+        jdbc.execute("create table store_dish(tenant_id bigint,store_id bigint,dish_id bigint,on_sale int,sold_out int,override_price decimal(10,2))");
+        jdbc.execute("insert into store_dish select tenant_id,1,id,1,0,null from dish");
+        jdbc.execute("create table store_setmeal(tenant_id bigint,store_id bigint,setmeal_id bigint,on_sale int,sold_out int,override_price decimal(10,2))");
+        jdbc.execute("insert into store_setmeal select tenant_id,1,id,1,0,null from setmeal");
+        com.junzhou.test.support.StoreSettingsTestSchema.create(jdbc);
         mvc = MockMvcBuilders.webAppContextSetup(context).build();
     }
 
@@ -215,6 +222,7 @@ class ShoppingCartModuleTest {
 
     @ParameterizedTest @ValueSource(ints={0,1})
     void concurrentAddsWaitForTheUserTransactionAndNeverDuplicateOrLoseUnits(int initial) throws Exception {
+        enforceCartIdentity();
         if (initial>0) seed(42,"微辣",initial);
         runConcurrentUnderUserLock(6, () -> { ShoppingCartDTO input = new ShoppingCartDTO(); input.setDishId(5L); input.setDishFlavor("微辣"); carts.add(input); });
         assertEquals(1,count());
@@ -222,6 +230,7 @@ class ShoppingCartModuleTest {
     }
 
     @Test void concurrentSubtractsCannotGoNegativeOrDeleteAnotherFlavor() throws Exception {
+        enforceCartIdentity();
         seed(42,"微辣",3); seed(42,"重辣",4);
         runConcurrentUnderUserLock(6, () -> { ShoppingCartDTO input = new ShoppingCartDTO(); input.setDishId(5L); input.setDishFlavor("微辣"); carts.sub(input); });
         assertEquals(1,count());
@@ -233,6 +242,24 @@ class ShoppingCartModuleTest {
         runConcurrentUnderUserLock(1, () -> carts.clean());
         assertEquals(0,count());
         assertEquals(7,jdbc.queryForObject("select number from shopping_cart where user_id=84",Integer.class));
+    }
+
+    /** Exercise service writes with a binary flavor identity, as in the MySQL migration. */
+    private void enforceCartIdentity() {
+        jdbc.execute("alter table shopping_cart add product_type int generated always as (case when dish_id is null then 1 else 0 end)");
+        jdbc.execute("alter table shopping_cart add product_id bigint generated always as (coalesce(dish_id,setmeal_id))");
+        jdbc.execute("alter table shopping_cart add flavor_key varbinary(200) generated always as (stringtoutf8(coalesce(dish_flavor,'')))");
+        jdbc.execute("create unique index uk_cart_identity on shopping_cart(tenant_id,store_id,user_id,product_type,product_id,flavor_key)");
+    }
+
+    @Test void canonicalFlavorsUseOneRowWithTheDatabaseIdentity() throws Exception {
+        enforceCartIdentity();
+        action("add", "{\"dishId\":5}", 1);
+        action("add", "{\"dishId\":5,\"dishFlavor\":\"   \"}", 1);
+        action("add", "{\"dishId\":5,\"dishFlavor\":\"辣\"}", 1);
+        action("add", "{\"setmealId\":5,\"dishFlavor\":\"ignored\"}", 1);
+        assertEquals(3, count());
+        assertEquals(3, quantity(""));
     }
 
     private void runConcurrentUnderUserLock(int threads, Runnable operation) throws Exception {

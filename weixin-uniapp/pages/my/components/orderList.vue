@@ -27,7 +27,7 @@
             </scroll-view>
           </view>
           <view class="numAndAum">
-            <view><text>￥{{ item.amount.toFixed(2) }}</text></view>
+            <view><text>￥{{ orderTotal(item).toFixed(2) }}</text></view>
             <view><text>共{{ numes(item.orderDetailList).count }}件</text></view>
           </view>
         </view>
@@ -47,6 +47,7 @@
   </scroll-view>
 </template>
 <script>
+import { orderSnapshotMoney } from "@/utils/order-snapshot";
 import ReachBottom from "@/components/reach-bottom/reach-bottom.vue";
 import { statusWord } from "@/utils/index";
 import { orderRefundLabel } from "@/utils/order-refund";
@@ -77,6 +78,7 @@ export default {
     ReachBottom,
   },
   methods: {
+    orderTotal(order) { return orderSnapshotMoney(order, "amount", order.amount); },
     lower() {
       this.$emit("lower");
     },

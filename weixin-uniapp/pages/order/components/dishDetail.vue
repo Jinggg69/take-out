@@ -33,7 +33,7 @@
       </view>
       <view class="orderList">
         <view class="orderInfo">
-          <text class="text">打包费</text><text class="may">￥</text>{{ orderDishNumber }}
+          <text class="text">打包费</text><text class="may">￥</text>{{ packFee.toFixed(2) }}
         </view>
         <view class="orderInfo">
           <text class="text">配送费</text><text class="may">￥</text>{{ deliveryFee }}
@@ -51,6 +51,7 @@ import { DELIVERY_FEE } from "../../../utils/order-pricing";
 export default {
   // 获取父级传的数据
   props: {
+    packFee: { type: Number, default: 0 },
     deliveryFee: {
       type: Number,
       default: DELIVERY_FEE,

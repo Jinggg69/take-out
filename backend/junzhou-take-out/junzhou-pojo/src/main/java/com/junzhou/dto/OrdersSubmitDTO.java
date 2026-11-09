@@ -30,4 +30,6 @@ public class OrdersSubmitDTO implements Serializable {
     private BigDecimal amount;
     // Stable identifier for one checkout intent; optional for legacy clients.
     private String clientRequestId;
+    private Long storeId;
+    private Long configVersion;
 }

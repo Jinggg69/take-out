@@ -57,6 +57,8 @@ import java.util.UUID;
  */
 @Service
 public class OrderServiceImpl implements OrderService {
+    @Autowired private com.junzhou.service.StoreSettingsService storeSettings;
+    @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
     @Autowired private CartAccessService cartAccessService;
     @Autowired private ShoppingCartService shoppingCartService;
     @Autowired private RefundTransactionService refundTransactions;
@@ -90,36 +92,55 @@ public class OrderServiceImpl implements OrderService {
      * @return 订单提交结果
      */
     @Override
-    @Transactional
     public OrderSubmitVO orderSubmit(OrdersSubmitDTO ordersSubmitDTO) {
         if (ordersSubmitDTO == null || ordersSubmitDTO.getAmount() == null
                 || ordersSubmitDTO.getAmount().signum() < 0) {
             throw new OrderBusinessException("请确认有效的订单金额后重新提交");
         }
         if(ordersSubmitDTO.getPayMethod()!=1) throw new OrderBusinessException("当前仅支持微信支付");
+        if (ordersSubmitDTO.getStoreId() != null && !ordersSubmitDTO.getStoreId().equals(com.junzhou.context.RequestScope.requireStoreId()))
+            throw new OrderBusinessException("门店已切换，请重新结算");
         String fingerprint=OrderSubmissionIdentity.fingerprint(ordersSubmitDTO);
-        //处理各种业务异常（地址簿为空，购物车数据为空）
-        Long userId = cartAccessService.lockCurrentCart();
-        if(ordersSubmitDTO.getClientRequestId()!=null) {
-            Orders existing=orderMapper.getBySubmission(userId,ordersSubmitDTO.getClientRequestId());
-            if(existing!=null) {
-                if(!fingerprint.equals(existing.getSubmitFingerprint())) throw new OrderBusinessException("该请求标识已用于不同订单内容");
-                return OrderSubmitVO.builder().id(existing.getId()).orderTime(existing.getOrderTime())
-                        .orderNumber(existing.getNumber()).orderAmount(existing.getAmount()).build();
-            }
-        }
+        Long userId = cartAccessService.currentUserId();
+        OrderSubmitVO previous = previousSubmission(userId, ordersSubmitDTO, fingerprint);
+        if (previous != null) return previous;
         AddressBook addressBook = addressBookMapper.getByIdAndUserId(ordersSubmitDTO.getAddressBookId(), userId);
-        if (addressBook == null) {
-            throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_IS_NULL);
-        }
+        if (addressBook == null) throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_IS_NULL);
+        String address = fullAddress(addressBook);
+        com.junzhou.entity.StoreSettings settings = storeSettings.requireOpen();
+        if (ordersSubmitDTO.getConfigVersion() != null && !ordersSubmitDTO.getConfigVersion().equals(settings.getVersion()))
+            throw new OrderBusinessException("门店配置已变化，请重新确认订单");
+        deliveryRangeService.validate(address, settings);
+        org.springframework.transaction.support.TransactionTemplate transaction =
+                new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        transaction.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_READ_COMMITTED);
+        return transaction.execute(status -> submitValidated(ordersSubmitDTO, fingerprint, addressBook, settings));
+    }
 
+    private OrderSubmitVO previousSubmission(Long userId, OrdersSubmitDTO input, String fingerprint) {
+        if (input.getClientRequestId() == null) return null;
+        Orders existing = orderMapper.getBySubmission(userId, input.getClientRequestId());
+        if (existing == null) return null;
+        if (!fingerprint.equals(existing.getSubmitFingerprint())) throw new OrderBusinessException("该请求标识已用于不同订单内容");
+        return OrderSubmitVO.builder().id(existing.getId()).orderTime(existing.getOrderTime())
+                .orderNumber(existing.getNumber()).orderAmount(existing.getAmount()).build();
+    }
+
+    private OrderSubmitVO submitValidated(OrdersSubmitDTO ordersSubmitDTO, String fingerprint,
+                                         AddressBook checkedAddress, com.junzhou.entity.StoreSettings settings) {
+        Long userId = cartAccessService.lockCurrentCart();
+        OrderSubmitVO previous = previousSubmission(userId, ordersSubmitDTO, fingerprint);
+        if (previous != null) return previous;
+        storeSettings.lockVersion(settings.getVersion());
+        AddressBook addressBook = addressBookMapper.getByIdAndUserId(ordersSubmitDTO.getAddressBookId(), userId);
+        if (addressBook == null || !fullAddress(checkedAddress).equals(fullAddress(addressBook))) {
+            throw new OrderBusinessException("收货地址已变化，请重新提交");
+        }
+        String address = fullAddress(addressBook);
         OrderQuoteVO quote = orderPricingService.quote();
         if (ordersSubmitDTO.getAmount().compareTo(quote.getAmount()) != 0) {
             throw new OrderBusinessException("商品价格或数量已变化，请重新确认订单金额");
         }
-
-        String address = fullAddress(addressBook);
-        deliveryRangeService.validate(address);
 
         //向订单表插入一条数据
         Orders order = new Orders();
@@ -132,6 +153,14 @@ public class OrderServiceImpl implements OrderService {
         order.setTablewareStatus(ordersSubmitDTO.getTablewareStatus());
         if (ordersSubmitDTO.getTablewareNumber() != null) order.setTablewareNumber(ordersSubmitDTO.getTablewareNumber());
         order.setAmount(quote.getAmount());
+        order.setStoreSnapshot(JSON.toJSONString(settings));
+        JSONObject priceSnapshot = new JSONObject();
+        priceSnapshot.put("goodsAmount",quote.getGoodsAmount());
+        priceSnapshot.put("packFee",quote.getPackFee());
+        priceSnapshot.put("deliveryFee",quote.getDeliveryFee());
+        priceSnapshot.put("amount",quote.getAmount());
+        priceSnapshot.put("packAmount",quote.getPackAmount());
+        order.setPricingSnapshot(priceSnapshot.toJSONString());
         order.setPackAmount(quote.getPackAmount());
         order.setOrderTime(LocalDateTime.now());
         order.setPayStatus(Orders.UN_PAID);

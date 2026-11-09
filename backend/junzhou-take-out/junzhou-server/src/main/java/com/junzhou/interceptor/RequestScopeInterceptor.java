@@ -36,10 +36,10 @@ public class RequestScopeInterceptor implements AsyncHandlerInterceptor {
                     && ((org.springframework.web.method.HandlerMethod)handler).getMethod().getName().equals("context"));
                 scope = selfService?scopes.forEmployeeIdentity(employee):scopes.forEmployee(employee, store);
             } else {
-                scopes.requireLegacySingleStore();
                 Long user = (Long) request.getAttribute(JwtTokenUserInterceptor.USER_ATTRIBUTE);
                 if (user == null) BaseContext.removeCurrentId();
-                scope = scopes.forUser(user, store);
+                boolean discovery = request.getRequestURI().equals(request.getContextPath() + "/user/stores");
+                scope = discovery ? scopes.forStoreDiscovery(user, store) : scopes.forUser(user, store);
             }
             RequestScope.set(scope);
             return true;

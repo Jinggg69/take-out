@@ -5,6 +5,8 @@ import com.junzhou.entity.Setmeal;
 import com.junzhou.dto.SetmealDTO;
 import com.junzhou.dto.DishDTO;
 import com.junzhou.service.DishService;
+import com.junzhou.service.StoreMenuService;
+import java.math.BigDecimal;
 import com.junzhou.service.SetmealService;
 import com.junzhou.vo.DishVO;
 import org.junit.jupiter.api.AfterEach;
@@ -23,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-/** Real controllers against a shared Redis boundary, including cache hits. */
+/** Public menus bypass tenant catalog caches; catalog invalidation remains tenant scoped. */
 class CacheIsolationTest {
     private final Map<String, Object> data = new HashMap<>();
     private final RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
@@ -52,25 +54,27 @@ class CacheIsolationTest {
         RequestScope.set(new RequestScope(null, null, tenant, store, Collections.emptySet()));
     }
 
-    @Test void dishCacheCannotReturnAnotherTenantsCategory() {
+    @Test void dishMenusAlwaysReadCurrentStorePriceAcrossTenantsAndStores() {
         com.junzhou.controller.user.DishController controller = new com.junzhou.controller.user.DishController();
-        DishService service = mock(DishService.class);
-        ReflectionTestUtils.setField(controller, "redisTemplate", redis);
-        ReflectionTestUtils.setField(controller, "dishService", service);
-        when(service.listWithFlavor(any())).thenAnswer(i -> Collections.singletonList(
-                DishVO.builder().id(RequestScope.requireTenantId()).build()));
+        StoreMenuService service = mock(StoreMenuService.class);
+        ReflectionTestUtils.setField(controller, "storeMenuService", service);
+        when(service.publicDishes(any())).thenAnswer(i -> Collections.singletonList(
+                DishVO.builder().id(RequestScope.requireTenantId())
+                        .price(BigDecimal.valueOf(RequestScope.requireStoreId())).build()));
         scope(101, 1001);
-        assertEquals(101L, controller.list(7L).getData().get(0).getId());
+        assertEquals(new BigDecimal("1001"), controller.list(7L).getData().get(0).getPrice());
         scope(102, 2001);
         assertEquals(102L, controller.list(7L).getData().get(0).getId());
         scope(101, 1002);
-        assertEquals(101L, controller.list(7L).getData().get(0).getId());
-        verify(service, times(2)).listWithFlavor(any());
+        assertEquals(new BigDecimal("1002"), controller.list(7L).getData().get(0).getPrice());
+        scope(101, 1001);
+        controller.list(7L);
+        verify(service, times(4)).publicDishes(7L);
+        verifyNoInteractions(redis);
     }
 
-    @Test void dishCacheHitStillRequiresAnAuthorisedStore() {
+    @Test void dishListingRequiresAnAuthorisedStore() {
         com.junzhou.controller.user.DishController controller = new com.junzhou.controller.user.DishController();
-        ReflectionTestUtils.setField(controller, "redisTemplate", redis);
         data.put("dish_7", Collections.singletonList(DishVO.builder().id(99L).build()));
         assertThrows(SecurityException.class, () -> controller.list(7L));
         RequestScope.set(new RequestScope(42L, null, 101L, 1002L, Collections.singleton(1001L)));
@@ -81,11 +85,11 @@ class CacheIsolationTest {
         com.junzhou.controller.user.DishController user = new com.junzhou.controller.user.DishController();
         com.junzhou.controller.admin.DishController admin = new com.junzhou.controller.admin.DishController();
         DishService service = mock(DishService.class);
-        ReflectionTestUtils.setField(user, "redisTemplate", redis);
-        ReflectionTestUtils.setField(user, "dishService", service);
+        StoreMenuService menu = mock(StoreMenuService.class);
+        ReflectionTestUtils.setField(user, "storeMenuService", menu);
         ReflectionTestUtils.setField(admin, "redisTemplate", redis);
         ReflectionTestUtils.setField(admin, "dishService", service);
-        when(service.listWithFlavor(any())).thenAnswer(i -> Collections.singletonList(
+        when(menu.publicDishes(nullable(Long.class))).thenAnswer(i -> Collections.singletonList(
                 DishVO.builder().name("fresh").build()));
         DishDTO dto = new DishDTO(); dto.setCategoryId(8L);
         List<Runnable> mutations = Arrays.asList(() -> admin.save(dto), () -> admin.update(dto),
@@ -99,6 +103,8 @@ class CacheIsolationTest {
             data.put("junzhou:v2:tenant:101:dish:category:7", old);
             data.put("junzhou:v2:tenant:101:dish:category:all", old);
             mutation.run();
+            assertFalse(data.containsKey("junzhou:v2:tenant:101:dish:category:7"));
+            assertFalse(data.containsKey("junzhou:v2:tenant:101:dish:category:all"));
             scope(101, 1002);
             assertEquals("fresh", user.list(7L).getData().get(0).getName());
             assertEquals("fresh", user.list(null).getData().get(0).getName());
@@ -127,7 +133,13 @@ class CacheIsolationTest {
         com.junzhou.controller.admin.ShopController admin = new com.junzhou.controller.admin.ShopController();
         com.junzhou.controller.user.ShopController user = new com.junzhou.controller.user.ShopController();
         ReflectionTestUtils.setField(admin, "redisTemplate", redis);
-        ReflectionTestUtils.setField(user, "redisTemplate", redis);
+        com.junzhou.service.StoreSettingsService settings = mock(com.junzhou.service.StoreSettingsService.class);
+        ReflectionTestUtils.setField(user, "settings", settings);
+        when(settings.current()).thenAnswer(i -> {
+            com.junzhou.entity.StoreSettings current = new com.junzhou.entity.StoreSettings();
+            current.setOpen(!Integer.valueOf(0).equals(data.get(com.junzhou.cache.ScopedCache.shopStatusKey())));
+            return current;
+        });
         data.put("SHOP_STATUS", 0);
         scope(101, 1001);
         assertEquals(1, user.getStatus().getData());
@@ -142,18 +154,20 @@ class CacheIsolationTest {
         assertThrows(SecurityException.class, () -> admin.setStatus(0));
     }
 
-    @Test void setmealHitsAndAllMutationsStayWithinTenant() {
+    @Test void setmealReadsAndAllMutationsStayWithinTenantAndStore() {
         SetmealService service = mock(SetmealService.class);
+        StoreMenuService menu = mock(StoreMenuService.class);
         Map<Long, String> names = new HashMap<>();
         names.put(101L, "old"); names.put(102L, "other");
-        when(service.list(any())).thenAnswer(i -> Collections.singletonList(Setmeal.builder()
-                .name(names.get(RequestScope.requireTenantId())).build()));
+        when(menu.publicSetmeals(any())).thenAnswer(i -> Collections.singletonList(Setmeal.builder()
+                .name(names.get(RequestScope.requireTenantId())).price(BigDecimal.valueOf(RequestScope.requireStoreId())).build()));
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
             context.register(CachingConfig.class, com.junzhou.controller.user.SetmealController.class,
                     com.junzhou.controller.admin.SetmealController.class);
             context.registerBean("cacheManager", ConcurrentMapCacheManager.class, () -> new ConcurrentMapCacheManager("setmealCache"));
             context.registerBean("redisTemplate", RedisTemplate.class, () -> redis);
             context.registerBean(SetmealService.class, () -> service);
+            context.getBeanFactory().registerSingleton("storeMenuService", menu);
             context.refresh();
             com.junzhou.controller.user.SetmealController user = context.getBean(com.junzhou.controller.user.SetmealController.class);
             com.junzhou.controller.admin.SetmealController admin = context.getBean(com.junzhou.controller.admin.SetmealController.class);
@@ -163,18 +177,20 @@ class CacheIsolationTest {
             assertEquals("other", user.list(7L).getData().get(0).getName());
             scope(101, 1002);
             assertEquals("old", user.list(7L).getData().get(0).getName());
-            verify(service, times(2)).list(any());
+            assertEquals(new BigDecimal("1002"), user.list(7L).getData().get(0).getPrice());
+            verify(menu, times(4)).publicSetmeals(any());
             SetmealDTO dto = new SetmealDTO(); dto.setCategoryId(8L);
             List<Runnable> mutations = Arrays.asList(() -> admin.save(dto), () -> admin.update(dto),
                     () -> admin.startOrStop(0, 1L), () -> admin.delete(Collections.singletonList(1L)));
-            int calls = 2;
+            int calls = 4;
             for (Runnable mutation : mutations) {
                 names.put(101L, "new" + calls);
                 mutation.run();
                 assertEquals("new" + calls, user.list(7L).getData().get(0).getName());
                 scope(102, 2001);
                 assertEquals("other", user.list(7L).getData().get(0).getName());
-                verify(service, times(++calls)).list(any());
+                calls += 2;
+                verify(menu, times(calls)).publicSetmeals(any());
                 scope(101, 1001);
             }
             RequestScope.clear();

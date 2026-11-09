@@ -7,6 +7,7 @@ import { createSetmealApi } from './setmeal'
 import { createOrderApi } from './order'
 import { createDashboardApi } from './dashboard'
 import { createStatisticsApi } from './statistics'
+import { createStoreApi } from './store'
 
 export const authApi = createAuthApi(request)
 export const employeeApi = createEmployeeApi(request)
@@ -16,3 +17,4 @@ export const setmealApi = createSetmealApi(request)
 export const orderApi = createOrderApi(request)
 export const dashboardApi = createDashboardApi(request)
 export const statisticsApi = createStatisticsApi(request)
+export const storeApi = createStoreApi(request)

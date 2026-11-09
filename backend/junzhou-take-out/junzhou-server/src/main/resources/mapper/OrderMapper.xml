@@ -37,14 +37,14 @@
                             rejection_reason, cancel_time, estimated_delivery_time,
                             delivery_status, delivery_time, pack_amount,
                             tableware_number, tableware_status, dispatch_time, wechat_transaction_id, refund_status,
-                            payment_check_time, wechat_trade_state, client_request_id, submit_fingerprint)
+                            payment_check_time, wechat_trade_state, client_request_id, submit_fingerprint, store_snapshot, pricing_snapshot)
         select #{scopeTenant}, #{scopeStore}, #{paymentAccountId}, #{number}, #{status}, #{userId}, #{addressBookId}, #{orderTime},
                 #{checkoutTime}, #{payMethod}, #{payStatus}, #{amount}, #{remark},
                 #{userName}, #{phone}, #{address}, #{consignee}, #{cancelReason},
                 #{rejectionReason}, #{cancelTime}, #{estimatedDeliveryTime},
                 #{deliveryStatus}, #{deliveryTime}, #{packAmount},
                 #{tablewareNumber}, #{tablewareStatus}, #{dispatchTime}, #{wechatTransactionId}, #{refundStatus},
-                #{paymentCheckTime}, #{wechatTradeState}, #{clientRequestId}, #{submitFingerprint}
+                #{paymentCheckTime}, #{wechatTradeState}, #{clientRequestId}, #{submitFingerprint}, #{storeSnapshot}, #{pricingSnapshot}
         from store where id=#{scopeStore} and tenant_id=#{scopeTenant}
         and exists (select 1 from payment_account pa join store_payment_account spa on spa.payment_account_id=pa.id
             where pa.id=#{paymentAccountId} and pa.tenant_id=#{scopeTenant} and pa.store_id=#{scopeStore}

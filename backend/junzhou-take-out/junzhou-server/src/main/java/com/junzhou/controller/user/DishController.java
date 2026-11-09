@@ -1,16 +1,11 @@
 package com.junzhou.controller.user;
 
-import com.junzhou.constant.StatusConstant;
-import com.junzhou.entity.Dish;
 import com.junzhou.result.Result;
-import com.junzhou.cache.ScopedCache;
-import com.junzhou.service.DishService;
 import com.junzhou.vo.DishVO;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,9 +17,7 @@ import java.util.List;
 @Api(tags = "C端-菜品浏览接口")
 public class DishController {
     @Autowired
-    private DishService dishService;
-    @Autowired
-    private RedisTemplate<String, Object> redisTemplate;
+    private com.junzhou.service.StoreMenuService storeMenuService;
 
     /**
      * 根据分类id查询菜品
@@ -35,24 +28,8 @@ public class DishController {
     @GetMapping("/list")
     @ApiOperation("根据分类id查询菜品")
     public Result<List<DishVO>> list(Long categoryId) {
-        // 使用可信租户范围构造目录缓存键
-        String key = ScopedCache.dishKey(categoryId);
-        //查询Redis中是否存在菜品数据
-        List<DishVO> list = (List<DishVO>) redisTemplate.opsForValue().get(key);
-        //如果存在，直接返回，无需查询数据库
-        if (list != null) {
-            return Result.success(list);
-        }
-
-        Dish dish = new Dish();
-        dish.setCategoryId(categoryId);
-        dish.setStatus(StatusConstant.ENABLE);//查询起售中的菜品
-
-        //如果不存在，需要查询数据库，将查询到的菜品数据缓存到Redis中
-        list = dishService.listWithFlavor(dish);
-        redisTemplate.opsForValue().set(key, list);
-
-        return Result.success(list);
+        com.junzhou.context.RequestScope.requireStoreId();
+        return Result.success(storeMenuService.publicDishes(categoryId));
     }
 
 }

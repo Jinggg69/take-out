@@ -2,15 +2,16 @@ import store from './../store'
 import { baseUrl } from './env'
 // 参数： url:请求地址  param：请求参数  method：请求方式 callBack：回调函数
 export function request({url='', params={}, method='GET'}) {
-	uni.getStorage({
-		key: ''
-	})
 	const storeInfo = store.state
+	const selectedStoreId = String(storeInfo.selectedStoreId || 1)
+	const generation = storeInfo.storeGeneration || 0
+	const stale = () => selectedStoreId !== String(store.state.selectedStoreId || 1) || generation !== (store.state.storeGeneration || 0)
+	const scopeError = () => ({ staleStore: true, msg: '门店已切换，请重试' })
 	let header = {
 			'Accept': 'application/json',
 			'Access-Control-Allow-Origin':'*',
 			'Content-Type': 'application/json', 
-			'X-Store-Id': '1', // 单店过渡配置；后续选店功能改为用户选择
+			'X-Store-Id': selectedStoreId,
 			// 'shopid':storeInfo.storeInfo.shopId ?? '',
 			// 'storeid':storeInfo.storeInfo.storeId ?? '',
 			'authentication': storeInfo.token
@@ -24,6 +25,7 @@ export function request({url='', params={}, method='GET'}) {
 			header: header,
 			method: method,
 			success: (res) => {
+				if (stale()) { reject(scopeError()); return }
 				const { data } = res
 				if (res.statusCode >= 400) {
 					reject({ ...(data && typeof data === 'object' ? data : {}), statusCode: res.statusCode,
@@ -40,6 +42,7 @@ export function request({url='', params={}, method='GET'}) {
 				}
 			},
 			fail: (err) => {
+				if (stale()) { reject(scopeError()); return }
 				const error = { msg: '网络请求失败，请稍后重试', errMsg: err.errMsg, data: { msg: err.data } }
 				// store.commit('setLodding', true)
 				reject(error)

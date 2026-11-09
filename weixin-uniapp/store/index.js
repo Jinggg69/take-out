@@ -6,6 +6,8 @@ Vue.use(Vuex)
 
 const store = new Vuex.Store({
 	state: {
+		selectedStoreId: (typeof uni !== 'undefined' && uni.getStorageSync('selectedStoreId')) || 1,
+		storeGeneration: 0,
 		storeInfo: {}, // 店铺请求的id信息
 		shopInfo: '',  // 店铺详细信息
 		orderListData: [],// 购物车列表信息
@@ -25,6 +27,24 @@ const store = new Vuex.Store({
 		gender: 0 // 收货地址对应的 性别  0 先生  1 女士
 	},
 	mutations: {
+		selectStore(state, id) {
+			if (!id || String(id) === String(state.selectedStoreId)) return
+			state.selectedStoreId = id
+			state.storeGeneration++
+			if (typeof uni !== 'undefined') uni.setStorageSync('selectedStoreId', id)
+			state.deliveryFee = 0
+			state.storeInfo = {}
+			state.addressBackUrl = ''
+			state.shopInfo = ''
+			state.shopStatus = null
+			state.shopPhone = ''
+			state.orderListData = []
+			state.orderData = {}
+			state.remarkData = ''
+			state.addressData = {}
+			state.arrivals = ''
+			state.dishTypeIndex = 0
+		},
 		setStoreInfo(state, provider) {
 			state.storeInfo = provider
 		},
@@ -75,7 +95,7 @@ const store = new Vuex.Store({
 		},
 		// 保存配送费
 		setDeliveryFee(state, deliveryFee) {
-			state.deliveryFee = DELIVERY_FEE
+			state.deliveryFee = deliveryFee != null && Number.isFinite(Number(deliveryFee)) && Number(deliveryFee) >= 0 ? Number(deliveryFee) : DELIVERY_FEE
 		},
 		// 设置性别
 		setGender(state, gender) {

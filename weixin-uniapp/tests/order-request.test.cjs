@@ -30,3 +30,39 @@ test('HTTP2xx business code0 and successful response keep existing contracts', a
 test('empty HTTP2xx body rejects as unknown without throwing from the native success callback', async () => {
   await assert.rejects(client({ statusCode: 200, data: null })({}), error => error.statusCode === 200 && error.code !== 0 && typeof error.msg === 'string')
 })
+
+
+function scopedClient(state = {}) {
+  const requests = []
+  const context = vm.createContext({ store: { state, commit() {} }, baseUrl: '', uni: {
+    request: options => requests.push(options),
+  } })
+  const source = fs.readFileSync(path.join(__dirname, '../utils/request.js'), 'utf8')
+  vm.runInContext(source.replace(/^import[^\n]*/gm, '').replace('export function', 'function'), context)
+  return { request: context.request, requests, state }
+}
+
+test('login retains default store header and later requests use selected store', async () => {
+  const client = scopedClient()
+  const first = client.request({ url: '/user/user/login' })
+  assert.equal(client.requests[0].header['X-Store-Id'], '1')
+  client.requests[0].success({ statusCode: 200, data: { code: 1 } })
+  await first
+  client.state.selectedStoreId = 9
+  const second = client.request({})
+  assert.equal(client.requests[1].header['X-Store-Id'], '9')
+  client.requests[1].success({ statusCode: 200, data: { code: 1 } })
+  await second
+})
+
+for (const outcome of ['success', 'fail']) {
+  test(`stale ${outcome} response discarded after switching away and back`, async () => {
+    const client = scopedClient({ selectedStoreId: 1, storeGeneration: 0 })
+    const pending = client.request({})
+    client.state.selectedStoreId = 2; client.state.storeGeneration++
+    client.state.selectedStoreId = 1; client.state.storeGeneration++
+    client.requests[0][outcome](outcome === 'success'
+      ? { statusCode: 200, data: { code: 1, data: ['old cart'] } } : { errMsg: 'timeout' })
+    await assert.rejects(pending, error => error.staleStore === true)
+  })
+}

@@ -13,8 +13,6 @@ import java.util.Collections;
 import com.junzhou.utils.JwtUtil;
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -41,12 +39,12 @@ public class HttpClientTest {
 
     @Test
     public void testGet() throws Exception {
-        RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
-        ValueOperations<String, Object> values = mock(ValueOperations.class);
-        when(redis.opsForValue()).thenReturn(values);
-        when(values.get("junzhou:v2:tenant:1:store:1:shop-status")).thenReturn(0);
         ShopController controller = new ShopController();
-        ReflectionTestUtils.setField(controller, "redisTemplate", redis);
+        com.junzhou.service.StoreSettingsService settings = mock(com.junzhou.service.StoreSettingsService.class);
+        com.junzhou.entity.StoreSettings current = new com.junzhou.entity.StoreSettings();
+        current.setOpen(false);
+        when(settings.current()).thenReturn(current);
+        ReflectionTestUtils.setField(controller, "settings", settings);
 
         com.junzhou.context.RequestScope.set(new com.junzhou.context.RequestScope(null, null, 1L, 1L, Collections.emptySet()));
         try {

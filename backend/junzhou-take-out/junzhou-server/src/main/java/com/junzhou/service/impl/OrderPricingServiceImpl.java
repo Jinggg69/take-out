@@ -3,8 +3,6 @@ package com.junzhou.service.impl;
 import com.junzhou.service.OrderPricingService;
 
 import com.junzhou.constant.MessageConstant;
-import com.junzhou.constant.StatusConstant;
-import com.junzhou.context.BaseContext;
 import com.junzhou.entity.Dish;
 import com.junzhou.entity.Setmeal;
 import com.junzhou.entity.SetmealDish;
@@ -29,7 +27,7 @@ import java.util.List;
 /** Shared checkout rules; cached cart prices and client fees are never pricing inputs. */
 @Service
 public class OrderPricingServiceImpl implements OrderPricingService {
-    private static final BigDecimal DELIVERY_FEE = new BigDecimal("6.00");
+    @Autowired private com.junzhou.service.StoreSettingsService storeSettings;
     private static final BigDecimal MAX_ORDER_AMOUNT = new BigDecimal("99999999.99");
     @Autowired private ShoppingCartMapper shoppingCartMapper;
     @Autowired private DishMapper dishMapper;
@@ -46,6 +44,7 @@ public class OrderPricingServiceImpl implements OrderPricingService {
         if (cart == null || cart.isEmpty()) {
             throw new ShoppingCartBusinessException(MessageConstant.SHOPPING_CART_IS_NULL);
         }
+        com.junzhou.entity.StoreSettings settings = storeSettings.requireOpen();
         BigDecimal goods = new BigDecimal("0.00");
         long count = 0;
         List<ShoppingCart> items = new ArrayList<>();
@@ -54,21 +53,38 @@ public class OrderPricingServiceImpl implements OrderPricingService {
                     || (row.getDishId() == null) == (row.getSetmealId() == null)) {
                 throw new OrderBusinessException("购物车商品或数量异常，请返回菜单检查");
             }
-            ShoppingCart item = refreshItem(row);
+            ShoppingCart item = priceAvailableItem(row);
             goods = goods.add(item.getAmount().multiply(BigDecimal.valueOf(item.getNumber())));
             count += item.getNumber();
             items.add(item);
         }
-        BigDecimal total = goods.add(BigDecimal.valueOf(count)).add(DELIVERY_FEE);
+        if (goods.compareTo(settings.getMinimumOrderAmount()) < 0) {
+            throw new OrderBusinessException("商品金额未达到门店起送价");
+        }
+        if (count > Integer.MAX_VALUE) throw new OrderBusinessException("商品数量超出允许范围");
+        BigDecimal packFee = settings.getPackFeePerItem().multiply(BigDecimal.valueOf(count));
+        BigDecimal deliveryFee = settings.getDeliveryFee();
+        if (settings.getFreeDeliveryThreshold() != null && goods.compareTo(settings.getFreeDeliveryThreshold()) >= 0)
+            deliveryFee = new BigDecimal("0.00");
+        BigDecimal total = goods.add(packFee).add(deliveryFee);
         if (total.compareTo(MAX_ORDER_AMOUNT) > 0) {
             throw new OrderBusinessException("订单金额超出允许范围，请减少商品数量");
         }
-        return new OrderQuoteVO(items, goods, (int) count, DELIVERY_FEE, total);
+        return new OrderQuoteVO(items, goods, (int) count, deliveryFee, total, packFee, settings.getId(), settings.getVersion());
     }
 
     /** {@inheritDoc} */
     @Override
     public ShoppingCart refreshItem(ShoppingCart row) {
+        requireOpenStore();
+        return priceAvailableItem(row);
+    }
+
+    private void requireOpenStore() {
+        storeSettings.requireOpen();
+    }
+
+    private ShoppingCart priceAvailableItem(ShoppingCart row) {
         ShoppingCart item = new ShoppingCart();
         BeanUtils.copyProperties(row, item);
         if (row.getDishId() != null) {
@@ -77,8 +93,8 @@ public class OrderPricingServiceImpl implements OrderPricingService {
             item.setName(dish.getName());
             item.setImage(dish.getImage());
         } else {
-            Setmeal setmeal = setmealMapper.getById(row.getSetmealId());
-            if (setmeal == null || !StatusConstant.ENABLE.equals(setmeal.getStatus())) {
+            Setmeal setmeal = setmealMapper.getAvailableForStore(row.getSetmealId());
+            if (setmeal == null) {
                 throw new OrderBusinessException("购物车中的套餐已停售或删除，请返回菜单检查");
             }
             if (setmealDishMapper.countInvalidDishes(setmeal.getId()) != 0) {
@@ -104,8 +120,8 @@ public class OrderPricingServiceImpl implements OrderPricingService {
 
     /** 校验菜品是否可售。 */
     private Dish requireAvailableDish(Long id) {
-        Dish dish = dishMapper.getById(id);
-        if (dish == null || !StatusConstant.ENABLE.equals(dish.getStatus())) {
+        Dish dish = dishMapper.getAvailableForStore(id);
+        if (dish == null) {
             throw new OrderBusinessException("购物车或套餐中的菜品已停售或删除，请返回菜单检查");
         }
         return dish;

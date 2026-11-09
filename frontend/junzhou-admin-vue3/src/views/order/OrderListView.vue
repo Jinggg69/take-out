@@ -9,7 +9,7 @@ import DataState from '@/components/DataState.vue'
 import FormFeedback from '@/components/FormFeedback.vue'
 import { orderApi as api } from '@/api'
 import type { OrderAction, OrderId, OrderRecord, OrderStatistics } from '@/api/order'
-import { actionLabels, cancellationReasons, orderActions, orderMoney, orderReason, orderRefundLabel, orderStatusLabel, orderTabs, rejectionReasons, shouldOpenNextOrder } from '@/utils/order'
+import { actionLabels, cancellationReasons, orderActions, orderBill, orderMoney, orderReason, orderRefundLabel, orderStatusLabel, orderTabs, rejectionReasons, shouldOpenNextOrder } from '@/utils/order'
 import { errorMessage } from '@/utils/error-message'
 import { createOrderList } from './list-state'
 
@@ -23,6 +23,7 @@ const route = useRoute(); const router = useRouter()
 const statistics = ref<OrderStatistics | null>(null)
 const statisticsError = ref('')
 const detailVisible = ref(false); const detail = ref<OrderRecord | null>(null)
+const detailBill = computed(() => detail.value ? orderBill(detail.value) : null)
 const detailLoading = ref(false); const detailError = ref(''); const detailId = ref<OrderId>('')
 const autoNext = ref(true); const busy = ref(false)
 const actionError = ref(''); const actionFeedback = ref<InstanceType<typeof FormFeedback>>(); const listFeedback = ref<InstanceType<typeof FormFeedback>>()
@@ -486,10 +487,10 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
         </ElTable>
         <h3>费用</h3>
         <dl class="order-detail-grid order-bill">
-          <dt>菜品小计</dt><dd>￥{{ orderMoney(Number(detail.amount) - 6 - Number(detail.packAmount || 0)) }}</dd>
-          <dt>派送费</dt><dd>￥6.00</dd>
-          <dt>打包费</dt><dd>￥{{ orderMoney(detail.packAmount) }}</dd>
-          <dt>合计</dt><dd><strong>￥{{ orderMoney(detail.amount) }}</strong></dd>
+          <dt>菜品小计</dt><dd>￥{{ orderMoney(detailBill?.goodsAmount) }}</dd>
+          <dt>派送费</dt><dd>￥{{ orderMoney(detailBill?.deliveryFee) }}</dd>
+          <dt>打包费</dt><dd>￥{{ orderMoney(detailBill?.packFee) }}</dd>
+          <dt>合计</dt><dd><strong>￥{{ orderMoney(detailBill?.amount) }}</strong></dd>
           <dt>支付渠道</dt><dd>{{ detail.payMethod === 1 ? '微信支付' : '支付宝支付' }}</dd>
           <dt>支付时间</dt><dd>{{ detail.checkoutTime || '—' }}</dd>
         </dl>

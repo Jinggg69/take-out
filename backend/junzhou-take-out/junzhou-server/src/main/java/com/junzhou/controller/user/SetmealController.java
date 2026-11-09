@@ -1,9 +1,7 @@
 package com.junzhou.controller.user;
 
-import com.junzhou.constant.StatusConstant;
 import com.junzhou.entity.Setmeal;
 import com.junzhou.result.Result;
-import com.junzhou.cache.ScopedCache;
 import com.junzhou.service.SetmealService;
 import com.junzhou.vo.DishItemVO;
 import io.swagger.annotations.Api;
@@ -13,7 +11,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.data.redis.core.RedisTemplate;
 
 import java.util.List;
 
@@ -24,7 +21,7 @@ public class SetmealController {
     @Autowired
     private SetmealService setmealService;
     @Autowired
-    private RedisTemplate<String, Object> redisTemplate;
+    private com.junzhou.service.StoreMenuService storeMenuService;
 
     /**
      * 条件查询
@@ -35,16 +32,8 @@ public class SetmealController {
     @GetMapping("/list")
     @ApiOperation("根据分类id查询套餐")
     public Result<List<Setmeal>> list(Long categoryId) {
-        String key = ScopedCache.setmealKey(categoryId);
-        List<Setmeal> cached = (List<Setmeal>) redisTemplate.opsForValue().get(key);
-        if (cached != null) return Result.success(cached);
-        Setmeal setmeal = new Setmeal();
-        setmeal.setCategoryId(categoryId);
-        setmeal.setStatus(StatusConstant.ENABLE);
-
-        List<Setmeal> list = setmealService.list(setmeal);
-        redisTemplate.opsForValue().set(key, list);
-        return Result.success(list);
+        com.junzhou.context.RequestScope.requireStoreId();
+        return Result.success(storeMenuService.publicSetmeals(categoryId));
     }
 
     /**

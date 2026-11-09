@@ -24,6 +24,7 @@ import {
 	getShopStatus,
 	// 获取店铺联系方式
 	getMerchantInfo,
+	getStores,
 } from "../api/api.js"
 import { mapState, mapMutations } from "vuex"
 import { baseUrl } from "../../utils/env"
@@ -31,6 +32,8 @@ export default {
 	data() {
 		return {
 			title: "Hello",
+			stores: [],
+			menuRequestId: 0,
 			// 去结算部分
 			openOrderCartList: false,
 			// 存放左侧滚动区域菜品分类数组
@@ -86,6 +89,9 @@ export default {
 	},
 	//   计算属性
 	computed: {
+		selectedStoreIndex() {
+			return Math.max(0, this.stores.findIndex(item => String(item.id) === String(this.$store.state.selectedStoreId)))
+		},
 		// 购物车信息列表
 		orderListDataes: function () {
 			return this.orderListData()
@@ -145,6 +151,27 @@ export default {
 		}
 	},
 	methods: {
+		switchStore(event) {
+			const selected = this.stores[Number(event.detail.value)]
+			if (!selected || String(selected.id) === String(this.$store.state.selectedStoreId)) return
+			this.$store.commit('selectStore', selected.id)
+			this.menuRequestId++
+			this.typeListData = []; this.dishListData = []; this.dishListItems = []
+			this.rightIdAndType = {}; this.dishDetailes = {}; this.dishMealData = null
+			this.moreNormDishdata = null; this.moreNormdata = null; this.flavorDataes = []
+			this.openDetailPop = false; this.openMoreNormPop = false; this.openOrderCartList = false
+			this.orderDishNumber = 0; this.orderDishPrice = 0; this.typeIndex = 0
+			this.shopStatus = null; this.phoneData = ''
+			this.init()
+		},
+		async loadStores() {
+			try {
+				const res = await getStores()
+				if (Array.isArray(res.data)) this.stores = res.data
+			} catch (error) {
+				if (!error.staleStore) uni.showToast({ title: error.msg || '门店列表加载失败', icon: 'none' })
+			}
+		},
 		//   vuex储存信息
 		...mapMutations([
 			"setShopInfo", //设置店铺信息
@@ -264,7 +291,9 @@ export default {
 				this.typeIndex = 0
 			}
 
-			// 获取店铺联系方式
+			// 获取当前门店配置和营业状态
+			this.loadStores()
+			this.getShopInfo()
 			this.getMerchantInfo()
 			getCategoryList().then((res) => {
 				if (res && res.code === 1) {
@@ -273,7 +302,7 @@ export default {
 						this.getDishListDataes(res.data[this.typeIndex || 0])
 					}
 				}
-			})
+			}).catch(() => {})
 			// 调用一次购物车集合---初始化
 			this.getTableOrderDishListes()
 		},
@@ -348,6 +377,9 @@ export default {
 		},
 		// 获取菜品列表
 		async getDishListDataes(params, index) {
+			if (!params || !params.id) return
+			const generation = this.$store.state.storeGeneration
+			const requestId = ++this.menuRequestId
 			this.rightIdAndType = {}
 			this.rightIdAndType = {
 				id: params.id,
@@ -360,6 +392,7 @@ export default {
 			if (params.type === 1) {
 				await dishListByCategoryId(param)
 					.then((res) => {
+						if (requestId !== this.menuRequestId) return
 						if (res && res.code === 1) {
 							// 添加一个字段去实时更新加入购物车number数量 ----- newCardNumber
 							this.dishListData =
@@ -376,6 +409,7 @@ export default {
 				// 套餐
 				await querySetmeaList(param)
 					.then((success) => {
+						if (requestId !== this.menuRequestId) return
 						if (success && success.code === 1) {
 							// dishListItems被转换数组---原始this.dishListData
 							this.dishListData =
@@ -389,14 +423,15 @@ export default {
 					})
 					.catch((err) => { })
 			}
-			this.typeIndex = index
+			if (generation !== this.$store.state.storeGeneration || requestId !== this.menuRequestId) return
+			this.typeIndex = index || 0
 			this.setOrderNum()
 		},
 		// 获取首页店铺信息
 		async getShopInfo() {
 			await getShopStatus()
 				.then((res) => {
-					this.shopStatus = res.data
+					this.shopStatus = Number(res.data)
 					console.log(res.data);
 					this.setShopStatus(res.data)
 				})
@@ -406,7 +441,9 @@ export default {
 		async getMerchantInfo() {
 			await getMerchantInfo()
 				.then((res) => {
-					this.phoneData = res.data.phone
+					this.setShopInfo({ ...res.data, shopName: res.data.name, shopAddress: res.data.address, shopId: res.data.id })
+					this.setDeliveryFee(res.data.deliveryFee)
+					this.phoneData = res.data.phone || ''
 					console.log(res);
 					this.setShopPhone(res.data)
 				})
@@ -424,6 +461,7 @@ export default {
 					if (res.code === 1) {
 						this.initdishListMut(res.data)
 						this.computOrderInfo()
+						this.setOrderNum()
 					}
 				})
 				.catch((err) => { })

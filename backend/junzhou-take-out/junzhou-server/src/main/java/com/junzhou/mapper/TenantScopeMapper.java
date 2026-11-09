@@ -19,4 +19,6 @@ public interface TenantScopeMapper {
 
     @Select("select s.tenant_id from store s join tenant t on t.id=s.tenant_id and t.status=1 where s.id=#{id} and s.status=1")
     Long activeStoreTenant(Long id);
+    @Select("select s.tenant_id from store s join tenant t on t.id=s.tenant_id and t.status=1 where s.id=#{id}")
+    Long storeTenantForDiscovery(Long id);
 }

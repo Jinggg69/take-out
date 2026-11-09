@@ -29,4 +29,7 @@ public interface TenantScopeService {
      * @throws SecurityException 门店不存在或不可用时拒绝访问
      */
     RequestScope forUser(Long userId, Long selectedStore);
+
+    /** A saved store may be disabled while the customer selects another active store. */
+    RequestScope forStoreDiscovery(Long userId, Long selectedStore);
 }

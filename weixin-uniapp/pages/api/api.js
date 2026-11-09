@@ -371,3 +371,6 @@ export const queryOrdersCheckStatus = (params) =>
 	})
 
 
+
+// 同租户可选门店
+export const getStores = () => request({ url: '/user/stores', method: 'GET' })

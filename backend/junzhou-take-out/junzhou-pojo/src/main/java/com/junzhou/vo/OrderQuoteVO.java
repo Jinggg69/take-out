@@ -17,4 +17,12 @@ public class OrderQuoteVO implements Serializable {
     private Integer packAmount;
     private BigDecimal deliveryFee;
     private BigDecimal amount;
+    private BigDecimal packFee;
+    private Long storeId;
+    private Long configVersion;
+
+    public OrderQuoteVO(List<ShoppingCart> items, BigDecimal goodsAmount, Integer packAmount,
+                        BigDecimal deliveryFee, BigDecimal amount) {
+        this(items, goodsAmount, packAmount, deliveryFee, amount, BigDecimal.valueOf(packAmount), null, null);
+    }
 }

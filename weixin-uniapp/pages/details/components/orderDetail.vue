@@ -2,7 +2,7 @@
 <template>
   <view class="box order_list_cont" v-if="Object.keys(orderDetailsData).length">
     <view class="order_list">
-      <view class="word_text"><view class="brand-order-heading"><image class="brand-order-logo" src="../../../static/brand/junzhou-logo.png" mode="aspectFit"></image><text>均州鱼庄</text></view><text class="word_style">{{ orderDetailsData.shopName }}</text></view>
+      <view class="word_text"><view class="brand-order-heading"><image class="brand-order-logo" src="../../../static/brand/junzhou-logo.png" mode="aspectFit"></image><text>均州鱼庄</text></view><text class="word_style">{{ storeName }}</text></view>
       <view class="order-type">
         <view class="type_item" v-for="(obj, index) in orderDataes" :key="index">
           <view class="dish_img">
@@ -36,7 +36,7 @@
           <view class="orderInfo">
             <text class="text">打包费</text>
             <text class="may">￥</text>
-            {{ orderDetailsData.packAmount }}
+            {{ packFee.toFixed(2) }}
           </view>
           <view class="orderInfo">
             <text class="text">配送费</text>
@@ -47,7 +47,7 @@
             合计
             <text class="text">
               <text>￥</text>
-              {{ orderDetailsData.amount }}
+              {{ totalAmount.toFixed(2) }}
             </text>
           </view>
         </view>
@@ -56,11 +56,15 @@
   </view>
 </template>
 <script>
+import { orderSnapshotMoney, orderSnapshotStoreName } from "../../../utils/order-snapshot";
 import { DELIVERY_FEE } from "../../../utils/order-pricing";
 export default {
   computed: {
+    storeName() { return orderSnapshotStoreName(this.orderDetailsData); },
+    packFee() { return orderSnapshotMoney(this.orderDetailsData, "packFee", this.orderDetailsData.packAmount); },
+    totalAmount() { return orderSnapshotMoney(this.orderDetailsData, "amount", this.orderDetailsData.amount); },
     deliveryFee() {
-      return DELIVERY_FEE;
+      return orderSnapshotMoney(this.orderDetailsData, "deliveryFee", this.orderDetailsData.deliveryFee == null ? DELIVERY_FEE : this.orderDetailsData.deliveryFee);
     },
   },
   // 获取父级传的数据

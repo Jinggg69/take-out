@@ -7,4 +7,5 @@ export const primaryNavigation = [
   { path: '/category', label: '分类管理', icon: 'category' },
   { path: '/employee', label: '员工管理', icon: 'employee' },
   { path: '/access', label: '角色与任职', icon: 'employee' },
+  { path: '/store', label: '门店设置与菜单', icon: 'shop' },
 ] as const

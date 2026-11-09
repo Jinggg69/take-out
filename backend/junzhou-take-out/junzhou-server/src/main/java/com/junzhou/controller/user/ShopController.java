@@ -1,12 +1,10 @@
 package com.junzhou.controller.user;
 
 import com.junzhou.result.Result;
-import com.junzhou.cache.ScopedCache;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 @RestController("userShopController")
@@ -15,8 +13,8 @@ import org.springframework.web.bind.annotation.*;
 @Slf4j
 public class ShopController {
 
-    @Autowired
-    private RedisTemplate<String, Object> redisTemplate;
+    @Autowired private com.junzhou.service.StoreSettingsService settings;
+
 
     /**
      * 获取店铺营业状态
@@ -24,11 +22,10 @@ public class ShopController {
     @GetMapping("/status")
     @ApiOperation("获取店铺营业状态")
     public Result<Integer> getStatus() {
-        Integer status = (Integer) redisTemplate.opsForValue().get(ScopedCache.shopStatusKey());
-        if (status == null) {
-            status = 1; // 默认状态为营业中
-        }
-        log.info("获取店铺营业状态为：{}", status == 1 ? "营业中" : "打烊中");
-        return Result.success(status);
+        return Result.success(settings.current().getOpen() ? 1 : 0);
+    }
+    @GetMapping("/getMerchantInfo")
+    public Result<com.junzhou.entity.StoreSettings> merchant() {
+        return Result.success(settings.current());
     }
 }

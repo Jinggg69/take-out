@@ -27,3 +27,21 @@ export function orderReason(selected: string, custom: string, label: string) {
 }
 export function shouldOpenNextOrder(auto: boolean, fromDetail: boolean, tab: number, status: number, remaining: number) { return auto && fromDetail && tab === 2 && status === 2 && remaining > 1 }
 export function orderMoney(amount: unknown) { const number = Number(amount ?? 0); return Number.isFinite(number) ? number.toFixed(2) : '0.00' }
+
+export function orderBill(order: Pick<OrderRecord, 'amount' | 'packAmount' | 'pricingSnapshot'>) {
+  let snapshot: Record<string, unknown> = {}
+  try {
+    const parsed: unknown = JSON.parse(order.pricingSnapshot || '{}')
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) snapshot = parsed as Record<string, unknown>
+  } catch { /* Orders created before pricing snapshots keep their legacy breakdown. */ }
+  const monetary = (value: unknown) => {
+    if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) return undefined
+    const number = Number(value)
+    return Number.isFinite(number) && number >= 0 ? number : undefined
+  }
+  const amount = monetary(snapshot.amount) ?? monetary(order.amount) ?? 0
+  const packFee = monetary(snapshot.packFee) ?? monetary(order.packAmount) ?? 0
+  const deliveryFee = monetary(snapshot.deliveryFee) ?? 6
+  const goodsAmount = monetary(snapshot.goodsAmount) ?? amount - packFee - deliveryFee
+  return { goodsAmount, packFee, deliveryFee, amount }
+}

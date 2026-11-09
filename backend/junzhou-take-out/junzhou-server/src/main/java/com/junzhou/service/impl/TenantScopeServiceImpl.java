@@ -59,4 +59,11 @@ public class TenantScopeServiceImpl implements TenantScopeService {
         }
         return new RequestScope(null, userId, tenant, selectedStore, Collections.emptySet());
     }
+    @Override
+    public RequestScope forStoreDiscovery(Long userId, Long selectedStore) {
+        if (selectedStore == null || selectedStore <= 0) throw new SecurityException("Store is required");
+        Long tenant = mapper.storeTenantForDiscovery(selectedStore);
+        if (tenant == null) throw new SecurityException("Store or tenant is missing");
+        return new RequestScope(null,userId,tenant,selectedStore,Collections.emptySet());
+    }
 }

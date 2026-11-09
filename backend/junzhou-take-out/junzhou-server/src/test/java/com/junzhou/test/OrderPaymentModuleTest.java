@@ -52,6 +52,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mybatis.spring.SqlSessionFactoryBean;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.mybatis.spring.mapper.ClassPathMapperScanner;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -171,13 +172,17 @@ class OrderPaymentModuleTest {
         jdbc.execute("alter table shopping_cart add (tenant_id bigint default 1 not null, store_id bigint default 1 not null)");
         jdbc.execute("alter table dish add tenant_id bigint default 1 not null");
         jdbc.execute("alter table setmeal add tenant_id bigint default 1 not null");
+        jdbc.execute("create table store_dish(tenant_id bigint,store_id bigint,dish_id bigint,on_sale int,sold_out int,override_price decimal(10,2))");
+        jdbc.execute("insert into store_dish select tenant_id,1,id,1,0,null from dish");
+        jdbc.execute("create table store_setmeal(tenant_id bigint,store_id bigint,setmeal_id bigint,on_sale int,sold_out int,override_price decimal(10,2))");
+        jdbc.execute("insert into store_setmeal select tenant_id,1,id,1,0,null from setmeal");
         mvc = MockMvcBuilders.webAppContextSetup(context).build();
     }
 
     @Test
     void orderSqlScopesReadsWritesChildrenRefundsAndStatistics() {
         jdbc.execute("insert into tenant values(2,1)");
-        jdbc.execute("insert into store values(2,1,1),(3,2,1)");
+        jdbc.execute("insert into store(id,tenant_id,status) values(2,1,1),(3,2,1)");
         jdbc.execute("insert into orders(id,number,status,user_id,address_book_id,order_time,pay_method,pay_status,amount,tenant_id,store_id) values "
                 + "(20,'store-a2',1,42,101,current_timestamp,1,0,25,1,2),(30,'tenant-b',1,42,101,current_timestamp,1,0,25,2,3),"
                 + "(40,'other-user',1,84,101,current_timestamp,1,0,25,1,1),(50,'bad-store',1,42,101,current_timestamp,1,0,25,1,3)");
@@ -222,7 +227,7 @@ class OrderPaymentModuleTest {
 
     @Test void verifiedCallbackWorksAfterAnotherTenantIsAdded() throws Exception {
         jdbc.execute("insert into tenant values(2,1)");
-        jdbc.execute("insert into store values(2,2,1)");
+        jdbc.execute("insert into store(id,tenant_id,status) values(2,2,1)");
         mvc.perform(signedNotification("/notify/paySuccess",paymentResource("order-10","wx-10"),"TRANSACTION.SUCCESS"))
                 .andExpect(status().isOk());
         assertEquals(1,paymentState(10));
@@ -253,7 +258,7 @@ class OrderPaymentModuleTest {
         WeChatProperties other=new WeChatProperties(); other.setMchid("merchant-other"); other.setAppid("test-app");
         SignedWechatNotifications signer=new SignedWechatNotifications(other,notificationKeys);
         context.getBean(WeChatProperties.class).getAccounts().put("other",other);
-        jdbc.execute("insert into tenant values(2,1)"); jdbc.execute("insert into store values(2,2,1)");
+        jdbc.execute("insert into tenant values(2,1)"); jdbc.execute("insert into store(id,tenant_id,status) values(2,2,1)");
         jdbc.execute("insert into payment_account values('other',2,2,'merchant-other','test-app')");
         JSONObject resource=paymentResource("order-10","wx-10"); resource.put("mchid","merchant-other");
         SignedWechatNotifications.Signed signed=signer.wrap(resource,"TRANSACTION.SUCCESS");
@@ -272,7 +277,7 @@ class OrderPaymentModuleTest {
         WeChatProperties shared=new WeChatProperties();
         org.springframework.beans.BeanUtils.copyProperties(original,shared,"accounts");
         original.getAccounts().put("store-two",shared);
-        jdbc.execute("insert into tenant values(2,1)"); jdbc.execute("insert into store values(2,2,1)");
+        jdbc.execute("insert into tenant values(2,1)"); jdbc.execute("insert into store(id,tenant_id,status) values(2,2,1)");
         jdbc.execute("insert into payment_account values('store-two',2,2,'test-merchant','test-app')");
         jdbc.execute("update orders set tenant_id=2,store_id=2,payment_account_id='store-two' where id=10");
         mvc.perform(signedNotification("/notify/refundSuccess",refundResource("SUCCESS"),"REFUND.SUCCESS"))
@@ -473,6 +478,104 @@ class OrderPaymentModuleTest {
         mvc.perform(get("/user/order/quote").header("authentication", token()))
                 .andExpect(jsonPath("$.code").value(0));
         assertSubmissionUntouched();
+    }
+
+    @Test
+    void settingsSqlPersistsVersionAndRejectsStaleEdits() {
+        RequestScope.set(new RequestScope(null,42L,1L,1L,java.util.Collections.emptySet()));
+        try {
+            com.junzhou.service.StoreSettingsService service = context.getBean(com.junzhou.service.StoreSettingsService.class);
+            com.junzhou.entity.StoreSettings settings = service.current();
+            settings.setAddress("门店地址"); settings.setLatitude(new BigDecimal("31.123456"));
+            settings.setLongitude(new BigDecimal("121.654321")); settings.setDeliveryFee(new BigDecimal("2.50"));
+            service.save(settings);
+            assertEquals(1L,service.current().getVersion());
+            assertEquals(new BigDecimal("2.50"),service.current().getDeliveryFee());
+            settings.setVersion(0L);
+            assertThrows(com.junzhou.exception.OrderBusinessException.class, () -> service.save(settings));
+            assertEquals(1L,service.current().getVersion());
+        } finally { RequestScope.clear(); }
+    }
+
+    @Test
+    void storeFeesAreQuotedAndFrozenOnTheOrder() throws Exception {
+        jdbc.update("insert into store_settings(tenant_id,store_id,pack_fee_per_item,delivery_fee,free_delivery_threshold) values(1,1,0.50,9,25)");
+        mvc.perform(get("/user/order/quote").header("authentication", token()))
+                .andExpect(jsonPath("$.data.packFee").value(1.00))
+                .andExpect(jsonPath("$.data.deliveryFee").value(0))
+                .andExpect(jsonPath("$.data.amount").value(26.00));
+        submit("26.00", 2).andExpect(jsonPath("$.code").value(1));
+        String snapshot = jdbc.queryForObject("select pricing_snapshot from orders where id<>10",String.class);
+        assertEquals(0, new BigDecimal("1.00").compareTo(JSON.parseObject(snapshot).getBigDecimal("packFee")));
+        jdbc.update("update store_settings set pack_fee_per_item=3,delivery_fee=20,version=1");
+        assertEquals(snapshot, jdbc.queryForObject("select pricing_snapshot from orders where id<>10",String.class));
+        JSONObject storeSnapshot = JSON.parseObject(jdbc.queryForObject("select store_snapshot from orders where id<>10",String.class));
+        assertNotNull(storeSnapshot.getBigDecimal("latitude"));
+        assertNotNull(storeSnapshot.getBigDecimal("longitude"));
+        assertFalse(storeSnapshot.getString("address").isEmpty());
+    }
+
+    @Test
+    void minimumOrderUsesGoodsAmount() throws Exception {
+        jdbc.update("insert into store_settings(tenant_id,store_id,minimum_order_amount) values(1,1,30)");
+        submit("33.00",2).andExpect(jsonPath("$.code").value(0));
+        assertSubmissionUntouched();
+    }
+
+    @Test
+    void storeSettingsChangedDuringMapLookupRejectSubmissionWithoutCartLoss() throws Exception {
+        deliveryEntered = new CountDownLatch(1); deliveryContinue = new CountDownLatch(1);
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> submitted = pool.submit(() -> {
+                RequestScope.set(new RequestScope(null,42L,1L,1L,java.util.Collections.emptySet()));
+                try { return context.getBean(OrderService.class).orderSubmit(submission("33.00")); }
+                finally { RequestScope.clear(); }
+            });
+            assertTrue(deliveryEntered.await(10,TimeUnit.SECONDS));
+            jdbc.update("insert into store_settings(tenant_id,store_id,version) values(1,1,1)");
+            deliveryContinue.countDown();
+            ExecutionException failure = assertThrows(ExecutionException.class, () -> submitted.get(10,TimeUnit.SECONDS));
+            assertTrue(failure.getCause() instanceof com.junzhou.exception.OrderBusinessException);
+            assertSubmissionUntouched();
+        } finally { deliveryContinue.countDown(); pool.shutdownNow(); assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS)); }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "update tenant set status=0", "update store set status=0",
+            "update store_dish set on_sale=0", "delete from store_dish"
+    })
+    void unavailableStoreItemBlocksQuoteAndReorder(String update) throws Exception {
+        jdbc.update(update);
+        jdbc.update("insert into order_detail(name,order_id,dish_id,number,amount) values('snapshot',10,5,1,1)");
+        mvc.perform(get("/user/order/quote").header("authentication", token()))
+                .andExpect(jsonPath("$.code").value(0));
+        mvc.perform(post("/user/order/repetition/10").header("authentication", token()))
+                .andExpect(jsonPath("$.code").value(0));
+        assertEquals(2, jdbc.queryForObject("select number from shopping_cart where user_id=42", Integer.class));
+    }
+
+    @Test
+    void closedStoreRejectsQuote() throws Exception {
+        RedisTemplate<String,Object> redis = context.getBean("redisTemplate", RedisTemplate.class);
+        org.mockito.Mockito.when(redis.opsForValue().get(org.mockito.ArgumentMatchers.anyString())).thenReturn(0);
+        mvc.perform(get("/user/order/quote").header("authentication", token()))
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    void quoteUsesStorePriceAndRejectsSoldOutSetmealComponent() throws Exception {
+        jdbc.update("update store_dish set override_price=0 where dish_id=5");
+        mvc.perform(get("/user/order/quote").header("authentication", token()))
+                .andExpect(jsonPath("$.data.amount").value(8.00));
+        jdbc.update("update shopping_cart set dish_id=null,setmeal_id=8 where user_id=42");
+        jdbc.update("update store_setmeal set override_price=10 where setmeal_id=8");
+        mvc.perform(get("/user/order/quote").header("authentication", token()))
+                .andExpect(jsonPath("$.data.amount").value(28.00));
+        jdbc.update("update store_dish set sold_out=1 where dish_id=5");
+        mvc.perform(get("/user/order/quote").header("authentication", token()))
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -700,8 +803,16 @@ class OrderPaymentModuleTest {
         assertEquals(2,jdbc.queryForObject("select count(*) from shopping_cart",Integer.class));
     }
 
+    private void enforceCartIdentity() {
+        jdbc.execute("alter table shopping_cart add product_type int generated always as (case when dish_id is null then 1 else 0 end)");
+        jdbc.execute("alter table shopping_cart add product_id bigint generated always as (coalesce(dish_id,setmeal_id))");
+        jdbc.execute("alter table shopping_cart add flavor_key varbinary(200) generated always as (stringtoutf8(coalesce(dish_flavor,'')))");
+        jdbc.execute("create unique index uk_cart_identity on shopping_cart(tenant_id,store_id,user_id,product_type,product_id,flavor_key)");
+    }
+
     @Test
-    void anAddDuringCheckoutWaitsAndRemainsInTheNewCart() throws Exception {
+    void mapValidationAllowsCartWritesAndCheckoutRechecksQuantity() throws Exception {
+        enforceCartIdentity();
         deliveryEntered=new CountDownLatch(1); deliveryContinue=new CountDownLatch(1);
         ExecutorService pool=Executors.newFixedThreadPool(2);
         try {
@@ -716,18 +827,19 @@ class OrderPaymentModuleTest {
                 try { ShoppingCartDTO input=new ShoppingCartDTO(); input.setDishId(5L); context.getBean(ShoppingCartService.class).add(input); }
                 finally { BaseContext.removeCurrentId(); RequestScope.clear(); }
             });
-            assertBlocked(added);
+            added.get(10,TimeUnit.SECONDS);
             deliveryContinue.countDown();
-            submitted.get(10,TimeUnit.SECONDS); added.get(10,TimeUnit.SECONDS);
+            assertThrows(ExecutionException.class, () -> submitted.get(10,TimeUnit.SECONDS));
             assertEquals(1,jdbc.queryForObject("select count(*) from shopping_cart where user_id=42",Integer.class));
-            assertEquals(1,jdbc.queryForObject("select number from shopping_cart where user_id=42",Integer.class));
-            assertEquals(2,jdbc.queryForObject("select number from order_detail",Integer.class));
+            assertEquals(3,jdbc.queryForObject("select number from shopping_cart where user_id=42",Integer.class));
+            assertEquals(0,jdbc.queryForObject("select count(*) from order_detail",Integer.class));
             assertEquals(1,jdbc.queryForObject("select count(*) from shopping_cart where user_id=84",Integer.class));
         } finally { deliveryContinue.countDown(); pool.shutdownNow(); assertTrue(pool.awaitTermination(10,TimeUnit.SECONDS)); }
     }
 
     @Test
     void checkoutReadsTheCartAfterThePrecedingWriterCommits() throws Exception {
+        enforceCartIdentity();
         ExecutorService pool=Executors.newSingleThreadExecutor();
         CompletableFuture<Void> submitted=new CompletableFuture<>();
         try {
@@ -1226,7 +1338,6 @@ class OrderPaymentModuleTest {
             Future<String> first=pool.submit(submit);
             assertTrue(deliveryEntered.await(10,TimeUnit.SECONDS));
             Future<String> second=pool.submit(submit);
-            assertBlocked(second);
             deliveryContinue.countDown();
             String firstId=JSON.parseObject(first.get(15,TimeUnit.SECONDS)).getJSONObject("data").getString("id");
             String secondId=JSON.parseObject(second.get(15,TimeUnit.SECONDS)).getJSONObject("data").getString("id");
@@ -1300,6 +1411,20 @@ class OrderPaymentModuleTest {
             includeFilters = @ComponentScan.Filter(type = org.springframework.context.annotation.FilterType.REGEX,
                     pattern = {"com\\.junzhou\\.controller\\.notify\\..*", "com\\.junzhou\\.controller\\.admin\\.OrderController"}))
     static class PaymentTestConfiguration {
+        @Bean com.junzhou.service.StoreSettingsService storeSettingsService() {
+            return new com.junzhou.service.StoreSettingsService();
+        }
+        @Bean com.junzhou.mapper.StoreSettingsMapper storeSettingsMapper(SqlSessionFactory f) {
+            f.getConfiguration().addMapper(com.junzhou.mapper.StoreSettingsMapper.class);
+            return new SqlSessionTemplate(f).getMapper(com.junzhou.mapper.StoreSettingsMapper.class);
+        }
+        @Bean RedisTemplate<String,Object> redisTemplate() {
+            RedisTemplate<String,Object> redis = org.mockito.Mockito.mock(RedisTemplate.class,
+                    org.mockito.Mockito.RETURNS_DEEP_STUBS);
+            org.mockito.Mockito.when(redis.opsForValue().get(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
+            return redis;
+        }
+
         @Bean
         DataSource dataSource() {
             JdbcDataSource source = new JdbcDataSource();
@@ -1335,6 +1460,7 @@ class OrderPaymentModuleTest {
             factory.setPlugins(pageInterceptor);
             factory.setMapperLocations(new ClassPathResource("mapper/OrderMapper.xml"), new ClassPathResource("mapper/RefundRequestMapper.xml"),
                     new ClassPathResource("mapper/OrderDetailMapper.xml"), new ClassPathResource("mapper/ShoppingCartMapper.xml"),
+                    new ClassPathResource("mapper/DishMapper.xml"), new ClassPathResource("mapper/SetmealMapper.xml"),
                     new ClassPathResource("mapper/SetmealDishMapper.xml"));
             return factory.getObject();
         }

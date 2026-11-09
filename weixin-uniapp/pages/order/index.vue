@@ -46,6 +46,7 @@
             :orderListDataes="orderListDataes"
             :orderDishPrice="orderDishPrice"
             :deliveryFee="orderDeliveryFee"
+            :packFee="packFee"
           ></dish-detail>
           <!-- end -->
           <view class="boxPad">

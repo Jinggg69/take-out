@@ -112,6 +112,8 @@ public class Orders implements Serializable {
     private String wechatTradeState;
     private String clientRequestId;
     private String submitFingerprint;
+    private String storeSnapshot;
+    private String pricingSnapshot;
 
     //打包费
     private int packAmount;

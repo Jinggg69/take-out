@@ -44,7 +44,7 @@
                 </view>
                 <!-- 商品数量及金额 -->
                 <view class="numAndAum">
-                  <view><text>￥{{ item.amount.toFixed(2) }}</text></view>
+                  <view><text>￥{{ orderTotal(item).toFixed(2) }}</text></view>
                   <view><text>共{{ numes(item.orderDetailList).count }}件</text></view>
                 </view>
               </view>
@@ -78,6 +78,7 @@
 </template>
 
 <script>
+import { orderSnapshotMoney } from "@/utils/order-snapshot";
 import {
   getOrderPage,
   repetitionOrder,
@@ -161,6 +162,7 @@ export default {
     }
   },
   methods: {
+    orderTotal(order) { return orderSnapshotMoney(order, "amount", order.amount); },
     ...mapMutations(["setAddressBackUrl"]),
     numes(list) {
       let count = 0;

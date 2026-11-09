@@ -12,6 +12,7 @@ export interface OrderRecord {
   cancelReason?: string; rejectionReason?: string; remark?: string; orderDishes?: string
   tablewareNumber?: number; tablewareStatus?: number; packAmount?: number | string; payMethod?: number
   orderDetailList?: OrderItem[]
+  pricingSnapshot?: string | null
   payStatus?: number | string; refundStatus?: RefundStatus | string | null
 }
 export interface OrderQuery { page: number; pageSize: number; number?: string; phone?: string; beginTime?: string; endTime?: string; status?: number }

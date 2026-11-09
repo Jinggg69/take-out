@@ -64,8 +64,13 @@ public class DeliveryRangeServiceImpl implements DeliveryRangeService {
      */
     @Override
     public void validate(String deliveryAddress) {
+        validate(deliveryAddress, null);
+    }
+
+    @Override
+    public void validate(String deliveryAddress, com.junzhou.entity.StoreSettings settings) {
         //1、校验门店配置和收货地址
-        if (blank(shopProperties.getAddress()) || blank(shopProperties.getBaiduAk())) {
+        if (blank(shopProperties.getBaiduAk())) {
             throw new OrderBusinessException("配送服务暂不可用，请联系商家");
         }
         if (blank(deliveryAddress)) {
@@ -73,7 +78,25 @@ public class DeliveryRangeServiceImpl implements DeliveryRangeService {
         }
         try {
             //2、将门店地址和收货地址解析为经纬度坐标
-            String origin = geocode(shopProperties.getAddress());
+            String origin;
+            if (settings != null && settings.getLatitude() != null && settings.getLongitude() != null) {
+                origin = settings.getLatitude().toPlainString() + "," + settings.getLongitude().toPlainString();
+            } else {
+                // Only the original store may use the existing deployment's address.
+                if (settings != null && (!Long.valueOf(1).equals(settings.getId())
+                        || !Long.valueOf(1).equals(com.junzhou.context.RequestScope.requireTenantId()))) {
+                    throw new OrderBusinessException("门店尚未配置配送坐标，请联系商家");
+                }
+                if (blank(shopProperties.getAddress())) throw new OrderBusinessException("配送服务暂不可用，请联系商家");
+                origin = geocode(shopProperties.getAddress());
+                if (settings != null) {
+                    // Capture the resolved legacy origin in the pending order's configuration snapshot.
+                    String[] coordinates = origin.split(",");
+                    settings.setLatitude(new BigDecimal(coordinates[0]));
+                    settings.setLongitude(new BigDecimal(coordinates[1]));
+                    settings.setAddress(shopProperties.getAddress());
+                }
+            }
             String destination = geocode(deliveryAddress);
             //3、查询门店到收货地址的骑行路线
             URI uri = UriComponentsBuilder.fromHttpUrl("https://api.map.baidu.com/directionlite/v1/riding")
@@ -91,8 +114,9 @@ public class DeliveryRangeServiceImpl implements DeliveryRangeService {
             if (distance == null || distance.signum() < 0) {
                 throw new OrderBusinessException("无法获取配送距离，请稍后重试");
             }
-            if (distance.compareTo(MAX_DELIVERY_DISTANCE) > 0) {
-                throw new OrderBusinessException("收货地址超出配送范围（5公里内）");
+            BigDecimal limit = settings == null ? MAX_DELIVERY_DISTANCE : BigDecimal.valueOf(settings.getDeliveryRadiusMeters());
+            if (distance.compareTo(limit) > 0) {
+                throw new OrderBusinessException("收货地址超出门店配送范围");
             }
         } catch (OrderBusinessException ex) {
             throw ex;

@@ -40,8 +40,8 @@ try:
     initializer = (ROOT / "database/junzhou.sql").read_text(encoding="utf-8")
     initializer = re.sub(r"(?im)^\s*(?:CREATE DATABASE|USE)\b[^;]*;", "", initializer)
     migration = (ROOT / "database/migrations/20261105_02_store_menu.sql").read_text(encoding="utf-8")
-    assert initializer.endswith(migration)
-    sql(initializer[:-len(migration)], schema)
+    assert migration in initializer
+    sql(initializer.split(migration, 1)[0], schema)
     sql("INSERT INTO tenant(id,code,name) VALUES(99,'other','Other');"
         "INSERT INTO store(id,tenant_id,code,name) VALUES(21,1,'second','Second'),(22,99,'other','Other');", schema)
     for product in ("dish", "setmeal"):

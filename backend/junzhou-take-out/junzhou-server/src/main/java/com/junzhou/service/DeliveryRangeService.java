@@ -10,4 +10,7 @@ public interface DeliveryRangeService {
      * @param deliveryAddress 完整收货地址
      */
     void validate(String deliveryAddress);
+
+    /** Also fills the legacy origin in settings so checkout can snapshot the resolved configuration. */
+    void validate(String deliveryAddress, com.junzhou.entity.StoreSettings settings);
 }

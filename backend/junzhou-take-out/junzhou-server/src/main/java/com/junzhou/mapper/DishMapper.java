@@ -16,6 +16,8 @@ import java.util.List;
 @Mapper
 public interface DishMapper {
 
+    Dish getAvailableForStore(Long id);
+
     /**
      * 根据分类id查询菜品数量
      * @param categoryId

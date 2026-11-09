@@ -68,7 +68,10 @@ class RequestScopeMvcTest {
                 .andExpect(status().isForbidden());
         assertNull(RequestScope.current()); assertNull(BaseContext.getCurrentId());
         when(mapper.isLegacySingleStore()).thenReturn(0);
-        mvc.perform(get("/user/dish/list").header("X-Store-Id","1")).andExpect(status().isForbidden());
+        when(mapper.activeStoreTenant(2L)).thenReturn(1L);
+        mvc.perform(get("/user/dish/list").header("X-Store-Id","1")).andExpect(status().isOk());
+        mvc.perform(get("/user/dish/list").header("X-Store-Id","2"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$").value("null:1:2"));
     }
     @Configuration static class Config {
         @Bean com.junzhou.service.RbacService rbac(){

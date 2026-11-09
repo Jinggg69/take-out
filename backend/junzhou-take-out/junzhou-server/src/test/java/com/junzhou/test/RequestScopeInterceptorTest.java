@@ -55,7 +55,7 @@ class RequestScopeInterceptorTest {
         assertNull(RequestScope.current());
     }
 
-    @Test void rejectsAnyAdditionalStoreBeforeUnscopedCodeRuns() {
+    @Test void rejectsInactiveOrMissingSelectedStore() {
         TenantScopeMapper mapper = mock(TenantScopeMapper.class);
         RequestScopeInterceptor interceptor = new RequestScopeInterceptor(new TenantScopeServiceImpl(mapper));
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/user/dish/list");
@@ -63,7 +63,31 @@ class RequestScopeInterceptorTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         assertFalse(interceptor.preHandle(request, response, new Object()));
         assertEquals(403, response.getStatus());
-        verify(mapper, never()).activeStoreTenant(anyLong());
+        verify(mapper).activeStoreTenant(2L);
+    }
+
+    @Test void acceptsAnActiveSecondStoreWithItsOwnTenant() {
+        TenantScopeMapper mapper = mock(TenantScopeMapper.class);
+        when(mapper.activeStoreTenant(2L)).thenReturn(7L);
+        RequestScopeInterceptor interceptor = new RequestScopeInterceptor(new TenantScopeServiceImpl(mapper));
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/user/dish/list");
+        request.addHeader("X-Store-Id", "2");
+        assertTrue(interceptor.preHandle(request,new MockHttpServletResponse(),new Object()));
+        assertEquals(7L, RequestScope.requireTenantId());
+        assertEquals(2L, RequestScope.requireStoreId());
+        verify(mapper,never()).isLegacySingleStore();
+    }
+
+    @Test void disabledSavedStoreCanDiscoverOtherStoresButCannotAccessItsMenu() {
+        TenantScopeMapper mapper = mock(TenantScopeMapper.class);
+        when(mapper.storeTenantForDiscovery(2L)).thenReturn(7L);
+        RequestScopeInterceptor interceptor = new RequestScopeInterceptor(new TenantScopeServiceImpl(mapper));
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/user/stores");
+        request.addHeader("X-Store-Id","2");
+        assertTrue(interceptor.preHandle(request,new MockHttpServletResponse(),new Object()));
+        assertEquals(7L,RequestScope.requireTenantId());
+        request.setRequestURI("/user/dish/list");
+        assertFalse(interceptor.preHandle(request,new MockHttpServletResponse(),new Object()));
     }
 
     @Test void reusedTaskThreadClearsStaleScopeEvenWhenTaskFails() throws Exception {

@@ -16,6 +16,8 @@ import java.util.List;
 @Mapper
 public interface SetmealMapper {
 
+    Setmeal getAvailableForStore(Long id);
+
     /**
      * 根据分类id查询套餐的数量
      * @param categoryId

@@ -22,7 +22,7 @@ const mapState = keys => Object.fromEntries(keys.map(key => [key, function () { 
 const mapMutations = keys => Object.fromEntries(keys.map(key => [key, function (value) { this.$store.commit(key, value) }]))
 function createCheckout(submit = () => Promise.resolve({ code: 1, data: { id: 7 } }),
   quote = () => Promise.resolve({ code: 1, data: {
-    items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, deliveryFee: 6, amount: 126,
+    items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, packFee: 1, storeId: 1, configVersion: 0, deliveryFee: 6, amount: 126,
   } })) {
   const store = load('store/index.js', { Vue: { use() {} }, Vuex: { Store: function (options) { return options } } })
   store.commit = (key, value) => store.mutations[key](store.state, value)
@@ -42,11 +42,12 @@ function createCheckout(submit = () => Promise.resolve({ code: 1, data: { id: 7 
   page.address = '测试地址'
   page.addressBookId = 3
   page.arrivalTime = '立即派送'
+  page.packFee = 1
   page.computOrderInfo()
   // Existing checkout-action tests start after a successful initial quotation.
   page.quoteReady = true
   page.packAmount = 1
-  return { page, store, requests, toasts, navigation, quoteRequests }
+  return { page, store, requests, toasts, navigation, quoteRequests, component }
 }
 
 for (const gender of ['0', 0]) {
@@ -71,11 +72,11 @@ test('登录响应没有配送费时仍按 6 元计费，119 元菜品加 1 元�
   assert.equal(page.orderDishPrice, 126)
 })
 
-test('登录返回其他费用时仍执行统一 6 元规则', () => {
+test('门店配送费支持配置并由报价确定结算费', () => {
   const { page, store } = createCheckout()
   store.commit('setDeliveryFee', '3.50')
   page.computOrderInfo()
-  assert.equal(store.state.deliveryFee, 6)
+  assert.equal(store.state.deliveryFee, 3.5)
   assert.equal(page.orderDishPrice, 126)
 })
 
@@ -84,7 +85,7 @@ test('数字字符串和小数单价按分计算总额', () => {
   store.state.orderListData = [{ number: '3', amount: '0.10' }, { number: '1', amount: '0.20' }]
   page.computOrderInfo()
   assert.equal(page.orderDishNumber, 4)
-  assert.equal(page.orderDishPrice, 10.5)
+  assert.equal(page.orderDishPrice, 7.5)
 })
 
 test('提交时配送费、总价与页面一致', async () => {
@@ -117,7 +118,7 @@ test('未选择地址时阻止下单且按钮不会锁死', async () => {
 test('服务端报价替换旧购物车单价、名称和结算费用', async () => {
   const { page, store, requests } = createCheckout(undefined, async () => ({ code: 1, data: {
     items: [{ name: '新菜名', number: 2, amount: 17.35 }], goodsAmount: 34.70,
-    packAmount: 2, deliveryFee: 6, amount: 42.70,
+    packAmount: 2, packFee: 2, storeId: 1, configVersion: 0, deliveryFee: 6, amount: 42.70,
   } }))
   assert.equal(await page.refreshQuote(), true)
   assert.equal(store.state.orderListData[0].name, '新菜名')
@@ -132,7 +133,7 @@ test('报价失败时拒绝使用旧金额下单并允许重试', async () => {
   let fail = true
   const { page, requests, toasts } = createCheckout(undefined, async () => {
     if (fail) throw { msg: '菜品已停售' }
-    return { code: 1, data: { items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, deliveryFee: 6, amount: 126 } }
+    return { code: 1, data: { items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, packFee: 1, storeId: 1, configVersion: 0, deliveryFee: 6, amount: 126 } }
   })
   assert.equal(await page.refreshQuote(), false)
   await page.payOrderHandle()
@@ -165,7 +166,7 @@ test('提交后价格变化则刷新显示，下一次点击才提交新金额',
     if (++attempt === 1) throw { code: 0, msg: '商品价格或数量已变化，请重新确认订单金额' }
     return { code: 1, data: { id: 8 } }
   }, async () => ({ code: 1, data: {
-    items: [{ number: 1, amount: 120 }], goodsAmount: 120, packAmount: 1, deliveryFee: 6, amount: 127,
+    items: [{ number: 1, amount: 120 }], goodsAmount: 120, packAmount: 1, packFee: 1, storeId: 1, configVersion: 0, deliveryFee: 6, amount: 127,
   } }))
   await page.payOrderHandle()
   assert.equal(requests.length, 1)
@@ -178,9 +179,9 @@ test('提交后价格变化则刷新显示，下一次点击才提交新金额',
 })
 
 for (const data of [null, {}, { items: [], amount: 1 }, {
-  items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, deliveryFee: 6, amount: -1,
+  items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, packFee: 1, storeId: 1, configVersion: 0, deliveryFee: 6, amount: -1,
 }, {
-  items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, deliveryFee: 6, amount: 125,
+  items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, packFee: 1, storeId: 1, configVersion: 0, deliveryFee: 6, amount: 125,
 }]) {
   test(`异常报价不能恢复可下单状态：${JSON.stringify(data)}`, async () => {
     const { page, requests } = createCheckout(undefined, async () => ({ code: 1, data }))
@@ -198,7 +199,7 @@ test('并发获取报价共享请求，完成后可再次刷新', async () => {
   const first = page.refreshQuote()
   const second = page.refreshQuote()
   assert.equal(quoteRequests.length, 1)
-  resolveQuote({ code: 1, data: { items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, deliveryFee: 6, amount: 126 } })
+  resolveQuote({ code: 1, data: { items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, packFee: 1, storeId: 1, configVersion: 0, deliveryFee: 6, amount: 126 } })
   assert.equal(await first, true)
   assert.equal(await second, true)
   await page.refreshQuote()
@@ -306,3 +307,67 @@ for (const statusCode of [401, 422]) {
     assert.equal(requests[1].remark, '修正后提交')
   })
 }
+
+
+test('decimal packaging fee is quoted independently of legacy item count', async () => {
+  const { page } = createCheckout(undefined, async () => ({ code: 1, data: {
+    items: [{ number: 2, amount: 10 }], goodsAmount: 20, packAmount: 2,
+    packFee: 3.5, deliveryFee: 0, amount: 23.5, storeId: 1, configVersion: 4,
+  } }))
+  assert.equal(await page.refreshQuote(), true)
+  assert.equal(page.packAmount, 2)
+  assert.equal(page.packFee, 3.5)
+  assert.equal(page.orderDishPrice, 23.5)
+})
+
+test('switching store clears only local cart and drafts and invalidates unknown submission key', async () => {
+  const { page, store, requests } = createCheckout(async () => { throw { errMsg: 'timeout' } })
+  await page.payOrderHandle()
+  const key = page.pendingSubmission.clientRequestId
+  store.state.remarkData = 'old remark'
+  store.commit('selectStore', 2)
+  assert.equal(store.state.orderListData.length, 0)
+  assert.equal(store.state.remarkData, '')
+  await page.payOrderHandle()
+  assert.equal(page.pendingSubmission, null)
+  assert.equal(page.quoteReady, false)
+  assert.equal(page.address, '')
+  assert.equal(requests.length, 1)
+  assert.ok(key)
+})
+
+test('hidden checkout returning after switching away and back invalidates quote and retry key', async () => {
+  const { page, store, component } = createCheckout(async () => { throw { errMsg: 'timeout' } })
+  await page.payOrderHandle()
+  store.commit('selectStore', 2)
+  store.commit('selectStore', 1)
+  page.getAddressList = () => {}
+  component.onShow.call(page)
+  assert.equal(page.pendingSubmission, null)
+  assert.equal(page.quoteReady, false)
+  assert.equal(page.address, '')
+  await page.quotePromise
+})
+
+test('old in-flight quote cannot repopulate cart after switching away and back', async () => {
+  let finish
+  const { page, store } = createCheckout(undefined, () => new Promise(resolve => { finish = resolve }))
+  const pending = page.refreshQuote()
+  store.commit('selectStore', 2)
+  store.commit('selectStore', 1)
+  page.ensureCurrentScope()
+  finish({ code: 1, data: { items: [{ number: 1, amount: 119 }], goodsAmount: 119,
+    packAmount: 1, packFee: 1, deliveryFee: 6, amount: 126, storeId: 1, configVersion: 1 } })
+  assert.equal(await pending, false)
+  assert.equal(page.quoteReady, false)
+  assert.equal(store.state.orderListData.length, 0)
+})
+
+test('quote for another store never becomes payable', async () => {
+  const { page } = createCheckout(undefined, async () => ({ code: 1, data: {
+    items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1,
+    packFee: 1, deliveryFee: 6, amount: 126, storeId: 2, configVersion: 1,
+  } }))
+  assert.equal(await page.refreshQuote(), false)
+  assert.equal(page.quoteReady, false)
+})

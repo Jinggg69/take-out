@@ -14,7 +14,9 @@
             </view>
             <view class="info_top_right">
               <view class="right_title">
-                <text>均州鱼庄</text>
+                <picker :range="stores" range-key="name" :value="selectedStoreIndex" @change="switchStore">
+                  <text>{{ shopInfo().name || shopInfo().shopName || '选择门店' }} ▾</text>
+                </picker>
                 <view class="businessStatus" v-if="shopStatus === 1">营业中</view>
                 <view class="businessStatus close" v-else>休息中</view>
               </view>
@@ -97,7 +99,10 @@
           <view v-if="typeListData.length > 0">该分类下暂无菜品</view>
         </view>
       </view>
-      <view class="restaurant_close">店铺已打烊</view>
+      <view class="restaurant_close" v-if="shopStatus !== 1">
+        {{ shopStatus === null ? '正在获取门店信息' : '店铺休息中，暂不能下单' }}
+        <view v-if="shopInfo().opensAt">营业时间 {{ shopInfo().opensAt }}–{{ shopInfo().closesAt }}</view>
+      </view>
       <!-- end -->
       <view class="mask-box"></view>
       <!-- 底部去结算 -->
@@ -158,7 +163,7 @@
       <!-- end -->
       <!-- 店面打烊弹层 -->
       <view class="colseShop" v-if="shopStatus === 0">
-        <view class="shop">本店已打样</view>
+        <view class="shop">本店已打烊</view>
       </view>
       <!-- end -->
     </view>

@@ -94,6 +94,18 @@ class DeliveryRangeServiceTest {
         server.verify();
     }
 
+    @Test
+    void selectedStoreCoordinatesAndRadiusDriveTheRoute() {
+        com.junzhou.entity.StoreSettings settings = new com.junzhou.entity.StoreSettings();
+        settings.setId(2L); settings.setLatitude(new java.math.BigDecimal("31.123456"));
+        settings.setLongitude(new java.math.BigDecimal("121.654321")); settings.setDeliveryRadiusMeters(1500);
+        server.expect(anything()).andRespond(withSuccess("{\"status\":0,\"result\":{\"location\":{\"lat\":31,\"lng\":121}}}", MediaType.APPLICATION_JSON));
+        server.expect(queryParam("origin","31.123456,121.654321"))
+                .andRespond(withSuccess("{\"status\":0,\"result\":{\"routes\":[{\"distance\":1501}]}}",MediaType.APPLICATION_JSON));
+        assertThrows(OrderBusinessException.class, () -> service.validate("测试收货地址",settings));
+        server.verify();
+    }
+
     private void geocoding() {
         server.expect(request -> assertTrue(java.net.URLDecoder.decode(request.getURI().getRawQuery(), "UTF-8")
                         .contains("address=北京市海淀区上地十街10号")))

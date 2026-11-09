@@ -34,6 +34,9 @@ export default {
 			orderDishPrice: 0,
 			orderPriceError: '',
 			quoteReady: false,
+			checkoutScope: null,
+			quoteVersion: null,
+			packFee: 0,
 			quotePromise: null,
 			quotedDeliveryFee: DELIVERY_FEE,
 			openPayType: false,
@@ -148,12 +151,15 @@ export default {
 		DishInfo
 	},
 	async onLoad(options) {
+		this.checkoutScope = this.currentScope()
+		const scope = this.currentScope()
 		this.initPlatform()
 		this.psersonUrl = this.$store.state.baseUserInfo && this.$store.state.baseUserInfo.avatarUrl
 		this.nickName = this.$store.state.baseUserInfo && this.$store.state.baseUserInfo.nickName
 		this.gender = this.$store.state.baseUserInfo && this.$store.state.baseUserInfo.gender
 		this.remark = this.remarkData()
 		await this.init()
+		if (scope !== this.currentScope()) return
 		// 存在options说明换地址了
 		if (this.addressData() && this.addressData().detail) {
 			this.addressBookId = ''
@@ -170,10 +176,21 @@ export default {
 			await this.getAddressBookDefault()
 		}
 
+		if (scope !== this.currentScope()) return
 		await this.getEstimatedDeliveryTime();
 		this.getDateDate()
 		this.setArrivalTime(this.arrivalTime)
 		this.setGender(this.gender)
+	},
+	onShow() {
+		if (this.checkoutScope !== null) {
+			const changed = this.ensureCurrentScope()
+			if (changed || (!this.quoteReady && !this.pendingSubmission)) this.refreshQuote()
+			if (!this.addressList.length) this.getAddressList()
+		}
+	},
+	watch: {
+		'$store.state.storeGeneration'() { this.ensureCurrentScope() }
 	},
 	onReady() {
 		uni.getSystemInfo({
@@ -183,6 +200,23 @@ export default {
 		})
 	},
 	methods: {
+		currentScope() {
+			return String(this.$store.state.selectedStoreId || 1) + ':' + (this.$store.state.storeGeneration || 0)
+		},
+		ensureCurrentScope() {
+			const scope = this.currentScope()
+			if (this.checkoutScope === null) { this.checkoutScope = scope; return false }
+			if (this.checkoutScope === scope) return false
+			this.checkoutScope = scope
+			this.quoteReady = false; this.quotePromise = null; this.quoteVersion = null
+			this.pendingSubmission = null; this.submissionComplete = false; this.isHandlePy = false
+			this.quotedDeliveryFee = 0; this.packFee = 0; this.packAmount = 0; this.orderDishPrice = 0; this.orderDishNumber = 0
+			this.remark = ''; this.arrivalTime = '立即派送'; this.orderTime = ''
+			this.address = ''; this.addressBookId = ''; this.addressList = []
+			this.tablewareData = '无需餐具'; this.tableware = ''; this.status = 0; this.num = 0
+			this.orderPriceError = '门店已切换，请重新确认地址和价格'
+			return true
+		},
 		...mapState(['orderListData', 'remarkData', 'addressData', 'storeInfo', 'shopInfo', 'deliveryFee']),
 		...mapMutations(['setAddressBackUrl', 'setOrderData', 'setArrivalTime', 'setRemark', 'setGender']),
 		init() {
@@ -191,12 +225,15 @@ export default {
 		},
 		// Quote failures must never leave an earlier price eligible for submission.
 		refreshQuote() {
+			this.ensureCurrentScope()
+			const scope = this.currentScope()
 			if (this.quotePromise) return this.quotePromise
 			this.quoteReady = false
 			this.orderPriceError = '正在获取最新价格'
 			this.quotePromise = (async () => {
 				try {
 					const result = await getOrderQuote()
+					if (scope !== this.currentScope()) return false
 					const quote = result && result.data
 					if (!result || ![1, 200].includes(Number(result.code)) || !quote || !Array.isArray(quote.items) || !quote.items.length) {
 						throw { msg: (result && result.msg) || '报价数据异常，请刷新价格' }
@@ -210,25 +247,32 @@ export default {
 						goodsCents += Math.round(price * 100) * quantity
 						count += quantity
 					}
-					const pack = Number(quote.packAmount), fee = Number(quote.deliveryFee), total = Number(quote.amount)
-					if (!Number.isInteger(pack) || pack !== count || !Number.isFinite(fee) || fee < 0
+					const pack = Number(quote.packAmount), packFee = Number(quote.packFee), fee = Number(quote.deliveryFee), total = Number(quote.amount)
+					if (String(quote.storeId) !== String(this.$store.state.selectedStoreId || 1) || quote.configVersion == null
+						|| quote.packFee == null || !Number.isFinite(Number(quote.goodsAmount))
+						|| !Number.isFinite(packFee) || packFee < 0 || Math.abs(packFee * 100 - Math.round(packFee * 100)) > 0.000001
+						|| !Number.isInteger(pack) || pack !== count || !Number.isFinite(fee) || fee < 0
+						|| Math.abs(fee * 100 - Math.round(fee * 100)) > 0.000001
 						|| !Number.isFinite(total) || total <= 0 || total > 99999999.99
 						|| Math.abs(goodsCents - Number(quote.goodsAmount) * 100) > 0.000001
-						|| Math.abs(total * 100 - goodsCents - pack * 100 - fee * 100) > 0.000001) {
+						|| Math.abs(total * 100 - goodsCents - packFee * 100 - fee * 100) > 0.000001) {
 						throw { msg: '报价金额异常，请刷新价格' }
 					}
 					this.$store.commit('initdishListMut', quote.items)
 					this.quotedDeliveryFee = fee
 					this.computOrderInfo()
 					this.packAmount = pack
+					this.packFee = packFee
+					this.quoteVersion = quote.configVersion
 					this.orderDishPrice = total
 					this.quoteReady = true
 					return true
 				} catch (error) {
+					if (scope !== this.currentScope()) return false
 					this.orderPriceError = (error && error.msg) || '获取价格失败，请刷新后重试'
 					return false
 				}
-			})().finally(() => { this.quotePromise = null })
+			})().finally(() => { if (scope === this.currentScope()) this.quotePromise = null })
 			return this.quotePromise
 		},
 		initPlatform() {
@@ -274,7 +318,7 @@ export default {
 					this.testValue = true
 					this.addressList = res.data
 				}
-			})
+			}).catch(() => {})
 		},
 		// 默认地址查询
 		getAddressBookDefault() {
@@ -332,7 +376,7 @@ export default {
 				this.orderDishNumber += count
 			}
 			if (this.orderDishNumber > 0) {
-				this.orderDishPrice = (goodsCents + this.orderDishNumber * 100 + this.orderDeliveryFee * 100) / 100
+				this.orderDishPrice = (goodsCents + this.packFee * 100 + this.orderDeliveryFee * 100) / 100
 			}
 		},
 		// 返回上一级
@@ -344,6 +388,8 @@ export default {
 		},
 		// 支付下单
 		async payOrderHandle() {
+			if (this.ensureCurrentScope()) return false
+			const scope = this.currentScope()
 			if (this.isHandlePy || this.submissionComplete) return
 			if (!this.pendingSubmission && !this.address) {
 				uni.showToast({
@@ -356,8 +402,9 @@ export default {
 				this.isHandlePy = true
 				try {
 					const ready = await this.refreshQuote()
+                    if (scope !== this.currentScope()) return false
 					uni.showToast({ title: ready ? '价格已更新，请确认后再次点击支付' : this.orderPriceError, icon: 'none' })
-				} finally { this.isHandlePy = false }
+				} finally { if (scope === this.currentScope()) this.isHandlePy = false }
 				return false
 			}
 			if (!this.pendingSubmission && (this.orderPriceError || !Number.isFinite(this.orderDishPrice) || this.orderDishNumber <= 0)) {
@@ -377,12 +424,15 @@ export default {
 					tablewareStatus: this.status,
 					tablewareNumber: this.num,
 					packAmount: this.packAmount,
+					storeId: this.$store.state.selectedStoreId || 1,
+					configVersion: this.quoteVersion,
 					amount: this.orderDishPrice,
 					shopId: this.shopInfo().shopId,
 					deliveryFee: this.orderDeliveryFee
 				}
 				this.pendingSubmission = params
 				const res = await submitOrderSubmit(params)
+				if (scope !== this.currentScope()) return false
 				if (res && [1, 200].includes(Number(res.code)) && res.data && res.data.id) {
 					this.submissionComplete = true
 					this.pendingSubmission = null
@@ -396,6 +446,7 @@ export default {
 					throw res
 				}
 			} catch (error) {
+				if (scope !== this.currentScope()) return false
 				if (isDefiniteSubmissionFailure(error)) {
 					this.pendingSubmission = null
 					await this.refreshQuote()
@@ -405,7 +456,7 @@ export default {
 					uni.showToast({ title: '下单结果待确认，请点击重试以查询原订单', icon: 'none' })
 				}
 			} finally {
-				this.isHandlePy = false
+				if (scope === this.currentScope()) this.isHandlePy = false
 			}
 		},
 		// 拨打电话

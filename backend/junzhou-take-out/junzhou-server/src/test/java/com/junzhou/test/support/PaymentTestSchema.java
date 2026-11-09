@@ -18,6 +18,8 @@ public final class PaymentTestSchema {
         jdbc.execute("insert into payment_account values('legacy',1,1,'test-merchant','test-app')");
         jdbc.execute("create table store_payment_account(tenant_id bigint,store_id bigint,payment_account_id varchar(64),primary key(tenant_id,store_id))");
         jdbc.execute("insert into store_payment_account values(1,1,'legacy')");
+        StoreSettingsTestSchema.create(jdbc);
+        jdbc.execute("alter table orders add (store_snapshot text,pricing_snapshot text)");
         jdbc.execute("alter table orders add payment_account_id varchar(64) default 'legacy'");
         jdbc.execute("create unique index uk_order_number on orders(number)");
         jdbc.execute("create unique index uk_order_transaction on orders(wechat_transaction_id)");

@@ -22,7 +22,9 @@ export const router = createRouter({
       children: [
         ...primaryNavigation.map(item => ({
           path: item.path.slice(1), name: item.path.slice(1),
-          component: item.path === '/access'
+          component: item.path === '/store'
+            ? () => import('@/views/store/StoreView.vue')
+            : item.path === '/access'
             ? () => import('@/views/access/AccessView.vue')
             : item.path === '/employee'
             ? () => import('@/views/employee/EmployeeListView.vue')
