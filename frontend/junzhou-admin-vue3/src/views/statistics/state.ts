@@ -37,5 +37,5 @@ export function createStatisticsState(api: Reader) {
       case 'top10': return fetchSection(key, state.top10, api.getTop10)
     }
   }
-  return { state, retry, async load(next: StatisticsRange) { if (!active) return; range = { ...next }; generation++; await Promise.all((['turnover', 'users', 'orders', 'top10'] as const).map(retry)) }, dispose() { active = false; generation++ } }
+  return { state, retry, clear() { range = null; generation++; for (const target of Object.values(state)) { target.data = null; target.error = ''; target.loading = false } }, async load(next: StatisticsRange) { if (!active) return; range = { ...next }; generation++; await Promise.all((['turnover', 'users', 'orders', 'top10'] as const).map(retry)) }, dispose() { active = false; generation++ } }
 }

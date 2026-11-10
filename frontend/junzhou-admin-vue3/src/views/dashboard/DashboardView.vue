@@ -14,21 +14,26 @@ const dishes = createDashboardResource(api.getDishesOverview)
 const setmeals = createDashboardResource(api.getSetmealsOverview)
 const resources = [business, orders, dishes, setmeals]
 const refreshing = computed(() => resources.some(resource => resource.state.loading))
-const date = ref(new Date().toLocaleDateString('zh-CN'))
+const date = ref(new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }))
 const orderList = ref<InstanceType<typeof DashboardOrders>>()
 const metrics = computed(() => [
-  { label: '营业额', value: dashboardMoney(business.state.data?.turnover) },
-  { label: '有效订单', value: dashboardCount(business.state.data?.validOrderCount) },
+  { label: '今日实收', value: dashboardMoney(business.state.data?.turnover) },
+  { label: '确认退款', value: dashboardMoney(business.state.data?.refundAmount) },
+  { label: '净收款', value: dashboardMoney(business.state.data?.netAmount) },
+  { label: '今日支付订单', value: dashboardCount(business.state.data?.paidOrderCount) },
+  { label: '今日下单', value: dashboardCount(business.state.data?.placedOrderCount) },
+  { label: '今日取消', value: dashboardCount(business.state.data?.cancelledOrderCount) },
+  { label: '今日完成订单', value: dashboardCount(business.state.data?.validOrderCount) },
   { label: '订单完成率', value: dashboardRate(business.state.data?.orderCompletionRate) },
   { label: '平均客单价', value: dashboardMoney(business.state.data?.unitPrice) },
-  { label: '新增用户', value: dashboardCount(business.state.data?.newUsers) },
+  { label: '首次下单顾客', value: dashboardCount(business.state.data?.newUsers) },
 ])
 const salesSections = [
   { key: 'dish', title: '菜品总览', label: '菜品', path: '/dish', resource: dishes },
   { key: 'setmeal', title: '套餐总览', label: '套餐', path: '/setmeal', resource: setmeals },
 ]
 async function refreshOverview() {
-  date.value = new Date().toLocaleDateString('zh-CN')
+  date.value = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })
   await Promise.all(resources.map(resource => resource.load()))
 }
 async function refresh() { await Promise.all([refreshOverview(), orderList.value?.refresh()]) }

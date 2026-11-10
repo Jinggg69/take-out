@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.junzhou.mapper.ReportMapper">
+<sql id="scope">o.tenant_id=#{tenant} and o.store_id in <foreach collection="stores" item="s" open="(" separator="," close=")">#{s}</foreach></sql>
+<select id="daily" resultType="com.junzhou.report.ReportRow">
+select cast(event_time as date) as `day`,sum(received) received,sum(refunded) refunded,sum(placed) placed,sum(paid) paid,sum(completed) completed,sum(cancelled) cancelled from (
+select o.order_time event_time,0 received,0 refunded,1 placed,0 paid,0 completed,0 cancelled from orders o  where <include refid="scope"/> and o.order_time&gt;=#{from} and o.order_time&lt;#{until} 
+union all
+select o.checkout_time event_time,o.amount received,0 refunded,0 placed,1 paid,0 completed,0 cancelled from orders o  where <include refid="scope"/> and o.checkout_time&gt;=#{from} and o.checkout_time&lt;#{until} 
+union all
+select o.delivery_time event_time,0 received,0 refunded,0 placed,0 paid,1 completed,0 cancelled from orders o  where <include refid="scope"/> and o.delivery_time&gt;=#{from} and o.delivery_time&lt;#{until} and o.status=5
+union all
+select o.cancel_time event_time,0 received,0 refunded,0 placed,0 paid,0 completed,1 cancelled from orders o  where <include refid="scope"/> and o.cancel_time&gt;=#{from} and o.cancel_time&lt;#{until} and o.status=6
+union all
+select r.updated_at event_time,0 received,r.amount_fen/100.0 refunded,0 placed,0 paid,0 completed,0 cancelled from orders o join refund_request r on r.order_id=o.id where <include refid="scope"/> and r.updated_at&gt;=#{from} and r.updated_at&lt;#{until} and r.status='SUCCESS'
+) events group by 1
+</select>
+<select id="sales" resultType="com.junzhou.report.ReportRow">
+ select d.dish_id dishId,d.setmeal_id setmealId,max(d.name) name,sum(d.number) quantity from orders o
+ join order_detail d on d.order_id=o.id where <include refid="scope"/>
+ and o.checkout_time&gt;=#{from} and o.checkout_time&lt;#{until}
+ and not exists(select 1 from refund_request r where r.order_id=o.id and r.status='SUCCESS' and r.updated_at&lt;#{until})
+ group by d.dish_id,d.setmeal_id order by quantity desc,d.dish_id,d.setmeal_id
+</select>
+<select id="users" resultType="com.junzhou.report.ReportRow">
+ select cast(first_time as date) as `day`,count(*) newUsers from (
+ select o.user_id,min(o.order_time) first_time from orders o where <include refid="scope"/> and o.order_time&lt;#{until} group by o.user_id
+ ) cohort group by 1
+</select>
+<select id="overview" resultType="com.junzhou.report.ReportRow">
+ select cast(o.status as char) name,count(*) quantity from orders o where <include refid="scope"/> and o.order_time&gt;=#{from} and o.order_time&lt;#{until} group by o.status
+</select>
+<select id="menu" resultType="com.junzhou.report.ReportRow">
+ <bind name="tenant" value="f.tenant"/><bind name="stores" value="f.stores"/>
+ select cast(case when m.on_sale=1 and m.sold_out=0 and p.status=1 then 1 else 0 end as char) name,count(*) quantity
+ from <choose><when test="kind == 'dish'">store_dish m join dish p on p.id=m.dish_id</when><otherwise>store_setmeal m join setmeal p on p.id=m.setmeal_id</otherwise></choose>
+ where m.tenant_id=#{tenant} and p.tenant_id=m.tenant_id and m.store_id in <foreach collection="stores" item="s" open="(" separator="," close=")">#{s}</foreach>
+ group by case when m.on_sale=1 and m.sold_out=0 and p.status=1 then 1 else 0 end
+</select>
+<select id="ledger" resultType="com.junzhou.report.ReportRow">
+ select o.id,o.number,o.store_id storeId,o.fulfillment_type fulfillmentType,cast(o.order_time as char(19)) as `day`,'ORDER' event,o.amount from orders o where <include refid="scope"/> and o.order_time&gt;=#{from} and o.order_time&lt;#{until}
+ union all select o.id,o.number,o.store_id,o.fulfillment_type,cast(o.checkout_time as char(19)),'PAYMENT',o.amount from orders o where <include refid="scope"/> and o.checkout_time&gt;=#{from} and o.checkout_time&lt;#{until}
+ union all select o.id,o.number,o.store_id,o.fulfillment_type,cast(r.updated_at as char(19)),'REFUND',r.amount_fen/100.0 from orders o join refund_request r on r.order_id=o.id where <include refid="scope"/> and r.status='SUCCESS' and r.updated_at&gt;=#{from} and r.updated_at&lt;#{until}
+ union all select o.id,o.number,o.store_id,o.fulfillment_type,cast(o.delivery_time as char(19)),'COMPLETED',o.amount from orders o where <include refid="scope"/> and o.status=5 and o.delivery_time&gt;=#{from} and o.delivery_time&lt;#{until}
+ union all select o.id,o.number,o.store_id,o.fulfillment_type,cast(o.cancel_time as char(19)),'CANCELLED',o.amount from orders o where <include refid="scope"/> and o.status=6 and o.cancel_time&gt;=#{from} and o.cancel_time&lt;#{until}
+ order by id,event limit 50001
+</select>
+<select id="itemDetails" resultType="com.junzhou.report.ReportRow">
+ select o.id,o.number,o.store_id storeId,o.fulfillment_type fulfillmentType,d.dish_id dishId,d.setmeal_id setmealId,
+ d.name,d.number quantity,d.amount,cast(o.checkout_time as char(19)) as `day`,
+ case when exists(select 1 from refund_request r where r.order_id=o.id and r.status='SUCCESS' and r.updated_at&lt;#{until}) then 'REFUNDED' else 'COUNTED' end event
+ from orders o join order_detail d on d.order_id=o.id where <include refid="scope"/>
+ and o.checkout_time&gt;=#{from} and o.checkout_time&lt;#{until} order by o.id,d.id limit 50001
+</select>
+</mapper>

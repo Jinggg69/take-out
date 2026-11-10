@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @EnableScheduling //定时任务
 public class JunzhouApplication {
     public static void main(String[] args) {
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Shanghai"));
         SpringApplication.run(JunzhouApplication.class, args);
         log.info("server started");
     }

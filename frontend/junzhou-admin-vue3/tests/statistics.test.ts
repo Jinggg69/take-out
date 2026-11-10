@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import axios, { AxiosHeaders, AxiosError } from 'axios'
 import { createStatisticsApi } from '../src/api/statistics.ts'
-import { presetRange, chartRows, rankingRows, lineSegments, exportWorkbook } from '../src/utils/statistics.ts'
+import { chartY, presetRange, chartRows, rankingRows, lineSegments, exportWorkbook } from '../src/utils/statistics.ts'
 
 test('statistics preserves four report GET paths, date-only bounds and binary export without filter params', async () => {
   const calls: { url?: string; params: unknown; responseType?: string }[] = []
@@ -18,13 +18,13 @@ test('statistics preserves four report GET paths, date-only bounds and binary ex
   assert.deepEqual(calls[4], { url: '/report/export', params: undefined, responseType: 'blob' })
 })
 
-test('presets retain default seven completed days, leap year/month/year bounds and original Sunday week behavior', () => {
+test('presets retain default seven completed days, leap year/month/year bounds and Monday-to-Sunday business week', () => {
   const now = new Date(2026, 9, 23, 15)
   assert.deepEqual(presetRange('yesterday', now), { begin: '2026-10-22', end: '2026-10-22' })
   assert.deepEqual(presetRange('7', now), { begin: '2026-10-16', end: '2026-10-22' })
   assert.deepEqual(presetRange('30', new Date(2024, 2, 1)), { begin: '2024-01-31', end: '2024-02-29' })
   assert.deepEqual(presetRange('month', new Date(2024, 1, 20)), { begin: '2024-02-01', end: '2024-02-29' })
-  assert.deepEqual(presetRange('week', new Date(2026, 9, 25)), { begin: '2026-10-26', end: '2026-11-01' })
+  assert.deepEqual(presetRange('week', new Date(2026, 9, 25)), { begin: '2026-10-19', end: '2026-10-25' })
   assert.deepEqual(presetRange('7', new Date(2026, 0, 1)), { begin: '2025-12-25', end: '2025-12-31' })
 })
 
@@ -113,3 +113,22 @@ test('rapid A to B to A through shared HTTP retains latest A and retries a rejec
   assert.equal(reports.state.turnover.data?.turnoverList, '0')
 })
 
+
+test('report export preserves selected dates and authorized store filter', async () => {
+ let params: unknown
+ const api=createStatisticsApi(axios.create({adapter:async config=>{params=config.params;return {data:new Blob(['xlsx']),status:200,statusText:'OK',headers:new AxiosHeaders(),config}}}))
+ await api.export({begin:'2026-11-01',end:'2026-11-03',storeIds:'1,2'})
+ assert.deepEqual(params,{begin:'2026-11-01',end:'2026-11-03',storeIds:'1,2'})
+})
+test('negative net receipts stay inside the chart plot',()=>{
+ assert.equal(chartY(-10,30,-10),218)
+ assert.equal(chartY(30,30,-10),36)
+})
+
+
+test('clearing report selection discards pending responses and disables stale retry', async()=>{
+ let finish!: (value: {data:{code:number;data:{dateList:string;turnoverList:string}}})=>void
+ let calls=0
+ const api={ getTurnover:async()=>{calls++;return new Promise<{data:{code:number;data:{dateList:string;turnoverList:string}}}>(r=>{finish=r})},getUsers:async()=>({data:{code:1,data:{dateList:'',totalUserList:'',newUserList:''}}}),getOrders:async()=>({data:{code:1,data:null}}),getTop10:async()=>({data:{code:1,data:{nameList:'',numberList:''}}}) }
+ const view=createStatisticsState(api);const pending=view.load({begin:'2026-11-01',end:'2026-11-01'});view.clear();finish({data:{code:1,data:{dateList:'2026-11-01',turnoverList:'10'}}});await pending;await view.retry('turnover');assert.equal(view.state.turnover.data,null);assert.equal(view.state.turnover.loading,false);assert.equal(calls,1)
+})

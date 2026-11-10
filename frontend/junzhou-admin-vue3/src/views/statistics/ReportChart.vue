@@ -4,8 +4,9 @@ import { chartX, chartY, lineSegments, type ChartRow } from '@/utils/statistics'
 const props = withDefaults(defineProps<{ title: string; rows: ChartRow[]; series: string[]; unit: string; money?: boolean; bars?: boolean }>(), { money: false, bars: false })
 const active = ref('')
 const maximum = computed(() => Math.max(1, ...props.rows.flatMap(row => row.values.filter((value): value is number => value !== null))))
+const minimum = computed(() => Math.min(0, ...props.rows.flatMap(row => row.values.filter((value): value is number => value !== null))))
 const hasValues = computed(() => props.rows.some(row => row.values.some(value => value !== null)))
-const ticks = computed(() => Array.from({ length: 5 }, (_, index) => maximum.value * index / 4))
+const ticks = computed(() => Array.from({ length: 5 }, (_, index) => minimum.value + (maximum.value - minimum.value) * index / 4))
 function valueText(value: number | null | undefined) { return value === null || value === undefined ? '—' : props.money ? value.toFixed(2) : String(value) }
 function description(row: ChartRow) { return `${row.label}：${props.series.map((name, i) => `${name} ${valueText(row.values[i])}${row.values[i] == null ? '' : props.unit}`).join('；')}` }
 function showTick(index: number) { const step = Math.max(1, Math.ceil((props.rows.length - 1) / 4)); return index % step === 0 || index === props.rows.length - 1 }
@@ -62,7 +63,7 @@ function showTick(index: number) { const step = Math.max(1, Math.ceil((props.row
             :key="name"
           >
             <span
-              :class="['legend-line', { secondary: index === 1 }]"
+              :class="['legend-line', { secondary: index === 1, tertiary: index === 2, fourth: index === 3 }]"
               aria-hidden="true"
             />{{ name }}（{{ unit }}）
           </li>
@@ -83,24 +84,24 @@ function showTick(index: number) { const step = Math.max(1, Math.ceil((props.row
             >
               <line
                 x1="72"
-                :y1="chartY(tick, maximum)"
+                :y1="chartY(tick, maximum, minimum)"
                 x2="592"
-                :y2="chartY(tick, maximum)"
+                :y2="chartY(tick, maximum, minimum)"
                 class="chart-grid"
               />
               <text
                 x="62"
-                :y="chartY(tick, maximum) + 4"
+                :y="chartY(tick, maximum, minimum) + 4"
                 text-anchor="end"
               >{{ Number(tick.toFixed(money ? 2 : 1)).toLocaleString('zh-CN') }}</text>
             </g>
             <g
               v-for="(name, seriesIndex) in series"
               :key="name"
-              :class="['chart-series', { secondary: seriesIndex === 1 }]"
+              :class="['chart-series', { secondary: seriesIndex === 1, tertiary: seriesIndex === 2, fourth: seriesIndex === 3 }]"
             >
               <polyline
-                v-for="(segment, index) in lineSegments(rows, seriesIndex, maximum)"
+                v-for="(segment, index) in lineSegments(rows, seriesIndex, maximum, minimum)"
                 :key="index"
                 :points="segment"
               />
@@ -111,7 +112,7 @@ function showTick(index: number) { const step = Math.max(1, Math.ceil((props.row
                 <circle
                   v-if="row.values[seriesIndex] != null"
                   :cx="chartX(index, rows.length)"
-                  :cy="chartY(row.values[seriesIndex]!, maximum)"
+                  :cy="chartY(row.values[seriesIndex]!, maximum, minimum)"
                   r="4"
                   tabindex="0"
                   role="img"
@@ -211,4 +212,8 @@ th:first-child { text-align: left; font-weight: 400; }
 .rank-value { font-variant-numeric: tabular-nums; }
 .bar-track { height: 16px; background: var(--jz-page-background); }
 .bar-fill { display: block; height: 100%; background: var(--jz-brand-primary); }
+</style>
+
+<style scoped>
+.chart-series.tertiary { color: #357753; } .chart-series.fourth { color: #725c9a; } .legend-line.tertiary { border-color: #357753; } .legend-line.fourth { border-color: #725c9a; }
 </style>

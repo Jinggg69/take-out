@@ -4,7 +4,7 @@ import type { ApiResult } from './types.ts'
 export type DashboardFigure = number | string | null
 export interface BusinessOverview {
   turnover: DashboardFigure; validOrderCount: DashboardFigure; orderCompletionRate: DashboardFigure
-  unitPrice: DashboardFigure; newUsers: DashboardFigure
+  unitPrice: DashboardFigure; newUsers: DashboardFigure; refundAmount?: DashboardFigure; netAmount?: DashboardFigure; paidOrderCount?: DashboardFigure; placedOrderCount?: DashboardFigure; cancelledOrderCount?: DashboardFigure
 }
 export interface OrdersOverview {
   waitingOrders: DashboardFigure; deliveredOrders: DashboardFigure; completedOrders: DashboardFigure

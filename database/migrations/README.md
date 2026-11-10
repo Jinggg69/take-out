@@ -235,3 +235,8 @@ store_dining_table 是当前门店有效桌台的基础登记，使用复合外�
 新权限 dining:read、dining:manage、dining:close、order:dine:complete 仅加入权限目录，由商户管理员按角色和门店配置。桌码为小程序内扫码内容，轮换后重新下载桌牌。详见 [5C 契约](../dining-stage5c.md)。
 
 python scripts/test-dining-session-migration.py 与 python scripts/test-order-pickup-migration.py 均已在随机临时MySQL库通过；包含回填、重跑、外键拒绝跨店关系和新库初始化。临时库已清理，业务库未迁移。
+
+
+## 20261110_01_report_indexes.sql
+
+阶段6经营报表复合索引，依赖阶段5C。备份并停止写入后执行，五个索引支持门店事件时间窗口与确认退款查询，重跑不会重复添加。不回填历史时间、不改金额、不新增汇总表。全新初始化已同步；随机临时MySQL库已验证重跑与真实SQL，当前业务库未迁移。部署后端时同时使用上海JVM时区和Druid会话时区配置；历史其他时区时间须先对账。详细指标、接口、授权、导出及回退边界见 [阶段6契约](../report-stage6.md)。

@@ -57,7 +57,7 @@ public class PaymentLifecycleServiceImpl implements PaymentLifecycleService {
         }
         if(order.getWechatTransactionId()!=null && !transaction.equals(order.getWechatTransactionId())) throw new OrderBusinessException("支付交易号不匹配");
         LocalDateTime paidAt;
-        try { paidAt=OffsetDateTime.parse(payment.getString("success_time")).atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime(); }
+        try { paidAt=OffsetDateTime.parse(payment.getString("success_time")).atZoneSameInstant(ZoneId.of("Asia/Shanghai")).toLocalDateTime(); }
         catch(RuntimeException ex) { throw new OrderBusinessException("支付时间信息异常"); }
         boolean newlyPaid=Orders.PENDING_PAYMENT.equals(order.getStatus()) && Orders.UN_PAID.equals(order.getPayStatus());
         Orders update=Orders.builder().id(order.getId()).wechatTransactionId(transaction).wechatTradeState("SUCCESS")

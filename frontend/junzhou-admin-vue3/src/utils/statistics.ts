@@ -3,12 +3,13 @@ export type StatisticsPreset = 'yesterday' | '7' | '30' | 'week' | 'month'
 export interface ChartRow { label: string; values: (number | null)[] }
 function dateOnly(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 export function presetRange(preset: StatisticsPreset, now = new Date()): StatisticsRange {
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const local = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
+  const start = new Date(local.getFullYear(), local.getMonth(), local.getDate())
   const end = new Date(start)
   if (preset === 'month') { start.setDate(1); end.setMonth(end.getMonth() + 1, 0) }
   else if (preset === 'week') {
     // Preserve the incumbent Sunday behavior as well as the complete calendar week.
-    start.setDate(start.getDate() - (now.getDay() - 1)); end.setDate(end.getDate() + (7 - now.getDay()))
+    start.setDate(start.getDate() - ((local.getDay() + 6) % 7)); end.setDate(start.getDate() + 6)
   } else {
     start.setDate(start.getDate() - (preset === 'yesterday' ? 1 : Number(preset))); end.setDate(end.getDate() - 1)
   }
@@ -24,13 +25,13 @@ export function chartRows(labels: unknown, lists: unknown[]): ChartRow[] {
 }
 export function rankingRows(labels: unknown, values: unknown) { return chartRows(labels, [values]).slice(0, 10) }
 export function chartX(index: number, length: number) { return length <= 1 ? 332 : 72 + index / (length - 1) * 520 }
-export function chartY(value: number, maximum: number) { return 218 - value / Math.max(1, maximum) * 182 }
-export function lineSegments(rows: ChartRow[], series: number, maximum: number): string[] {
+export function chartY(value: number, maximum: number, minimum = 0) { return 218 - (value - minimum) / Math.max(1, maximum - minimum) * 182 }
+export function lineSegments(rows: ChartRow[], series: number, maximum: number, minimum = 0): string[] {
   const segments: string[] = []; let current: string[] = []
   rows.forEach((row, i) => {
     const value = row.values[series]
     if (value === null || value === undefined) { if (current.length) segments.push(current.join(' ')); current = [] }
-    else current.push(`${chartX(i, rows.length)},${chartY(value, maximum)}`)
+    else current.push(`${chartX(i, rows.length)},${chartY(value, maximum, minimum)}`)
   })
   if (current.length) segments.push(current.join(' '))
   return segments
