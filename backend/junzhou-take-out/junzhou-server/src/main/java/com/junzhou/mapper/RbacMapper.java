@@ -3,6 +3,16 @@ import com.junzhou.security.RbacAssignment;
 import org.apache.ibatis.annotations.*;
 import java.util.List;
 @Mapper public interface RbacMapper {
+ @Select("select id as store_id,name from store where tenant_id=#{t} and status=1")
+ @Results({@Result(column="store_id",property="storeId"),@Result(column="name",property="name")})
+ List<com.junzhou.security.RbacGrantRow> activeStoresWithNames(Long t);
+ @Select("select er.role_code,er.data_scope,rp.permission_code from employee_role er join role_permission rp on rp.tenant_id=er.tenant_id and rp.role_code=er.role_code where er.tenant_id=#{t} and er.employee_id=#{e}")
+ @Results({@Result(column="role_code",property="roleCode"),@Result(column="data_scope",property="dataScope"),@Result(column="permission_code",property="permissionCode")})
+ List<com.junzhou.security.RbacGrantRow> employeeGrants(@Param("t") Long t,@Param("e") Long e);
+ @Select("select role_code,store_id from employee_role_store where tenant_id=#{t} and employee_id=#{e}")
+ @Results({@Result(column="role_code",property="roleCode"),@Result(column="store_id",property="storeId")})
+ List<com.junzhou.security.RbacGrantRow> employeeRoleStores(@Param("t") Long t,@Param("e") Long e);
+
  @Select("select name from store where tenant_id=#{t} and id=#{s} and status=1") String storeName(@Param("t") Long t,@Param("s") Long s);
  @Select("select id,name,status from employee where tenant_id=#{t} order by id") java.util.List<java.util.Map<String,Object>> employees(Long t);
  @Select("select code,name from rbac_role where tenant_id=#{t} order by code") java.util.List<java.util.Map<String,Object>> roles(Long t);

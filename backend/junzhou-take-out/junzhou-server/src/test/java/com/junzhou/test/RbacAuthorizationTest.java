@@ -38,13 +38,16 @@ class RbacAuthorizationTest {
   RbacMapper m=mock(RbacMapper.class); RbacService s=new RbacServiceImpl(m);
   RequestScope.set(new RequestScope(4L,null,1L,10L,Collections.singleton(10L)));
   when(m.activeEmployee(1L,4L)).thenReturn(1);
-  when(m.activeStores(1L)).thenReturn(Arrays.asList(10L,11L));
-  when(m.assignments(1L,4L,"order:refund")).thenReturn(Collections.singletonList(new RbacAssignment("REFUNDER","SPECIFIED_STORES")));
-  when(m.roleStores(1L,4L,"REFUNDER")).thenReturn(Collections.singletonList(11L));
+  RbacGrantRow a=new RbacGrantRow();a.setStoreId(10L);RbacGrantRow b=new RbacGrantRow();b.setStoreId(11L);
+  when(m.activeStoresWithNames(1L)).thenReturn(Arrays.asList(a,b));
+  RbacGrantRow grant=new RbacGrantRow();grant.setRoleCode("REFUNDER");grant.setDataScope("SPECIFIED_STORES");grant.setPermissionCode("order:refund");
+  when(m.employeeGrants(1L,4L)).thenReturn(Collections.singletonList(grant));
+  RbacGrantRow binding=new RbacGrantRow();binding.setRoleCode("REFUNDER");binding.setStoreId(11L);
+  when(m.employeeRoleStores(1L,4L)).thenReturn(Collections.singletonList(binding));
   assertThrows(SecurityException.class,()->s.require(PermissionAction.ORDER_REFUND));
-  when(m.roleStores(1L,4L,"REFUNDER")).thenReturn(Collections.singletonList(10L));
+  binding.setStoreId(10L);
   assertDoesNotThrow(()->s.require(PermissionAction.ORDER_REFUND));
-  when(m.assignments(1L,4L,"order:refund")).thenReturn(Collections.emptyList());
+  when(m.employeeGrants(1L,4L)).thenReturn(Collections.emptyList());
   assertThrows(SecurityException.class,()->s.require(PermissionAction.ORDER_REFUND));
  }
  @Test void lastAdministratorAndRestrictedScopeCannotManageGrants(){

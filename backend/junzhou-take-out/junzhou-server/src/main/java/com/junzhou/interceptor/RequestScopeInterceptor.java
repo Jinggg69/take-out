@@ -18,6 +18,7 @@ public class RequestScopeInterceptor implements AsyncHandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         RequestScope.clear();
+        com.junzhou.security.RbacRequestContext.begin(request);
         try {
             String value = request.getHeader("X-Store-Id");
             Long store = value == null || value.isEmpty() ? null : Long.valueOf(value);
@@ -44,18 +45,22 @@ public class RequestScopeInterceptor implements AsyncHandlerInterceptor {
             RequestScope.set(scope);
             return true;
         } catch (SecurityException | IllegalArgumentException ex) {
+            com.junzhou.security.RbacRequestContext.clear(request);
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             return false;
         } catch (DataAccessException ex) {
+            com.junzhou.security.RbacRequestContext.clear(request);
             response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
             return false;
         }
     }
     @Override public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         RequestScope.clear();
+        com.junzhou.security.RbacRequestContext.clear(request);
     }
     @Override public void afterConcurrentHandlingStarted(HttpServletRequest request, HttpServletResponse response, Object handler) {
         RequestScope.clear();
         BaseContext.removeCurrentId();
+        com.junzhou.security.RbacRequestContext.clear(request);
     }
 }

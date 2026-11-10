@@ -42,6 +42,7 @@ public class JwtTokenAdminInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         BaseContext.removeCurrentId();
         RequestScope.clear();
+        com.junzhou.security.RbacRequestContext.clear(request);
         request.removeAttribute(AdminSessionService.SESSION_ATTRIBUTE);
         //判断当前拦截到的是Controller的方法还是其他资源
         if (!(handler instanceof HandlerMethod)) {
@@ -82,6 +83,7 @@ public class JwtTokenAdminInterceptor implements HandlerInterceptor {
                                 Object handler, Exception ex) {
         BaseContext.removeCurrentId();
         RequestScope.clear();
+        com.junzhou.security.RbacRequestContext.clear(request);
         request.removeAttribute(AdminSessionService.SESSION_ATTRIBUTE);
     }
 }

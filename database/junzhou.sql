@@ -1,5 +1,5 @@
-CREATE DATABASE  IF NOT EXISTS `sky_take_out` ;
-USE `sky_take_out`;
+CREATE DATABASE  IF NOT EXISTS `junzhou_take_out` ;
+USE `junzhou_take_out`;
 
 -- Initialization only. Existing databases use the additive scripts in migrations/.
 DROP TABLE IF EXISTS `admin_session`;

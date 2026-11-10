@@ -9,53 +9,41 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 @Service public class RbacServiceImpl implements RbacService {
  private final RbacMapper mapper;
- public RbacServiceImpl(RbacMapper mapper){this.mapper=mapper;}
- @Override
- public boolean permits(Long tenant,Long employee,Long store,PermissionAction action){
-  if(mapper.activeEmployee(tenant,employee)!=1 || !mapper.activeStores(tenant).contains(store)) return false;
-  for(RbacAssignment row:mapper.assignments(tenant,employee,action.getCode())){
-   DataScope scope;
-   try{scope=DataScope.valueOf(row.getDataScope());}catch(RuntimeException ex){continue;}
-   List<Long> ids=scope==DataScope.TENANT_STORES?Collections.emptyList():mapper.roleStores(tenant,employee,row.getRoleCode());
-   if(new PermissionGrant(tenant,action,scope,new HashSet<>(ids)).allows(tenant,store,tenant,store,action))return true;
-  }
-  return false;
+ private final RbacSnapshotLoader loader;
+ public RbacServiceImpl(RbacMapper mapper){this(mapper,new RbacSnapshotLoader(mapper));}
+ @org.springframework.beans.factory.annotation.Autowired
+ public RbacServiceImpl(RbacMapper mapper,RbacSnapshotLoader loader){this.mapper=mapper;this.loader=loader;}
+ private AuthorizationSnapshot authorization(Long tenant,Long employee){
+  AuthorizationSnapshot cached=RbacRequestContext.current();
+  if(cached!=null&&cached.matches(tenant,employee))return cached;
+  AuthorizationSnapshot fresh=loader.load(tenant,employee);RbacRequestContext.store(fresh);return fresh;
  }
- @Override
- public void require(PermissionAction action){
+ @Override public boolean permits(Long tenant,Long employee,Long store,PermissionAction action){
+  return store!=null&&action!=null&&authorization(tenant,employee).permits(store,action);
+ }
+ @Override public void require(PermissionAction action){
   Long tenant=RequestScope.requireEmployeeTenantId();RequestScope scope=RequestScope.current();
-  if(!permits(tenant,scope.getEmployeeId(),scope.getStoreId(),action))throw new SecurityException("Action denied");
-  String code=action.getCode();
-  boolean tenantResource=code.startsWith("employee:") || ((code.startsWith("dish:") || code.startsWith("category:") || code.startsWith("setmeal:")) && !code.endsWith(":read"));
-  if(tenantResource && mapper.assignments(tenant,scope.getEmployeeId(),code).stream().noneMatch(r->"TENANT_STORES".equals(r.getDataScope())))throw new SecurityException("Tenant-wide action required for shared resource");
+  AuthorizationSnapshot snapshot=authorization(tenant,scope.getEmployeeId());
+  if(!snapshot.permits(scope.getStoreId(),action))throw new SecurityException("Action denied");
+  if(AuthorizationSnapshot.tenantShared(action)&&!snapshot.tenantWide(action))throw new SecurityException("Tenant-wide action required for shared resource");
  }
- @Override
- public Set<Long> accessibleStores(Long tenant,Long employee){
-  Set<Long> result=new HashSet<>();
-  for(Long store:mapper.activeStores(tenant))for(PermissionAction action:PermissionAction.values())
-   if(permits(tenant,employee,store,action)){result.add(store);break;}
-  return result;
- }
+ @Override public Set<Long> accessibleStores(Long tenant,Long employee){return authorization(tenant,employee).accessibleStores();}
  /** Caller must hold this tenant row lock until the whole mutation commits. */
  @Override
- public void lock(){if(mapper.lockTenant(RequestScope.requireEmployeeTenantId())==null)throw new SecurityException("Inactive tenant");}
+ public void lock(){if(mapper.lockTenant(RequestScope.requireEmployeeTenantId())==null)throw new SecurityException("Inactive tenant");RbacRequestContext.invalidateAfterTransaction();}
  @Override
  public void ensureAdministrator(){lock();if(mapper.adminCount(RequestScope.requireEmployeeTenantId())<1)throw new SecurityException("Last merchant administrator required");}
  @Override
  public Map<String,Object> context(){
   Long t=RequestScope.requireAuthenticatedEmployeeTenantId();Long e=RequestScope.current().getEmployeeId();
+  AuthorizationSnapshot snapshot=authorization(t,e);
   List<Map<String,Object>> stores=new ArrayList<>();
-  for(Long id:accessibleStores(t,e)){
-   Map<String,Object> row=new LinkedHashMap<>();row.put("id",id);row.put("name",mapper.storeName(t,id));
+  for(Long id:snapshot.accessibleStores()){
+   Map<String,Object> row=new LinkedHashMap<>();row.put("id",id);row.put("name",snapshot.storeName(id));
    List<String> actions=new ArrayList<>();
-   RequestScope previous=RequestScope.current();
-   try{
-    RequestScope.set(new RequestScope(e,null,t,id,Collections.singleton(id)));
-    for(PermissionAction action:PermissionAction.values())try{require(action);actions.add(action.getCode());}catch(SecurityException denied){/* omit denied actions */}
-   }finally{RequestScope.set(previous);}
+   for(PermissionAction action:PermissionAction.values())if(snapshot.effective(id,action))actions.add(action.getCode());
    row.put("permissions",actions);stores.add(row);
   }
-  stores.sort(java.util.Comparator.comparing(row->((Long)row.get("id"))));
   stringifyIds(stores);
   Map<String,Object> result=new LinkedHashMap<>();result.put("stores",stores);return result;
  }
@@ -79,20 +67,22 @@ import java.util.*;
  }
  private void requireTenantManager(){
   require(PermissionAction.EMPLOYEE_MANAGE);
-  Long t=RequestScope.requireEmployeeTenantId();Long e=RequestScope.current().getEmployeeId();
-  if(mapper.assignments(t,e,"employee:manage").stream().noneMatch(r->"TENANT_STORES".equals(r.getDataScope())))throw new SecurityException("Tenant-wide manager required");
+
  }
  @Override
  @Transactional public void replacePermissions(String role,List<String> actions){
+  try{
   lock();requireTenantManager();Long t=RequestScope.requireEmployeeTenantId();
   if(actions==null || mapper.roleExists(t,role)!=1)throw new SecurityException("Invalid role");
   try{for(String action:actions)PermissionAction.fromCode(action);}catch(IllegalArgumentException ex){throw new SecurityException("Invalid action");}
   mapper.deletePermissions(t,role);
   for(String action:new HashSet<>(actions))mapper.addPermission(t,role,action);
   ensureAdministrator();mapper.revokeTenant(t);
+  }finally{RbacRequestContext.invalidateAfterTransaction();}
  }
  @Override
  @Transactional public void replaceAssignments(Long employee,List<RoleGrantInput> grants){
+  try{
   lock();requireTenantManager();Long t=RequestScope.requireEmployeeTenantId();
   if(grants==null || mapper.activeEmployee(t,employee)!=1)throw new SecurityException("Invalid employee");
   Set<Long> stores=new HashSet<>();Set<String> roles=new HashSet<>();
@@ -107,5 +97,6 @@ import java.util.*;
    if(g.getDataScope()!=DataScope.TENANT_STORES)for(Long store:g.getStoreIds())mapper.addRoleStore(t,employee,g.getRoleCode(),store);
   }
   ensureAdministrator();mapper.revokeTenant(t);
+  }finally{RbacRequestContext.invalidateAfterTransaction();}
  }
 }

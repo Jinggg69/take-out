@@ -245,3 +245,8 @@ python scripts/test-dining-session-migration.py 与 python scripts/test-order-pi
 ## 2026-11-10 本机当前库实际迁移完成
 
 本机 `localhost:3306/sky_take_out` 已在完整备份、恢复演练和停写确认后补齐20261105_01起的8项迁移；全部16项迁移目标结构已到位。30张表的字段、索引、外键、CHECK及触发器与全新初始化加支付账户迁移的基准一致，原始数据指纹保持，后端启动及5项只读HTTP/鉴权检查通过。详细记录、脚本哈希与备份路径保存在本地忽略目录 `local-reports/migration-execution-20261110/completion.md`；完整备份保留在 `database/backups/`。此前章节“业务库未迁移”是当时的历史状态，此记录为当前本机库的较新状态；不代表其他部署环境已迁移。新增功能权限仍由商户管理员配置。
+
+
+## 2026-11-10 本机数据库名称切换
+
+按用户要求，当前本机活动库已由 `sky_take_out` 切换为 `junzhou_take_out`。完整备份后复制并逐表校验30张表全部记录、结构及自增编号一致；后端连接已切换并通过启动/只读HTTP检查，旧库保留用于回退。默认配置模板和初始化目标已同步。迁移完成及改名的历史记录中的旧库名不改写；最新改名证据与备份路径见本地 `local-reports/database-rename-20261110/completion.md`。DataGrip等工具需手动刷新并选择新库。

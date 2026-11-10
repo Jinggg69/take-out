@@ -136,7 +136,7 @@ take-out/
 
 后端模块依赖为 `junzhou-server → junzhou-common`、`junzhou-server → junzhou-pojo`。目前是一个 Spring Boot 应用，三个 Maven 模块不代表三个独立服务。
 
-后端 Maven 坐标和 Java 包名已统一为 `com.junzhou`，启动类为 `com.junzhou.JunzhouApplication`。现有数据库名 `sky_take_out` 和 `sky.*` 配置键保持兼容，本次重命名不需要迁移数据库；本地历史报告、备份与旧源码归档保留原名。
+后端 Maven 坐标和 Java 包名已统一为 `com.junzhou`，启动类为 `com.junzhou.JunzhouApplication`。当前本机数据库名已切换为 `junzhou_take_out`；`sky.*` 配置键继续兼容，本地历史报告、备份与旧源码归档保留原名。
 
 ## 本地开发
 
@@ -149,7 +149,7 @@ take-out/
 - 准备 Redis；小程序使用 HBuilderX 与微信开发者工具。
 - 支付、图片上传和配送范围校验分别需要微信支付、OSS、百度地图配置。
 
-`database/junzhou.sql` 创建并使用 `sky_take_out` 数据库，包含 `DROP TABLE IF EXISTS`。仅在确认可重建的开发库中初始化；已有数据的数据库需要备份和增量迁移，不能直接执行该脚本升级。
+`database/junzhou.sql` 创建并使用 `junzhou_take_out` 数据库，包含 `DROP TABLE IF EXISTS`。仅在确认可重建的开发库中初始化；已有数据的数据库需要备份和增量迁移，不能直接执行该脚本升级。
 
 已有库按迁移说明依次执行 `database/migrations/20261026_01_admin_session.sql`、`database/migrations/20261027_01_order_payment_lifecycle.sql`，再发布新后端。全新初始化脚本已包含会话表、订单生命周期字段及退款表。
 

@@ -25,6 +25,8 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 class RbacIntegrationTest {
+ SqlCounter counter=new SqlCounter();
+ TenantScopeMapper tenantMapper;
  JdbcTemplate db;RbacService rbac;DataSourceTransactionManager tx;RbacMapper mapper;
  @SuppressWarnings("unchecked") <T> T transactional(T target){
   TransactionInterceptor interceptor=new TransactionInterceptor();interceptor.setTransactionManager(tx);
@@ -51,12 +53,13 @@ class RbacIntegrationTest {
   db.update("insert into role_permission values(1,'MERCHANT_ADMIN','employee:manage'),(1,'CLERK','order:read'),(1,'CLERK','order:accept')");
   db.update("insert into employee_store values(1,2,10),(1,2,11)");db.update("insert into employee_role_store values(1,2,'CLERK',10)");
   db.update("insert into admin_session values('a',1,9999999999999),('b',2,9999999999999),('c',3,9999999999999)");
-  Configuration conf=new Configuration(new Environment("test",new SpringManagedTransactionFactory(),ds));conf.setMapUnderscoreToCamelCase(true);conf.addMapper(RbacMapper.class);
-  mapper=new SqlSessionTemplate(new SqlSessionFactoryBuilder().build(conf)).getMapper(RbacMapper.class);
+  Configuration conf=new Configuration(new Environment("test",new SpringManagedTransactionFactory(),ds));conf.setMapUnderscoreToCamelCase(true);conf.addMapper(RbacMapper.class);conf.addMapper(TenantScopeMapper.class);conf.setLocalCacheScope(LocalCacheScope.STATEMENT);conf.addInterceptor(counter);
+  SqlSessionTemplate template=new SqlSessionTemplate(new SqlSessionFactoryBuilder().build(conf));
+  mapper=template.getMapper(RbacMapper.class);tenantMapper=template.getMapper(TenantScopeMapper.class);
   rbac=transactional(new RbacServiceImpl(mapper));scope(1L,10L);
  }
  void scope(Long employee,Long store){RequestScope.set(new RequestScope(employee,null,1L,store,Collections.singleton(store)));}
- @AfterEach void clear(){RequestScope.clear();}
+ @AfterEach void clear(){RequestScope.clear();org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();}
  @Test void largeIdentifiersAreSerializedAsExactStrings() throws Exception {
   db.update("insert into store values(9007199254740993,1,1,'large')");
   String json=new com.junzhou.json.JacksonObjectMapper().writeValueAsString(rbac.context());
@@ -131,6 +134,7 @@ class RbacIntegrationTest {
   }finally{pool.shutdownNow();}
  }
  @Test void disablingLastAdminRollsBackEmployeeAndKeepsSession(){
+  db.update("insert into role_permission values(1,'MERCHANT_ADMIN','employee:status')");
   // Use a real transactional update through a mock only for employee SQL execution;
   // the guard and session transaction remain real.
   EmployeeMapper employees=mock(EmployeeMapper.class);when(employees.update(any())).thenAnswer(i->{com.junzhou.entity.Employee e=i.getArgument(0);return db.update("update employee set status=? where tenant_id=1 and id=?",e.getStatus(),e.getId());});
@@ -138,5 +142,89 @@ class RbacIntegrationTest {
   com.junzhou.service.EmployeeService service=transactional(impl);
   assertThrows(SecurityException.class,()->service.startOrStop(0,1L));
   assertEquals(1,db.queryForObject("select status from employee where id=1",Integer.class));
+ }
+
+ @org.apache.ibatis.plugin.Intercepts(@org.apache.ibatis.plugin.Signature(type=org.apache.ibatis.executor.statement.StatementHandler.class,method="query",args={java.sql.Statement.class,org.apache.ibatis.session.ResultHandler.class}))
+ public static class SqlCounter implements org.apache.ibatis.plugin.Interceptor {
+  int count;
+  public Object intercept(org.apache.ibatis.plugin.Invocation i)throws Throwable{count++;return i.proceed();}
+ }
+ private org.springframework.mock.web.MockHttpServletRequest request(){
+  org.springframework.mock.web.MockHttpServletRequest r=new org.springframework.mock.web.MockHttpServletRequest();
+  org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(new org.springframework.web.context.request.ServletRequestAttributes(r));
+  RbacRequestContext.begin(r);return r;
+ }
+ @org.junit.jupiter.params.ParameterizedTest @org.junit.jupiter.params.provider.ValueSource(ints={1,3,10})
+ void authorizationQueriesAreConstantAndReused(int stores){
+  db.update("delete from store where tenant_id=1");
+  for(int i=0;i<stores;i++)db.update("insert into store values(?,1,1,?)",10+i,"Store"+i);
+  request();scope(1L,10L);counter.count=0;
+  assertEquals(stores,rbac.accessibleStores(1L,1L).size());assertEquals(4,counter.count);
+  rbac.require(PermissionAction.EMPLOYEE_MANAGE);rbac.context();assertEquals(4,counter.count);
+  org.springframework.mock.web.MockHttpServletRequest next=request();counter.count=0;
+  com.junzhou.service.impl.TenantScopeServiceImpl scopes=new com.junzhou.service.impl.TenantScopeServiceImpl(tenantMapper);
+  ReflectionTestUtils.setField(scopes,"rbac",rbac);RequestScope.set(scopes.forEmployee(1L,10L));
+  rbac.require(PermissionAction.EMPLOYEE_MANAGE);rbac.context();assertEquals(5,counter.count);
+  RbacRequestContext.clear(next);
+ }
+ @Test void requestRevocationAndIdentityIsolation(){
+  org.springframework.mock.web.MockHttpServletRequest r=request();scope(2L,10L);
+  assertTrue(rbac.permits(1L,2L,10L,PermissionAction.ORDER_ACCEPT));
+  assertFalse(rbac.permits(1L,1L,10L,PermissionAction.ORDER_ACCEPT));
+  db.update("delete from role_permission where role_code='CLERK'");
+  assertTrue(rbac.permits(1L,2L,10L,PermissionAction.ORDER_ACCEPT));
+  RbacRequestContext.clear(r);RbacRequestContext.begin(r);
+  assertFalse(rbac.permits(1L,2L,10L,PermissionAction.ORDER_ACCEPT));
+ }
+ @Test void lockedMutationRejectsRevokedEntrySnapshot(){
+  request();scope(1L,10L);rbac.require(PermissionAction.EMPLOYEE_MANAGE);
+  db.update("delete from role_permission where role_code='MERCHANT_ADMIN'");
+  assertThrows(SecurityException.class,()->rbac.replacePermissions("CLERK",Collections.emptyList()));
+  assertEquals(2,db.queryForObject("select count(*) from role_permission where role_code='CLERK'",Integer.class));
+  assertNull(RbacRequestContext.current());
+ }
+ @Test void sharedActionsAndRoleBoundariesRemainDistinct(){
+  db.update("insert into role_permission values(1,'CLERK','dish:update')");
+  db.update("insert into employee_role values(1,2,'OTHER','CURRENT_STORE')");
+  db.update("insert into employee_role_store values(1,2,'OTHER',11)");
+  request();scope(2L,10L);RequestScope before=RequestScope.current();
+  assertTrue(rbac.permits(1L,2L,10L,PermissionAction.DISH_UPDATE));
+  assertFalse(rbac.permits(1L,2L,11L,PermissionAction.ORDER_ACCEPT));
+  assertThrows(SecurityException.class,()->rbac.require(PermissionAction.DISH_UPDATE));
+  assertFalse(rbac.context().toString().contains("dish:update"));assertSame(before,RequestScope.current());
+ }
+ @Test void disabledAndUnknownGrantsDenyAccess(){
+  db.update("update employee_role set data_scope='UNKNOWN' where employee_id=2");
+  assertTrue(rbac.accessibleStores(1L,2L).isEmpty());
+  db.update("update employee set status=0 where id=1");
+  assertTrue(rbac.accessibleStores(1L,1L).isEmpty());
+ }
+ @Test void requestScopeFailureAndAsyncExitClearSnapshot()throws Exception{
+  org.springframework.mock.web.MockHttpServletRequest r=request();scope(1L,10L);rbac.context();
+  com.junzhou.service.TenantScopeService scopes=mock(com.junzhou.service.TenantScopeService.class);
+  com.junzhou.interceptor.RequestScopeInterceptor interceptor=new com.junzhou.interceptor.RequestScopeInterceptor(scopes);
+  interceptor.afterConcurrentHandlingStarted(r,new org.springframework.mock.web.MockHttpServletResponse(),this);
+  assertNull(RbacRequestContext.current());
+  RbacRequestContext.begin(r);scope(1L,10L);rbac.context();
+  r.setRequestURI("/admin/rbac/context");
+  com.junzhou.context.BaseContext.removeCurrentId();
+  assertFalse(interceptor.preHandle(r,new org.springframework.mock.web.MockHttpServletResponse(),this));
+  assertNull(RbacRequestContext.current());
+ }
+
+ @Test void outerTransactionRollbackClearsAnyReloadedSnapshot(){
+  request();scope(1L,10L);
+  org.springframework.transaction.support.TransactionTemplate template=new org.springframework.transaction.support.TransactionTemplate(tx);
+  template.execute(status->{
+   rbac.replacePermissions("CLERK",Collections.singletonList("order:accept"));
+   rbac.context();assertNotNull(RbacRequestContext.current());status.setRollbackOnly();return null;
+  });
+  assertNull(RbacRequestContext.current());
+  assertEquals(2,db.queryForObject("select count(*) from role_permission where role_code='CLERK'",Integer.class));
+ }
+ @Test void snapshotCollectionsCannotBeChangedByCallers(){
+  request();scope(1L,10L);rbac.context();AuthorizationSnapshot snapshot=RbacRequestContext.current();
+  assertThrows(UnsupportedOperationException.class,()->snapshot.accessibleStores().clear());
+  assertTrue(snapshot.permits(10L,PermissionAction.EMPLOYEE_MANAGE));
  }
 }
