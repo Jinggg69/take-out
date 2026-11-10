@@ -174,6 +174,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     public void startOrStop(Integer status, Long id){
         if(status==null || (status!=0 && status!=1))throw new SecurityException("Invalid status");
         rbac.lock();
+        rbac.require(com.junzhou.security.PermissionAction.EMPLOYEE_STATUS);
         // update employee set status = ? where id = ?
         Employee employee = Employee.builder()
                 .id(id)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElButton, ElImage, ElInput, ElMessage, ElMessageBox, ElOption, ElSelect, ElTable, ElTableColumn } from 'element-plus'
 import DataState from '@/components/DataState.vue'
@@ -10,6 +10,7 @@ import type { DishCategory, DishId, DishRecord } from '@/api/dish'
 import { dishResultMessage, formatDishPrice, nextDishStatus } from '@/utils/dish'
 import { errorMessage } from '@/utils/error-message'
 import { createDishList } from './list-state'
+import DishDetailDialog from './DishDetailDialog.vue'
 
 const router = useRouter()
 const list = createDishList(dishApi)
@@ -19,6 +20,8 @@ const categoryError = ref('')
 const categoryLoading = ref(false)
 const selected = ref<DishId[]>([])
 const pending = ref('')
+const detailRow = ref<Pick<DishRecord, 'id' | 'name'> | null>(null)
+let detailTrigger: HTMLElement | null = null
 let active = true
 watch(() => state.records, () => { selected.value = [] })
 onMounted(() => { void list.load(); void loadCategories() })
@@ -55,6 +58,16 @@ async function action(kind: 'delete' | 'status', row?: DishRecord) {
   finally { pending.value = '' }
 }
 function select(rows: DishRecord[]) { selected.value = rows.map(row => row.id) }
+function openDetail(row: DishRecord, event: MouseEvent) {
+  detailTrigger = event.currentTarget as HTMLElement
+  detailRow.value = { id: row.id, name: row.name }
+}
+async function closeDetail() {
+  detailRow.value = null
+  await nextTick()
+  if (active && detailTrigger?.isConnected) detailTrigger.focus()
+  detailTrigger = null
+}
 </script>
 
 <template>
@@ -194,11 +207,25 @@ function select(rows: DishRecord[]) { selected.value = rows.map(row => row.id) }
             width="48"
             :selectable="() => !pending"
           />
+          <!-- @vue-generic {DishRecord} -->
           <ElTableColumn
             prop="name"
             label="菜品名称"
             min-width="160"
-          />
+          >
+            <template #default="{ row }">
+              <ElButton
+                link
+                type="primary"
+                class="dish-name-link"
+                :disabled="Boolean(pending)"
+                :aria-label="`查看${row.name}的详情`"
+                @click.stop="openDetail(row, $event)"
+              >
+                {{ row.name }}
+              </ElButton>
+            </template>
+          </ElTableColumn>
           <!-- @vue-generic {DishRecord} -->
           <ElTableColumn
             label="图片"
@@ -312,6 +339,13 @@ function select(rows: DishRecord[]) { selected.value = rows.map(row => row.id) }
         @size-change="list.setPageSize"
       />
     </section>
+    <DishDetailDialog
+      v-if="detailRow"
+      :id="detailRow.id"
+      :name="detailRow.name"
+      :categories="categories"
+      @close="closeDetail"
+    />
   </div>
 </template>
 
@@ -324,5 +358,7 @@ function select(rows: DishRecord[]) { selected.value = rows.map(row => row.id) }
 .dish-thumbnail { display: block; width: 80px; height: 48px; border-radius: var(--jz-radius-control); background: var(--jz-page-background); }
 .dish-image-empty { display: grid; place-items: center; height: 100%; color: var(--jz-text-secondary); font-size: var(--jz-font-caption); }
 .dish-price { font-variant-numeric: tabular-nums; }
+.dish-name-link { max-width: 100%; min-height: 32px; height: auto; white-space: normal; text-align: left; }
+.dish-name-link :deep(span) { overflow-wrap: anywhere; }
 @media (max-width: 767px) { .dish-filter .management-filter-field { width: 100%; } .dish-filter :deep(.el-select__wrapper) { min-height: var(--jz-control-height-large); } }
 </style>

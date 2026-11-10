@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElButton, ElImage, ElInput, ElMessage, ElMessageBox, ElOption, ElSelect, ElTable, ElTableColumn } from 'element-plus'
 import DataState from '@/components/DataState.vue'
@@ -10,6 +10,7 @@ import type { SetmealCategory, SetmealId, SetmealRecord } from '@/api/setmeal'
 import { setmealResultMessage, formatSetmealPrice, nextSetmealStatus } from '@/utils/setmeal'
 import { errorMessage } from '@/utils/error-message'
 import { createSetmealList } from './list-state'
+import SetmealDetailDialog from './SetmealDetailDialog.vue'
 
 const router = useRouter()
 const list = createSetmealList(setmealApi)
@@ -19,6 +20,8 @@ const categoryError = ref('')
 const categoryLoading = ref(false)
 const selected = ref<SetmealId[]>([])
 const pending = ref('')
+const detailRow = ref<Pick<SetmealRecord, 'id' | 'name'> | null>(null)
+let detailTrigger: HTMLElement | null = null
 let active = true
 watch(() => state.records, () => { selected.value = [] })
 onMounted(() => { void list.load(); void loadCategories() })
@@ -55,6 +58,16 @@ async function action(kind: 'delete' | 'status', row?: SetmealRecord) {
   finally { pending.value = '' }
 }
 function select(rows: SetmealRecord[]) { selected.value = rows.map(row => row.id) }
+function openDetail(row: SetmealRecord, event: MouseEvent) {
+  detailTrigger = event.currentTarget as HTMLElement
+  detailRow.value = { id: row.id, name: row.name }
+}
+async function closeDetail() {
+  detailRow.value = null
+  await nextTick()
+  if (active && detailTrigger?.isConnected) detailTrigger.focus()
+  detailTrigger = null
+}
 </script>
 
 <template>
@@ -194,11 +207,25 @@ function select(rows: SetmealRecord[]) { selected.value = rows.map(row => row.id
             width="48"
             :selectable="() => !pending"
           />
+          <!-- @vue-generic {SetmealRecord} -->
           <ElTableColumn
             prop="name"
             label="套餐名称"
             min-width="160"
-          />
+          >
+            <template #default="{ row }">
+              <ElButton
+                link
+                type="primary"
+                class="setmeal-name-link"
+                :disabled="Boolean(pending)"
+                :aria-label="`查看${row.name}的菜品明细`"
+                @click.stop="openDetail(row, $event)"
+              >
+                {{ row.name }}
+              </ElButton>
+            </template>
+          </ElTableColumn>
           <!-- @vue-generic {SetmealRecord} -->
           <ElTableColumn
             label="图片"
@@ -312,6 +339,12 @@ function select(rows: SetmealRecord[]) { selected.value = rows.map(row => row.id
         @size-change="list.setPageSize"
       />
     </section>
+    <SetmealDetailDialog
+      v-if="detailRow"
+      :id="detailRow.id"
+      :name="detailRow.name"
+      @close="closeDetail"
+    />
   </div>
 </template>
 
@@ -324,5 +357,7 @@ function select(rows: SetmealRecord[]) { selected.value = rows.map(row => row.id
 .setmeal-thumbnail { display: block; width: 80px; height: 48px; border-radius: var(--jz-radius-control); background: var(--jz-page-background); }
 .setmeal-image-empty { display: grid; place-items: center; height: 100%; color: var(--jz-text-secondary); font-size: var(--jz-font-caption); }
 .setmeal-price { font-variant-numeric: tabular-nums; }
+.setmeal-name-link { max-width: 100%; min-height: 32px; height: auto; white-space: normal; text-align: left; }
+.setmeal-name-link :deep(span) { overflow-wrap: anywhere; }
 @media (max-width: 767px) { .setmeal-filter .management-filter-field { width: 100%; } .setmeal-filter :deep(.el-select__wrapper) { min-height: var(--jz-control-height-large); } }
 </style>
