@@ -1,4 +1,4 @@
-"""Verify the pickup migration in a disposable local MySQL schema only."""
+"""Verify report queries using the default SQL mode in a disposable local MySQL schema."""
 import os
 import re
 import shutil
@@ -27,7 +27,7 @@ def sql(query, database=None, succeeds=True):
     if database:
         assert owned and database == schema
         args += ["--database=" + schema]
-    result = subprocess.run(args, input="SET SESSION sql_mode='STRICT_ALL_TABLES';\n" + query,
+    result = subprocess.run(args, input=query,
                             text=True, encoding="utf-8", env=env, capture_output=True)
     if (result.returncode == 0) != succeeds:
         raise AssertionError("Unexpected MySQL result: " + result.stderr)
@@ -36,6 +36,9 @@ def sql(query, database=None, succeeds=True):
 
 
 try:
+    mode = sql("SELECT @@SESSION.sql_mode;")
+    assert 'ONLY_FULL_GROUP_BY' in mode.split(','), "MySQL default mode must include ONLY_FULL_GROUP_BY: " + mode
+    print('MySQL default sql_mode: ' + mode)
     sql(f"CREATE DATABASE `{schema}`;")
     owned=True
     init=(ROOT/'database/junzhou.sql').read_text(encoding='utf-8')
@@ -71,17 +74,40 @@ try:
     details=sql(queries['itemDetails'],schema);assert 'REFUNDED' in details and 'COUNTED' in details
     single=sql(queries['daily'].replace('in (1,2)','in (1)'),schema);assert '999' not in single
     sql(queries['users'],schema);sql(queries['overview'],schema)
+    sql("INSERT INTO store(id,tenant_id,code,name) VALUES(4,1,'menu','Menu'),(5,1,'other','Other'),(6,2,'foreign','Foreign'),(7,1,'empty','Empty');",schema)
     for kind in ['dish','setmeal']:
+        # Two different names in the same bucket catch accidental GROUP BY product.name.
+        sql(f"INSERT INTO {kind}(id,tenant_id,name,category_id,price,status) VALUES "
+            "(9001,1,'menu-on-a',16,10,1),(9002,1,'menu-on-b',16,10,1),"
+            "(9003,1,'menu-off',16,10,1),(9004,1,'menu-sold-out',16,10,1),"
+            "(9005,1,'menu-disabled',16,10,0),(9006,1,'menu-other-store',16,10,1),"
+            "(9007,2,'menu-foreign',16,10,1)",schema)
+        sql(f"INSERT INTO store_{kind}(tenant_id,store_id,{kind}_id,on_sale,sold_out) VALUES "
+            "(1,4,9001,1,0),(1,4,9002,1,0),(1,4,9003,0,0),"
+            "(1,4,9004,1,1),(1,4,9005,1,0),(1,5,9006,1,0),(2,6,9007,1,0)",schema)
         raw=ET.tostring(tree.find("select[@id='menu']"),encoding='unicode')
         raw=re.sub(r'<choose>.*?</choose>',f'store_{kind} m join {kind} p on p.id=m.{kind}_id',raw,flags=re.S)
         raw=re.sub(r'<bind[^>]*/>','',raw)
-        raw=re.sub(r'<foreach.*?</foreach>','(1,2)',raw,flags=re.S)
-        raw=re.sub(r'<[^>]*>',' ',raw).replace('#{tenant}','1')
-        sql(raw,schema)
+        raw=re.sub(r'<foreach.*?</foreach>','{stores}',raw,flags=re.S)
+        raw=re.sub(r'<[^>]*>',' ',raw)
+        for tenant,stores,expected in [
+            (1,'(4)',{'0':3,'1':2}),
+            (1,'(5)',{'1':1}),
+            (1,'(4,5,6)',{'0':3,'1':3}),
+            (1,'(6)',{}),
+            (2,'(4,5,6)',{'1':1}),
+            (1,'(7)',{}),
+        ]:
+            query=raw.replace('#{tenant}',str(tenant)).replace('{stores}',stores)
+            output=sql(query,schema)
+            rows=[line.split('\t') for line in output.splitlines()]
+            assert len(rows)==len(expected), (kind,tenant,stores,rows,expected)
+            assert {name:int(count) for name,count in rows}==expected, (kind,tenant,stores,rows,expected)
+        queries['menu_'+kind]=raw.replace('#{tenant}','1').replace('{stores}','(4,5)')
     report=ROOT/'local-reports/stage6';report.mkdir(parents=True,exist_ok=True)
     plans=[]
     for key,q in queries.items():plans += [key,sql('EXPLAIN '+q,schema)]
     (report/'mysql-explain.txt').write_text('\n\n'.join(plans),encoding='utf-8')
-    print('PASS: init, repeatable index migration, actual Mapper SQL, cross-day payment/refund, late cancelled payment, tenant/store scope; EXPLAIN saved.')
+    print('PASS: init, repeatable index migration, actual Mapper SQL under default ONLY_FULL_GROUP_BY, cross-day payment/refund, late cancelled payment, menu status buckets and tenant/store scope; EXPLAIN saved.')
 finally:
     if owned:sql(f"DROP DATABASE `{schema}`;")

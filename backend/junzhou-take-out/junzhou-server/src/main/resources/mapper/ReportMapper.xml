@@ -35,7 +35,7 @@ select r.updated_at event_time,0 received,r.amount_fen/100.0 refunded,0 placed,0
  select cast(case when m.on_sale=1 and m.sold_out=0 and p.status=1 then 1 else 0 end as char) name,count(*) quantity
  from <choose><when test="kind == 'dish'">store_dish m join dish p on p.id=m.dish_id</when><otherwise>store_setmeal m join setmeal p on p.id=m.setmeal_id</otherwise></choose>
  where m.tenant_id=#{tenant} and p.tenant_id=m.tenant_id and m.store_id in <foreach collection="stores" item="s" open="(" separator="," close=")">#{s}</foreach>
- group by case when m.on_sale=1 and m.sold_out=0 and p.status=1 then 1 else 0 end
+ group by 1
 </select>
 <select id="ledger" resultType="com.junzhou.report.ReportRow">
  select o.id,o.number,o.store_id storeId,o.fulfillment_type fulfillmentType,cast(o.order_time as char(19)) as `day`,'ORDER' event,o.amount from orders o where <include refid="scope"/> and o.order_time&gt;=#{from} and o.order_time&lt;#{until}
