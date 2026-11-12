@@ -47,8 +47,8 @@
         </view>
       </view>
       <view class="bottomBox btnBox">
-        <button class="add_btn" type="primary" plain="true" @click="handleSave">
-          确认支付
+        <button class="add_btn" type="primary" plain="true" :disabled="paying" :loading="paying" @click="handleSave">
+          {{ paying ? paymentMessage : (needsConfirmation ? "查询支付结果" : "确认支付") }}
         </button>
       </view>
     </view>
@@ -57,10 +57,19 @@
 
 <script>
 import { mapState } from "vuex";
-import { paymentOrder, cancelOrder } from "@/pages/api/api.js";
+import { paymentOrder, confirmOrderPayment } from "@/pages/api/api.js";
 export default {
   data() {
     return {
+      paying: false,
+      paymentMessage: "正在发起支付",
+      paymentRun: 0,
+      pageActive: true,
+      needsConfirmation: false,
+      paymentFinished: false,
+      confirmTimer: null,
+      confirmWait: null,
+      cashierError: null,
       timeout: false,
       rocallTime: "",
       orderId: null,
@@ -79,58 +88,118 @@ export default {
   onLoad(options) {
     this.orderId = options.orderId;
   },
+  onShow() {
+    this.pageActive = true;
+    if (this.needsConfirmation && !this.paying) this.handleSave();
+    else if (!this.paying && this.orderDataInfo.orderTime) this.runTimeBack();
+  },
+  onHide() { this.stopPaymentWork(); },
+  onUnload() { this.stopPaymentWork(); },
   methods: {
     ...mapState(["orderData", "shopInfo"]),
-    // 支付详情
-    handleSave() {
-      if (this.timeout) {
-        cancelOrder(this.orderId).then((res) => {});
-        uni.redirectTo({
-          url: "/pages/details/index?orderId=" + this.orderId,
-        });
-      } else {
-        // 如果支付成功进入成功页
-        clearTimeout(this.times);
-        const params = {
-          orderNumber: this.orderDataInfo.orderNumber,
-          payMethod: this.activeRadio === 0 ? 1 : 2,
-        };
-        paymentOrder(params).then(async (res) => {
-          if (res.code === 1) {
-            const [err, payRes] = await uni.requestPayment({
-              ...res.data,
-              package: res.data.packageStr, // package 为微信支付必须的字段
-            });
-            console.log(err, payRes);
-            if (err) {
-              await uni.showToast({ title: "支付失败", icon: "error" });
-              setTimeout(() => {
-                // 下单失败!!
-                uni.redirectTo({
-                  url: "/pages/details/index?orderId=" + this.orderId,
-                });
-              }, 1500);
-            } else {
-              await uni.showToast({ title: "支付成功", icon: "success" });
-              setTimeout(() => {
-                // 下单成功!!
-                uni.redirectTo({
-                  url: "/pages/success/index?orderId=" + this.orderId,
-                });
-              }, 1500);
-            }
-          } else {
-            uni.showToast({
-              title: res.msg,
-              duration: 1000,
-              icon: "none",
-            });
-          }
-        });
+    isCurrentPayment(run) {
+      return this.pageActive && run === this.paymentRun;
+    },
+    stopPaymentWork() {
+      this.pageActive = false;
+      this.paymentRun++;
+      this.paying = false;
+      clearTimeout(this.times);
+      clearTimeout(this.confirmTimer);
+      if (this.confirmWait) this.confirmWait();
+      this.confirmWait = null;
+    },
+    async handleSave() {
+      if (this.paying || !this.pageActive || this.paymentFinished) return;
+      this.paying = true;
+      const run = ++this.paymentRun;
+      clearTimeout(this.times);
+      try {
+        if (!this.needsConfirmation && !this.timeout) {
+          this.paymentMessage = "正在发起支付";
+          const res = await paymentOrder({
+            orderNumber: this.orderDataInfo.orderNumber,
+            payMethod: 1,
+          });
+          if (!this.isCurrentPayment(run)) return;
+          if (!res || res.code !== 1 || !res.data) throw { msg: (res && res.msg) || "暂时无法发起支付，请重试" };
+          this.needsConfirmation = true;
+          // Callback form behaves consistently in both Vue 2 and Vue 3 uni-app runtimes.
+          this.cashierError = await new Promise(resolve => {
+            try {
+              uni.requestPayment({
+                ...res.data,
+                package: res.data.packageStr,
+                success: () => resolve(null),
+                fail: error => resolve(error),
+              });
+            } catch (error) { resolve(error); }
+          });
+        }
+        if (!this.isCurrentPayment(run)) return;
+        this.needsConfirmation = true;
+        await this.confirmPaymentResult(run);
+      } catch (error) {
+        if (this.isCurrentPayment(run)) uni.showToast({ title: error.msg || "网络异常，请稍后重试", icon: "none" });
+      } finally {
+        if (this.isCurrentPayment(run)) {
+          this.paying = false;
+          if (!this.needsConfirmation && !this.paymentFinished) this.runTimeBack();
+        }
       }
+    },
+    async confirmPaymentResult(run) {
+      this.paymentMessage = "正在确认支付结果";
+      for (let attempt = 0; attempt < 6; attempt++) {
+        if (!this.isCurrentPayment(run)) return;
+        try {
+          const res = await confirmOrderPayment(this.orderId);
+          if (!this.isCurrentPayment(run)) return;
+          if (res && res.code === 1 && res.data) {
+            const order = res.data;
+            const status = Number(order.status), paid = Number(order.payStatus);
+            if (paid === 1 && status >= 2 && status <= 5 && !order.refundStatus) {
+              this.needsConfirmation = false;
+              this.paymentFinished = true;
+              uni.showToast({ title: "支付成功", icon: "success" });
+              uni.redirectTo({ url: "/pages/success/index?orderId=" + this.orderId });
+              return;
+            }
+            if (status === 6 || order.refundStatus || [2, 3, 4].includes(paid)) {
+              this.needsConfirmation = false;
+              this.paymentFinished = true;
+              uni.showToast({ title: "订单已取消或退款，请查看订单", icon: "none" });
+              uni.redirectTo({ url: "/pages/details/index?orderId=" + this.orderId });
+              return;
+            }
+          }
+        } catch (error) {
+          if (!this.isCurrentPayment(run)) return;
+          if (error.staleStore || error.statusCode === 401) {
+            uni.showToast({ title: error.msg || "请重新登录后查询订单", icon: "none" });
+            return;
+          }
+          // A timeout leaves payment unconfirmed; the next query or worker may recover it.
+        }
+        if (attempt < 5) {
+          await new Promise(resolve => {
+            this.confirmWait = resolve;
+            this.confirmTimer = setTimeout(resolve, 2000);
+          });
+          this.confirmWait = null;
+        }
+      }
+      if (!this.isCurrentPayment(run)) return;
+      const cancelled = this.cashierError && /cancel/i.test(this.cashierError.errMsg || "");
+      uni.showToast({ title: cancelled ? "已取消支付，请查看订单状态" : "支付结果确认中，请稍后查询订单", icon: "none" });
+      this.needsConfirmation = false;
+      this.paymentFinished = true;
+      uni.redirectTo({ url: "/pages/details/index?orderId=" + this.orderId });
     },
     // // 订单倒计时
     runTimeBack() {
+      clearTimeout(this.times);
+      if (!this.pageActive || !this.orderDataInfo.orderTime) return;
       const end = Date.parse(this.orderDataInfo.orderTime.replace(/-/g, "/"));
       const now = Date.parse(new Date());
       const m15 = 15 * 60 * 1000;

@@ -99,6 +99,11 @@
         select * from orders where user_id=#{userId} and user_id=#{currentUser} and client_request_id=#{requestId}</select>
     <select id="cancelledPaymentsToCheck" resultType="com.junzhou.entity.Orders">select * from orders where status=6 and pay_status=0 and (wechat_trade_state is null or wechat_trade_state not in ('CLOSED','REVOKED','PAYERROR')) and (payment_check_time is null or payment_check_time&lt;#{before}) <include refid="scope"/> order by coalesce(payment_check_time,order_time),id limit 20</select>
     <update id="recordPaymentCheck">update orders set payment_check_time=#{now} where id=#{id} <include refid="scope"/></update>
+    <update id="claimPaymentCheck">
+        update orders set payment_check_time=#{now} where id=#{id} and status in (1,6) and pay_status=0
+        and (wechat_trade_state is null or wechat_trade_state not in ('CLOSED','REVOKED','PAYERROR'))
+        and (payment_check_time is null or payment_check_time &lt; #{before}) <include refid="scope"/>
+    </update>
     <update id="markClosedPayment">update orders set wechat_trade_state=#{state},payment_check_time=#{now} where id=#{id} and status=6 and pay_status=0 <include refid="scope"/></update>
     <select id="getByNumber" resultType="com.junzhou.entity.Orders">select * from orders where number = #{orderNumber} <include refid="scope"/></select>
     <select id="getByNumberForUpdate" resultType="com.junzhou.entity.Orders">select * from orders where number = #{orderNumber} <include refid="scope"/> for update</select>

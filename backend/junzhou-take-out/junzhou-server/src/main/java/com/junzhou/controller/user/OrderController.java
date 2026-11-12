@@ -132,6 +132,12 @@ public class OrderController {
         return Result.success(orderPaymentVO);
     }
 
+    @PostMapping("/{id}/payment/confirm")
+    @ApiOperation("主动核查当前用户订单支付结果")
+    public Result<OrderVO> confirmPayment(@PathVariable Long id) {
+        return Result.success(orderService.confirmPayment(id));
+    }
+
     /**
      * 用户催单，仅访问本人当前门店订单
      * @param id 订单id

@@ -22,6 +22,9 @@ public interface OrderMapper {
 
     void recordPaymentCheck(@Param("id") Long id,@Param("now") LocalDateTime now);
 
+    int claimPaymentCheck(@Param("id") Long id, @Param("now") LocalDateTime now,
+                          @Param("before") LocalDateTime before);
+
     int markClosedPayment(@Param("id") Long id,@Param("state") String state,@Param("now") LocalDateTime now);
 
     /**

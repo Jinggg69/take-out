@@ -4,7 +4,7 @@ package com.junzhou.service;
 
 /** 支付恢复业务接口。 */
 public interface PaymentRecoveryService {
-    /** Re-read and reconcile one order within its trusted system scope. */
+    /** Re-read and reconcile an unpaid pending/cancelled order within its authorized scope. */
     void reconcileOrder(Long orderId);
     /**
      * 处理到期的退款请求。

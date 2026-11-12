@@ -36,6 +36,9 @@ public interface OrderService {
      */
     OrderPaymentVO payment(OrdersPaymentDTO ordersPaymentDTO) throws Exception;
 
+    /** 核查本人当前门店订单的微信支付结果，返回已持久化的状态。 */
+    OrderVO confirmPayment(Long id);
+
     /**
      * 分页查询当前用户退款相关订单（处理中、成功、异常及历史待核验）
      */

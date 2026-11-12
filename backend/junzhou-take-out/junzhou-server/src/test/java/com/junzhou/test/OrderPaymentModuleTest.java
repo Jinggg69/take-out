@@ -1489,6 +1489,125 @@ class OrderPaymentModuleTest {
         assertEquals("SUCCESS",refundState(10)); assertEquals(2,paymentState(10));
     }
 
+
+    @Test void pendingPaymentWithLostNotificationIsConfirmedBeforeTimeout() {
+        provider().queriedPayment=paymentResource("order-10","wx-10");
+        systemBean(PaymentRecoveryService.class).reconcileOrder(10L);
+        assertEquals(2,statusOf(10)); assertEquals(1,paymentState(10));
+        assertEquals(1,provider().paymentQueries); assertEquals(0,provider().closeCalls);
+        assertEquals(0,jdbc.queryForObject("select count(*) from refund_request",Integer.class));
+        systemBean(PaymentRecoveryService.class).reconcileOrder(10L);
+        assertEquals(1,provider().paymentQueries);
+    }
+
+    @ParameterizedTest @ValueSource(strings={"NOTPAY","USERPAYING","CLOSED"})
+    void pendingPaymentIsNeverClosedOrMarkedPaidByNonSuccess(String state) {
+        provider().queriedPayment=JSON.parseObject("{\"out_trade_no\":\"order-10\",\"trade_state\":\""+state+"\"}");
+        systemBean(PaymentRecoveryService.class).reconcileOrder(10L);
+        assertEquals(1,provider().paymentQueries); assertEquals(0,provider().closeCalls);
+        assertEquals(1,statusOf(10)); assertEquals(0,paymentState(10));
+    }
+
+    @Test void pendingPaymentQueriesAreThrottledAndRetryAfterFailure() {
+        provider().paymentQueryFails=true;
+        systemBean(PaymentRecoveryService.class).reconcileOrder(10L);
+        systemBean(PaymentRecoveryService.class).reconcileOrder(10L);
+        assertEquals(1,provider().paymentQueries); assertEquals(0,paymentState(10));
+        jdbc.update("update orders set payment_check_time=? where id=10",LocalDateTime.now().minusSeconds(4));
+        provider().paymentQueryFails=false; provider().queriedPayment=paymentResource("order-10","wx-10");
+        systemBean(PaymentRecoveryService.class).reconcileOrder(10L);
+        assertEquals(2,provider().paymentQueries); assertEquals(1,paymentState(10));
+    }
+
+    @Test void pendingQueryCannotConfirmWrongAmountAndCancellationDuringQueryCreatesRefund() {
+        provider().queriedPayment=paymentResource("order-10","wx-10");
+        provider().queriedPayment.getJSONObject("amount").put("total",1);
+        systemBean(PaymentRecoveryService.class).reconcileOrder(10L);
+        assertEquals(1,provider().paymentQueries); assertEquals(0,paymentState(10));
+        jdbc.update("update orders set payment_check_time=null where id=10");
+        provider().queriedPayment=paymentResource("order-10","wx-10");
+        provider().duringPaymentQuery=()->jdbc.update("update orders set status=6 where id=10");
+        systemBean(PaymentRecoveryService.class).reconcileOrder(10L);
+        assertEquals(6,statusOf(10)); assertEquals(3,paymentState(10)); assertEquals("REQUESTED",refundState(10));
+    }
+
+    @Test void paymentConfirmationEndpointChecksOwnershipAndReturnsPersistedPayment() throws Exception {
+        provider().queriedPayment=paymentResource("order-10","wx-10");
+        mvc.perform(post("/user/order/10/payment/confirm").header("authentication",token()))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(1))
+            .andExpect(jsonPath("$.data.payStatus").value(1)).andExpect(jsonPath("$.data.status").value(2));
+        mvc.perform(post("/user/order/10/payment/confirm").header("authentication",token()))
+            .andExpect(jsonPath("$.data.payStatus").value(1));
+        assertEquals(1,provider().paymentQueries);
+    }
+
+    @Test void paymentConfirmationRejectsOtherUsersAndStoresBeforeProviderCall() throws Exception {
+        addOrder(11,84,1,0);
+        jdbc.execute("insert into store(id,tenant_id,status) values(2,1,1)");
+        addOrder(12,42,1,0); jdbc.update("update orders set store_id=2 where id=12");
+        for(int id:new int[]{11,12,999}) mvc.perform(post("/user/order/"+id+"/payment/confirm").header("authentication",token()))
+            .andExpect(jsonPath("$.code").value(0));
+        assertEquals(0,provider().paymentQueries);
+    }
+
+    @Test void paymentConfirmationReturnsUnconfirmedStateWhenProviderUnavailable() throws Exception {
+        provider().paymentQueryFails=true;
+        mvc.perform(post("/user/order/10/payment/confirm").header("authentication",token()))
+            .andExpect(jsonPath("$.code").value(1)).andExpect(jsonPath("$.data.payStatus").value(0));
+        assertEquals(1,provider().paymentQueries);
+    }
+
+
+    @Test void pendingPaymentCandidateScanFiltersStateRecencyOwnershipAndCursor() {
+        SqlSessionFactory factory=context.getBean(SqlSessionFactory.class);
+        if(!factory.getConfiguration().hasMapper(OrderMaintenanceMapper.class)) factory.getConfiguration().addMapper(OrderMaintenanceMapper.class);
+        OrderMaintenanceMapper mapper=new SqlSessionTemplate(factory).getMapper(OrderMaintenanceMapper.class);
+        for(long id=11;id<=15;id++) addOrder(id,42,1,0);
+        jdbc.execute("insert into tenant values(2,1)");
+        jdbc.execute("insert into store(id,tenant_id,status) values(3,2,1)");
+        jdbc.update("update orders set pay_status=1 where id=11");
+        jdbc.update("update orders set payment_check_time=? where id=12",LocalDateTime.now());
+        jdbc.update("update orders set status=6 where id=13");
+        jdbc.update("update orders set tenant_id=2 where id=14");
+        jdbc.update("update orders set tenant_id=2,store_id=3 where id=15");
+        RequestScope.clear();
+        java.util.List<Orders> candidates=com.junzhou.task.BackgroundJobScope.scan(() -> mapper.pendingPaymentCandidates(0,LocalDateTime.now().minusSeconds(5)));
+        assertEquals(2,candidates.size()); assertEquals(10L,candidates.get(0).getId());
+        assertEquals(15L,candidates.get(1).getId()); assertEquals(2L,candidates.get(1).getTenantId()); assertEquals(3L,candidates.get(1).getStoreId());
+        assertEquals(15L,com.junzhou.task.BackgroundJobScope.scan(() -> mapper.pendingPaymentCandidates(10,LocalDateTime.now().minusSeconds(5))).get(0).getId());
+        RequestScope.set(RequestScope.forSystem(1L,1L));
+        assertThrows(Exception.class,()->mapper.pendingPaymentCandidates(0,LocalDateTime.now()));
+    }
+
+    @Test void concurrentPaymentChecksOnlyClaimOneProviderAttempt() throws Exception {
+        OrderMapper mapper=context.getBean(OrderMapper.class);
+        ExecutorService workers=Executors.newFixedThreadPool(2);
+        CountDownLatch start=new CountDownLatch(1);
+        LocalDateTime now=LocalDateTime.now();
+        Callable<Integer> claim=()-> {
+            RequestScope.set(RequestScope.forSystem(1L,1L));
+            try { assertTrue(start.await(5,TimeUnit.SECONDS)); return mapper.claimPaymentCheck(10L,now,now.minusSeconds(3)); }
+            finally { RequestScope.clear(); }
+        };
+        try {
+            Future<Integer> a=workers.submit(claim), b=workers.submit(claim); start.countDown();
+            assertEquals(1,a.get(10,TimeUnit.SECONDS)+b.get(10,TimeUnit.SECONDS));
+        } finally { workers.shutdownNow(); }
+    }
+
+    @Test void backgroundRecoveryScansPendingOrdersWithTrustedOwnership() {
+        SqlSessionFactory factory=context.getBean(SqlSessionFactory.class);
+        if(!factory.getConfiguration().hasMapper(OrderMaintenanceMapper.class)) factory.getConfiguration().addMapper(OrderMaintenanceMapper.class);
+        OrderMaintenanceMapper mapper=new SqlSessionTemplate(factory).getMapper(OrderMaintenanceMapper.class);
+        com.junzhou.task.PaymentRecoveryTask task=new com.junzhou.task.PaymentRecoveryTask();
+        org.springframework.test.util.ReflectionTestUtils.setField(task,"candidates",mapper);
+        org.springframework.test.util.ReflectionTestUtils.setField(task,"refunds",context.getBean(PaymentRecoveryService.class));
+        org.springframework.test.util.ReflectionTestUtils.setField(task,"enabled",true);
+        provider().queriedPayment=paymentResource("order-10","wx-10");
+        task.recover();
+        assertEquals(1,paymentState(10)); assertEquals(1,provider().paymentQueries); assertNull(RequestScope.current());
+    }
+
     @Test void cancelledPaymentWithLostNotificationIsRecoveredByAuthenticatedQuery() {
         jdbc.update("update orders set status=6 where id=10");
         provider().queriedPayment=paymentResource("order-10","wx-10");
@@ -1593,6 +1712,9 @@ class OrderPaymentModuleTest {
         int refundCalls;
         int refundQueries;
         int closeCalls;
+        int paymentQueries;
+        Runnable duringPaymentQuery;
+        boolean paymentQueryFails;
         JSONObject queriedPayment;
         String refundResult = "{\"status\":\"PROCESSING\"}";
 
@@ -1613,7 +1735,12 @@ class OrderPaymentModuleTest {
             return refundResponse(number);
         }
 
-        @Override public JSONObject queryOrder(String number) { return queriedPayment; }
+        @Override public JSONObject queryOrder(String number) {
+            paymentQueries++;
+            if(duringPaymentQuery!=null) duringPaymentQuery.run();
+            if(paymentQueryFails) throw new com.junzhou.exception.WechatApiException(0,"TIMEOUT");
+            return queriedPayment;
+        }
         @Override public void closeOrder(String number) { closeCalls++; }
 
         @Override

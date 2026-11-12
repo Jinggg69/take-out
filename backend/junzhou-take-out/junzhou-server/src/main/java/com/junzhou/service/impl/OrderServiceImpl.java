@@ -78,6 +78,8 @@ public class OrderServiceImpl implements OrderService {
     @Autowired
     private com.junzhou.service.PaymentAccountService paymentAccounts;
     @Autowired
+    private com.junzhou.service.PaymentRecoveryService paymentRecovery;
+    @Autowired
     private DeliveryRangeService deliveryRangeService;
     @Autowired
     private WebSocketServer webSocketServer;
@@ -358,6 +360,15 @@ public class OrderServiceImpl implements OrderService {
                 && order.getRefundStatus()==null && !Orders.CANCELLED.equals(order.getStatus())
                 && !Orders.COMPLETED.equals(order.getStatus())) vo.setPickupToken(order.getPickupCredential());
         return vo;
+    }
+
+    @Override
+    public OrderVO confirmPayment(Long id) {
+        Orders order = requireOrder(id, false);
+        requireUserOrder(order);
+        // Provider I/O stays outside the payment confirmation transaction.
+        paymentRecovery.reconcileOrder(order.getId());
+        return userOrderDetail(id);
     }
 
     /**

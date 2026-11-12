@@ -347,6 +347,11 @@ export const paymentOrder = (params) =>
 		params
 	})
 // 再来一单
+export const confirmOrderPayment = id => request({
+	url: `/user/order/${id}/payment/confirm`,
+	method: 'POST'
+})
+
 export const repetitionOrder = (params) =>
 	request({
 		url: `/user/order/repetition/${params}`,
