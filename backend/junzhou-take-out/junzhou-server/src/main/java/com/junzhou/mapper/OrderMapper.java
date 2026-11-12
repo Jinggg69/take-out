@@ -11,6 +11,8 @@ import java.util.List;
 
 @Mapper
 public interface OrderMapper {
+    @org.apache.ibatis.annotations.Select("<script><bind name='tenant' value='@com.junzhou.context.RequestScope@requireTenantId()'/><bind name='store' value='@com.junzhou.context.RequestScope@requireStoreId()'/>select t.name from tenant t join store s on s.tenant_id=t.id where t.id=#{tenant} and s.id=#{store} and t.status=1 and s.status=1</script>")
+    String currentMerchantName();
     int dineComplete(Long id);
     int pickupReady(Long id);
     int pickupVerify(@Param("id") Long id,@Param("credential") String credential,@Param("employeeId") Long employeeId,@Param("now") LocalDateTime now);

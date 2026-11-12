@@ -6,26 +6,28 @@
       @clickLeft="goBack"
       left-icon="back"
       leftIcon="arrowleft"
-      title="提交订单"
+      title="确认订单"
       statusBar="true"
       fixed="true"
       color="#ffffff"
-      backgroundColor="#9E2026"
+      backgroundColor="#164B3B"
     ></uni-nav-bar>
     <!-- end -->
     <view class="order_content" @touchstart="touchstart">
       <view class="order_content_box">
-        <view class="box boxPad">
+        <view class="box boxPad checkout-mode">
+          <view class="fulfillment-options">
           <button :disabled="isHandlePy || !!pendingSubmission || !!quotePromise" :aria-pressed="fulfillmentType === 'DELIVERY'" @click="changeFulfillment('DELIVERY')">外卖配送</button>
           <button :disabled="isHandlePy || !!pendingSubmission || !!quotePromise" :aria-pressed="fulfillmentType === 'PICKUP'" @click="changeFulfillment('PICKUP')">到店自取</button>
-          <button v-if="$store.state.diningContext" :disabled="isHandlePy || !!pendingSubmission || !!quotePromise" @click="changeFulfillment('DINE_IN')">堂食点餐</button>
-          <view v-if="fulfillmentType === 'DINE_IN'">{{ $store.state.diningContext.storeName }} · {{ $store.state.diningContext.name }}，仅商品金额，无打包及配送费。请核对桌号后支付。</view>
+          <button v-if="$appStore.diningContext" :disabled="isHandlePy || !!pendingSubmission || !!quotePromise" @click="changeFulfillment('DINE_IN')">堂食点餐</button>
+          </view>
+          <view v-if="fulfillmentType === 'DINE_IN'">{{ diningSummary }}，仅商品金额，无打包及配送费。请核对桌号后支付。</view>
           <view>当前方式：{{ fulfillmentType === 'DINE_IN' ? '堂食' : fulfillmentType === 'PICKUP' ? '到店自取，无配送费' : '外卖配送' }}</view>
         </view>
-        <view v-if="fulfillmentType === 'PICKUP'" class="box boxPad">
-          <view>到店自取 · 制作完成后凭核销凭证取餐</view>
-          <label>取餐联系人<input v-model="contactName" maxlength="32" placeholder="请填写取餐联系人" :disabled="isHandlePy || !!pendingSubmission" /></label>
-          <label>联系手机号<input v-model="contactPhone" type="number" maxlength="11" placeholder="请填写11位手机号" :disabled="isHandlePy || !!pendingSubmission" /></label>
+        <view v-if="fulfillmentType === 'PICKUP'" class="box boxPad pickup-contact">
+          <view class="pickup-notice">制作完成后，凭核销凭证到店取餐</view>
+          <label class="contact-row"><text>取餐联系人</text><input v-model="contactName" maxlength="32" aria-label="取餐联系人" placeholder="请填写取餐联系人" :disabled="isHandlePy || !!pendingSubmission" /></label>
+          <label class="contact-row"><text>联系手机号</text><input v-model="contactPhone" type="number" maxlength="11" aria-label="联系手机号" placeholder="请填写11位手机号" :disabled="isHandlePy || !!pendingSubmission" /></label>
         </view>
         <!-- 地址 -->
         <address-pop v-if="fulfillmentType === 'DELIVERY'"
@@ -53,7 +55,7 @@
           <!-- 菜品详情 -->
           <dish-detail
             :orderDataes="orderDataes"
-            :showDisplay="showDisplay"
+            :showDisplay="showDisplay" @toggle="showDisplay = !showDisplay"
             :orderDishNumber="orderDishNumber"
             :orderListDataes="orderListDataes"
             :orderDishPrice="orderDishPrice"
@@ -87,7 +89,7 @@
       <view class="footer_order_buttom order_form">
         <view class="order_number">
           <image
-            src="../../static/brand/cart-active.png"
+            src="../../static/tabbar/menu-active.png"
             class="order_number_icon"
             mode="aspectFit"
           ></image>

@@ -1,46 +1,24 @@
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const path = require('node:path')
-const vm = require('node:vm')
 const test = require('node:test')
+let menu
+test.before(async () => { menu = await import('../utils/menu-cart.js') })
 
-function loadMenu() {
-  const additions = [], subtractions = []
-  const context = vm.createContext({
-    module: { exports: {} }, mapState: () => ({}), mapMutations: () => ({}),
-    navBar: {}, Phone: {}, popMask: {}, popCart: {}, dishDetail: {},
-    newAddShoppingCartAdd: async value => { additions.push(value); return { code: 1 } },
-    newShoppingCartSub: async value => { subtractions.push(value); return { code: 1 } },
-    uni: { showToast() {} },
-  })
-  const source = fs.readFileSync(path.join(__dirname, '../pages/index/index.js'), 'utf8')
-    .replace(/^import[\s\S]*?from\s*["'][^"']+["'];?[^\n]*/gm, '')
-    .replace('export default', 'module.exports =')
-  vm.runInContext(source, context)
-  const component = context.module.exports
-  const page = Object.assign(component.data(), component.methods, {
-    orderListDataes: [], flavorDataes: [], dishDetailes: { dishNumber: 0 },
-    getTableOrderDishListes() {}, getDishListDataes() {},
-  })
-  return { page, additions, subtractions }
-}
-
-test('多项口味的加菜和减菜发送同一完整组合', async () => {
-  const { page, additions, subtractions } = loadMenu()
-  const item = { id: 5, type: 1, flavorRemark: JSON.stringify(['微辣', '少盐']) }
-  await page.addDishAction(item, '普通')
-  await page.redDishAction(item, '普通')
-  assert.equal(additions[0].dishFlavor, '微辣,少盐')
-  assert.equal(subtractions[0].dishFlavor, '微辣,少盐')
-  assert.equal(subtractions[0].dishId, 5)
+test('菜品与套餐ID不混淆，同菜不同完整口味分别增减', () => {
+  const product = { id: '5', type: 1 }
+  assert.deepEqual(menu.cartPayload(product, ['微辣', '少盐']), { dishId: '5', dishFlavor: '微辣,少盐' })
+  assert.deepEqual(menu.cartPayload({ setmealId: '5', type: 2 }, ['微辣']), { setmealId: '5' })
+  const cart = [{ dishId: '5', dishFlavor: '微辣,少盐', number: 2 }, { dishId: '5', dishFlavor: '重辣,少盐', number: 1 }, { setmealId: '5', number: 4 }]
+  assert.equal(menu.productQuantity(product, cart), 3)
+  assert.equal(menu.productQuantity({ id: '5', type: 2 }, cart), 4)
+  assert.deepEqual(menu.cartPayload(cart[1]), { dishId: '5', dishFlavor: '重辣,少盐' })
 })
-
-test('购物车已有口味优先于过时的规格选择，套餐只发送套餐 ID', async () => {
-  const { page, subtractions } = loadMenu()
-  await page.redDishAction({ dishId: 5, dishFlavor: '重辣,多盐', flavorRemark: '["微辣"]' }, '购物车')
-  assert.equal(subtractions[0].dishFlavor, '重辣,多盐')
-  await page.redDishAction({ setmealId: 5, dishFlavor: '不适用' }, '购物车')
-  assert.equal(subtractions[1].setmealId, 5)
-  assert.equal(subtractions[1].dishId, undefined)
-  assert.equal(subtractions[1].dishFlavor, undefined)
+test('后台规格JSON解析且拒绝损坏或空组选项', () => {
+  assert.deepEqual(menu.flavorGroups([{ name: '辣度', value: '["微辣","重辣"]' }]), [{ name: '辣度', options: ['微辣', '重辣'] }])
+  assert.deepEqual(menu.flavorGroups([{ name: '坏值', value: '{bad' }, { name: '空值', value: '[]' }]), [])
+})
+test('购物车只计算真实商品金额，按分处理小数，不附加其他门店费用', () => {
+  assert.deepEqual(menu.cartTotal([{ number: 3, amount: '0.10' }, { number: 1, amount: '0.20' }]), { quantity: 4, amount: '0.50' })
+  assert.deepEqual(menu.cartTotal([]), { quantity: 0, amount: '0.00' })
+  assert.throws(() => menu.cartTotal([{ number: 1, amount: 'not-price' }]), /价格/)
+  assert.throws(() => menu.cartPayload({}), /商品/)
 })

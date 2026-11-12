@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
+@com.junzhou.annotation.MiniappEntry(com.junzhou.annotation.MiniappEntry.Scope.IDENTITY)
 @RequestMapping("/user/addressBook")
 @Api(tags = "C端地址簿接口")
 public class AddressBookController {

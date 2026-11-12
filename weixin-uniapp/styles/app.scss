@@ -1,0 +1,38 @@
+$app-green: #176B4B;
+$app-text: #1F2933;
+$app-muted: #58636F;
+$app-line: #E6E9EC;
+.app-page { box-sizing: border-box; min-height: calc(100vh - var(--window-top, 0px) - var(--window-bottom, 0px)); background: #F7F8FA; color: $app-text; padding: 32rpx 28rpx calc(40rpx + env(safe-area-inset-bottom)); font-size: 28rpx; line-height: 1.55; }
+.app-page * { box-sizing: border-box; }
+.app-heading { font-size: 42rpx; font-weight: 700; line-height: 1.3; margin-bottom: 16rpx; overflow-wrap: anywhere; }
+.app-subtitle { color: $app-muted; font-size: 26rpx; margin-bottom: 32rpx; }
+.app-section-title { font-size: 32rpx; font-weight: 650; margin: 38rpx 0 20rpx; }
+.app-panel { padding: 28rpx; background: white; border-radius: 24rpx; margin-bottom: 24rpx; }
+.app-row { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
+.app-grow { flex: 1; min-width: 0; }
+.app-title { font-size: 32rpx; font-weight: 600; overflow-wrap: anywhere; }
+.app-muted { color: $app-muted; font-size: 26rpx; }
+.app-small { font-size: 24rpx; }
+.app-meta { margin-top: 12rpx; color: $app-muted; font-size: 26rpx; }
+.app-button { min-height: 88rpx; line-height: 1.4; padding: 22rpx 28rpx; margin: 0; display: flex; justify-content: center; align-items: center; border-radius: 16rpx; font-size: 28rpx; font-weight: 600; color: white; background: $app-green; }
+.app-button::after { border: 0; }
+.app-button[disabled] { color: #69757D; background: #E6E9EC; }
+.app-button-secondary { color: $app-green; background: #EAF3EE; }
+.app-link { padding: 22rpx 0; min-height: 88rpx; color: $app-green; background: transparent; font-size: 26rpx; line-height: 1.5; margin: 0; }
+.app-link::after { border: 0; }
+.app-search { display: flex; align-items: center; gap: 16rpx; margin: 28rpx 0; }
+.app-search input { flex: 1; min-width: 0; height: 88rpx; padding: 0 24rpx; background: white; border: 1px solid #D5DCE0; border-radius: 16rpx; font-size: 28rpx; }
+.app-list { background: white; border-radius: 24rpx; overflow: hidden; }
+.app-list-row { display: flex; align-items: center; gap: 20rpx; width: 100%; padding: 28rpx; background: white; text-align: left; border-bottom: 1px solid $app-line; border-radius: 0; color: $app-text; font-size: 28rpx; line-height: 1.55; }
+.app-list-row::after { border: 0; }
+.app-list-row:last-child { border-bottom: 0; }
+.app-logo { width: 96rpx; height: 96rpx; border-radius: 16rpx; flex-shrink: 0; }
+.app-mark { width: 96rpx; height: 96rpx; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: 16rpx; background: #EAF3EE; color: $app-green; font-size: 36rpx; font-weight: 600; }
+.app-status { font-size: 24rpx; color: $app-green; white-space: nowrap; }
+.app-error { color: #A42C2C; font-size: 26rpx; margin: 20rpx 0; }
+.app-divider { height: 1px; background: $app-line; margin: 24rpx 0; }
+.app-tabs { display: flex; flex-wrap: wrap; gap: 8rpx; margin: 24rpx 0; }
+.app-tab { flex-shrink: 0; font-size: 26rpx; padding: 20rpx; background: transparent; border-radius: 12rpx; line-height: 1.4; color: $app-muted; margin: 0; min-height: 80rpx; }
+.app-tab::after { border: 0; }
+.app-tab.active { color: $app-green; background: #EAF3EE; font-weight: 600; }
+.app-price { font-size: 34rpx; font-weight: 600; font-variant-numeric: tabular-nums; }

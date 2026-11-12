@@ -1,15 +1,12 @@
-import Vue from 'vue'
+import { createSSRApp } from 'vue'
 import App from './App'
-import store from './store'
-import "@/styles/common.scss"
-// 1
-Vue.config.productionTip = false
-Vue.prototype.$store = store
+import getAppStore, { pinia } from './store/index.js'
 
-App.mpType = 'app'
-
-const app = new Vue({
-	store,
-    ...App
-})
-app.$mount()
+export function createApp() {
+  const app = createSSRApp(App)
+  app.use(pinia)
+  const state = getAppStore()
+  state.restoreSession()
+  app.config.globalProperties.$appStore = state
+  return { app }
+}

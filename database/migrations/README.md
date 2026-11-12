@@ -2,6 +2,22 @@
 
 `junzhou.sql` 是全新开发库的初始化脚本，包含删除重建表的语句。已有数据库升级使用本目录增量脚本。
 
+## 20261112_01_merchant_discovery.sql：小程序公开商家目录
+
+依赖 `20261109_02_store_fulfillment.sql`。在维护窗口备份并核对选定业务库后，先执行此迁移再发布对应后端；本轮交付未对真实业务库执行迁移。初始化库同样需要执行本脚本。
+
+新增可空 `tenant.logo_url VARCHAR(512)`、`tenant.introduction VARCHAR(500)`、`store_settings.contact_phone VARCHAR(32)`，存量数据初始 NULL，既有身份归属、订单与费用不变。脚本可重复执行，已有值保留；若同名列定义不匹配则报错。MySQL DDL 隐式提交，失败后检查已生效字段并修复再重入，不能用 `--force`。应用回退保留字段与数据。
+
+商家资料仅通过受控配置维护，此轮没有资料管理/上传页面。`logo_url` 只填写可匿名读取的公开静态图片 HTTPS URL，当前服务端仅接收 `/public/` 下 `.png/.jpg/.jpeg/.webp/.gif/.svg` 路径，且无查询串、片段、用户信息、编码或 `..` 路径；例如 `https://cdn.example.com/public/merchants/merchant-2.png`。其他值在公开接口返回 NULL。部署负责人须确认 CDN/对象匿名读取授权；不得填写员工鉴权接口或含 token 的签名链接，也不改变已有 file_asset 归属和权限。
+
+联系电话为空可保存，空白会转 NULL；有值时最多32字符，允许数字、空格、`+()-` 且必须含数字。电话通过已有门店配置保存接口更新，沿用版本锁与版本递增，不修改其他店配置。
+
+升级后核对三列类型和 NULL 默认值、tenant/store_settings 行数及原始字段未变；抽查无资料商家返回空图片/简介、无电话门店返回 NULL，以及更新电话后 configVersion 增长。测试使用随机 H2 合成库覆盖实际 Mapper，MySQL 脚本的真实库执行与备份恢复演练由部署阶段完成。
+
+运行 `python scripts/test-merchant-discovery-migration.py` 可在本机 MySQL 一次性随机测试库验证首次升级、重复执行保留已填资料与版本/归属、拒绝不匹配列、完整初始化后追加迁移。只读取开发配置中的localhost连接，密码通过MYSQL_PWD传递且不打印，不选择开发业务schema；最终仅清理本脚本创建的随机库。需要本机测试账号具备创建/删除测试库和DDL权限。沙箱网络阻止时不能跳过校验，应在授权后重跑。真实业务库迁移和可恢复备份演练仍须部署阶段单独完成。
+
+2026-11-12 本机授权连续两轮验证以上四项通过，随机测试库均已清理；这证明合成数据上的迁移行为，未执行真实业务库升级。
+
 ## 20261103_01_file_asset.sql：公开菜单图片归属
 
 依赖阶段一迁移及 `20261029_01_tenant_store.sql`，先执行此增量脚本，再部署配套后端。新增 `file_asset`，记录租户、上传员工、固定用途 `PUBLIC_CATALOG`、OSS 对象键、公开 URL 和上传时间；归属字段没有默认值，不自动回填历史 URL。新建库初始化脚本包含同一建表定义。
@@ -250,3 +266,8 @@ python scripts/test-dining-session-migration.py 与 python scripts/test-order-pi
 ## 2026-11-10 本机数据库名称切换
 
 按用户要求，当前本机活动库已由 `sky_take_out` 切换为 `junzhou_take_out`。完整备份后复制并逐表校验30张表全部记录、结构及自增编号一致；后端连接已切换并通过启动/只读HTTP检查，旧库保留用于回退。默认配置模板和初始化目标已同步。迁移完成及改名的历史记录中的旧库名不改写；最新改名证据与备份路径见本地 `local-reports/database-rename-20261110/completion.md`。DataGrip等工具需手动刷新并选择新库。
+
+
+## 20261112_02_mock_payment.sql：学习演示支付渠道
+
+新增订单不可变 payment_channel（历史默认 WECHAT）和持久 mock_payment 表。先完成支付账户及生命周期迁移，停写备份后执行本迁移，再部署后端。脚本不改商户身份、门店账户映射或历史资金记录。Mock 默认关闭，启用与完整演示步骤见 [Mock支付说明](../mock-payment.md)。迁移演练命令：`python scripts/test-mock-payment-migration.py`，仅使用本机随机临时库。

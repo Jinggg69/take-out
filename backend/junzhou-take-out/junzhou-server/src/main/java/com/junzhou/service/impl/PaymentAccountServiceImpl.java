@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class PaymentAccountServiceImpl implements PaymentAccountService {
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private com.junzhou.payment.MockPaymentGateway mock;
     private final PaymentAccountMapper mapper;
     private final WeChatProperties configuration;
     private final WeChatPayUtil legacyProvider;
@@ -20,9 +22,11 @@ public class PaymentAccountServiceImpl implements PaymentAccountService {
     /** {@inheritDoc} */
     @Override public String currentAccountId() {
         PaymentAccount account=mapper.current();
-        validate(account);
+        if(mock==null || !mock.enabled()) validate(account);
+        else if(account==null) throw new IllegalStateException("Store payment account is missing");
         return account.getId();
     }
+    @Override public String channelForNewOrders() { return mock==null ? "WECHAT" : mock.newOrderChannel(); }
     /** {@inheritDoc} */
     @Override public WeChatProperties properties(Orders order) {
         if(order==null || order.getPaymentAccountId()==null) throw new IllegalStateException("Order has no payment account");
@@ -31,11 +35,16 @@ public class PaymentAccountServiceImpl implements PaymentAccountService {
                 || !RequestScope.requireStoreId().equals(account.getStoreId())
                 || !account.getTenantId().equals(order.getTenantId()) || !account.getStoreId().equals(order.getStoreId()))
             throw new SecurityException("Payment account ownership mismatch");
+        if("MOCK".equals(order.getPaymentChannel())) {
+            if(mock==null || !mock.enabled()) throw new SecurityException("Mock payment is disabled");
+            return com.junzhou.payment.MockPaymentGateway.identity();
+        }
         return validate(account);
     }
     /** {@inheritDoc} */
     @Override public WeChatPayUtil provider(Orders order) {
         WeChatProperties properties=properties(order);
+        if("MOCK".equals(order.getPaymentChannel())) return com.junzhou.payment.MockPaymentGateway.provider(mock,order.getId());
         return "legacy".equals(order.getPaymentAccountId()) ? legacyProvider : new WeChatPayUtil(properties);
     }
     /** {@inheritDoc} */

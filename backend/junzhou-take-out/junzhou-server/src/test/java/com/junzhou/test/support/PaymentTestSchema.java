@@ -28,6 +28,8 @@ public final class PaymentTestSchema {
         jdbc.execute("create table dining_session_member(session_id varchar(32),user_id bigint,primary key(session_id,user_id))");
         jdbc.execute("create table store_dining_table(id bigint primary key,tenant_id bigint,store_id bigint,name varchar(64),enabled int,qr_token varchar(32),current_session_id varchar(32))");
         jdbc.execute("alter table orders add payment_account_id varchar(64) default 'legacy'");
+        jdbc.execute("alter table orders add payment_channel varchar(16) default 'WECHAT' not null");
+        jdbc.execute("create table mock_payment(order_id bigint primary key,state varchar(16) not null,amount_fen bigint not null,payer_openid varchar(128) not null,paid_at timestamp,out_refund_no varchar(64))");
         jdbc.execute("create unique index uk_order_number on orders(number)");
         jdbc.execute("create unique index uk_order_transaction on orders(wechat_transaction_id)");
         jdbc.execute("create unique index uk_order_submission on orders(user_id,client_request_id)");

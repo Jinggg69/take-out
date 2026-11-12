@@ -18,7 +18,7 @@
   background: #e1f1fe;
   display: inline-block;
   margin-right: 8rpx;
-  color: #302824;
+  color: #1F2933;
   font-size: 24rpx;
   font-family: PingFangSC, PingFangSC-Regular;
   font-weight: 400;
@@ -42,16 +42,16 @@
       letter-spacing: 0px;
       .time {
         display: inline-block;
-        color: #302824;
+        color: #1F2933;
         // font-weight: 600;
       }
       .type {
         display: inline-block;
-        color: #756B62;
+        color: #58636F;
         float: right;
       }
       .status {
-        color: #9E2026;
+        color: #176B4B;
       }
     }
     .orderBox {
@@ -87,7 +87,7 @@
         white-space: nowrap;
         padding-top: 12rpx;
         font-size: 26rpx;
-        color: #756B62;
+        color: #58636F;
       }
     }
     .numAndAum {
@@ -97,7 +97,7 @@
       font-family: PingFangSC, PingFangSC-Regular;
       font-weight: 400;
       text-align: left;
-      color: #756B62;
+      color: #58636F;
       line-height: 40rpx;
       text-align: center;
       position: absolute;
@@ -110,12 +110,12 @@
           text {
             font-family: PingFangSC, PingFangSC-Medium;
             font-weight: 600;
-            color: #302824;
+            color: #1F2933;
           }
         }
         &:last-child {
           font-size: 24rpx;
-          color: #756B62;
+          color: #58636F;
           text {
             padding: 0 10rpx;
           }
@@ -134,24 +134,24 @@
     width: 172rpx;
     height: 68rpx;
     line-height: 68rpx;
-    border-color: #EADFD1;
+    border-color: #E6E9EC;
     background-color: #fff;
     border-radius: 8rpx;
     font-size: 28rpx;
     font-family: PingFangSC, PingFangSC-Medium;
     font-weight: 500;
-    color: #302824;
+    color: #1F2933;
     margin-left: 20rpx;
     display: inline-block;
   }
   .btn {
-    background: #9E2026;
+    background: #176B4B;
     color: #fff;
   }
 }
 //
 .phoneIcon {
-  background: url(../image/phone.png);
+  background: url('@/image/phone.png');
   background-size: contain;
   width: 42rpx;
   height: 42rpx;
@@ -186,7 +186,7 @@
     line-height: 34rpx;
     border-radius: 8rpx 8rpx 0 0;
     text {
-      color: #9E2026;
+      color: #176B4B;
     }
   }
   .popupCon {
@@ -194,7 +194,7 @@
     .popupBtn {
       display: flex;
       padding: 0 68rpx 38rpx;
-      border-bottom: 2rpx solid #EADFD1;
+      border-bottom: 2rpx solid #E6E9EC;
       text {
         flex: 1;
         text-align: center;
@@ -214,24 +214,24 @@
     }
     .popupList {
       & > view {
-        border-bottom: 2rpx solid #EADFD1;
+        border-bottom: 2rpx solid #E6E9EC;
         padding: 40rpx 0 27rpx;
         text-align: center;
       }
     }
   }
   .popupSet {
-    background: #FFF8EE;
+    background: #F7F8FA;
     padding: 30rpx;
     font-size: 28rpx;
     text-align: center;
     margin: 0 32rpx;
     border-radius: 8rpx;
-    color: #756B62;
+    color: #58636F;
     view {
       &:last-child {
         padding-top: 34rpx;
-        color: #302824;
+        color: #1F2933;
         radio-group {
           display: flex;
           width: 100%;
@@ -280,7 +280,7 @@
 .phoneCon {
   .popupBox {
     text-align: center;
-    color: #302824;
+    color: #1F2933;
     font-size: 32rpx;
     line-height: 44rpx;
     .popup-content {
@@ -294,10 +294,10 @@
         height: 120rpx;
         line-height: 120rpx;
         font-size: 32rpx;
-        color: #302824;
+        color: #1F2933;
         &:first-child {
-          border-bottom: 2rpx solid #EADFD1;
-          color: #756B62;
+          border-bottom: 2rpx solid #E6E9EC;
+          color: #58636F;
           font-size: 26rpx;
         }
         &:last-child {
@@ -327,17 +327,17 @@
       padding: 60rpx;
     }
     .btn {
-      border-top: 2rpx solid #EADFD1;
+      border-top: 2rpx solid #E6E9EC;
       display: flex;
       font-size: 32rpx;
       & > view {
         padding: 24rpx 0;
         flex: 1;
         &:first-child {
-          border-right: 2rpx solid #EADFD1;
+          border-right: 2rpx solid #E6E9EC;
         }
         &:last-child {
-          color: #9E2026;
+          color: #176B4B;
         }
       }
     }
@@ -353,7 +353,7 @@
   background: #e1f1fe;
   display: inline-block;
   margin-right: 8rpx;
-  color: #302824;
+  color: #1F2933;
   font-size: 24rpx;
   font-family: PingFangSC, PingFangSC-Regular;
   font-weight: 400;
@@ -369,8 +369,8 @@
   .wx-checkbox-input-checked,
   .wx-radio-input-checked,
   .wx-switch-input-checked {
-    background-color: #9E2026 !important;
-    border-color: #9E2026 !important;
+    background-color: #176B4B !important;
+    border-color: #176B4B !important;
     color: #fff !important;
     transform: scale(0.7);
   }
@@ -384,42 +384,42 @@ radio .wx-radio-input.wx-radio-input-checked::before {
   font-size: 40rpx; /* 对勾大小 30rpx */
   font-weight: 600;
   color: #fff; /* 对勾颜色 */
-  border: 1rpx solid #9E2026;
-  background: #9E2026;
+  border: 1rpx solid #176B4B;
+  background: #176B4B;
   // transform:scale(1);
   // -webkit-transform:translate(-50%, -50%) scale(1);
 }
 .dish_dishFlavor {
   font-size: 20rpx;
-  color: #756B62;
+  color: #58636F;
 }
 
 /* 均州鱼庄：订单列表与项目自有弹层，沿用现有公共样式入口。 */
-.recent_orders .order_lists { border: 1rpx solid #EADFD1; border-radius: 20rpx; }
+.recent_orders .order_lists { border: 1rpx solid #E6E9EC; border-radius: 20rpx; }
 .recent_orders .order_lists .date_type { display: flex; justify-content: space-between; gap: 16rpx; height: auto; font-size: 24rpx; }
 .recent_orders .order_lists .date_type .time { min-width: 0; flex: 1; overflow-wrap: anywhere; }
-.recent_orders .order_lists .date_type .type { flex-shrink: 0; color: #9E2026; }
+.recent_orders .order_lists .date_type .type { flex-shrink: 0; color: #176B4B; }
 .recent_orders .order_lists .orderBox { display: flex; align-items: center; gap: 16rpx; }
 .recent_orders .order_lists .food_num { min-width: 0; padding-bottom: 24rpx; }
 .recent_orders .order_lists .food_num .food_num_item { height: auto; }
 .recent_orders .order_lists .food_num .food { height: auto; line-height: 40rpx; padding-top: 8rpx; font-size: 24rpx; }
 .recent_orders .order_lists .numAndAum { position: static; flex-shrink: 0; padding: 0; height: auto; background: transparent; text-align: right; }
-.recent_orders .order_lists .numAndAum view:first-child text { color: #9E2026; font-size: 30rpx; }
+.recent_orders .order_lists .numAndAum view:first-child text { color: #176B4B; font-size: 30rpx; }
 .againBtn { height: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 16rpx; padding-bottom: 24rpx; }
-.againBtn .new_btn { min-height: 80rpx; height: auto; line-height: 80rpx; margin-left: 0; border-radius: 12rpx; padding: 0 12rpx; border: 1rpx solid #EADFD1; }
+.againBtn .new_btn { min-height: 80rpx; height: auto; line-height: 80rpx; margin-left: 0; border-radius: 12rpx; padding: 0 12rpx; border: 1rpx solid #E6E9EC; }
 .againBtn .new_btn::after { border: 0; }
-.againBtn .btn { border-color: #9E2026; }
-.tag { color: #9E2026; background: #FFF8EE; border: 1rpx solid #EADFD1; box-sizing: border-box; }
-.tag2 { background: #FFF8EE; color: #756B62; }
-.tag3 { background: #FFF8EE; color: #756B62; }
+.againBtn .btn { border-color: #176B4B; }
+.tag { color: #176B4B; background: #F7F8FA; border: 1rpx solid #E6E9EC; box-sizing: border-box; }
+.tag2 { background: #F7F8FA; color: #58636F; }
+.tag3 { background: #F7F8FA; color: #58636F; }
 .dish_dishFlavor { font-size: 24rpx; }
-.comPopupBox .popup-content { width: 560rpx; max-width: 88vw; border: 1rpx solid #EADFD1; border-radius: 20rpx; overflow: hidden; }
-.comPopupBox .popup-content .text { padding: 40rpx 32rpx; color: #302824; }
+.comPopupBox .popup-content { width: 560rpx; max-width: 88vw; border: 1rpx solid #E6E9EC; border-radius: 20rpx; overflow: hidden; }
+.comPopupBox .popup-content .text { padding: 40rpx 32rpx; color: #1F2933; }
 .popupBox .popupCon .popupBtn { padding: 0 24rpx 20rpx; }
 .popupBox .popupCon .popupBtn text { min-height: 72rpx; line-height: 72rpx; }
-.popupBox .popupCon .popupBtn text:first-child { flex: 0 0 96rpx; color: #756B62; }
-.popupBox .popupCon .popupBtn text:last-child { flex: 0 0 96rpx; color: #9E2026; }
+.popupBox .popupCon .popupBtn text:first-child { flex: 0 0 96rpx; color: #58636F; }
+.popupBox .popupCon .popupBtn text:last-child { flex: 0 0 96rpx; color: #176B4B; }
 .popupBox .popupSet { margin: 0 24rpx; padding: 24rpx 16rpx; font-size: 24rpx; }
 .popupBox .popupSet view:last-child radio-group { flex-wrap: wrap; gap: 16rpx; }
 .phoneCon .popupBox .popup-content { border-radius: 24rpx 24rpx 0 0; padding-bottom: calc(24rpx + env(safe-area-inset-bottom)); }
-.phoneCon .popupBox .popup-content > view:nth-child(2) { color: #9E2026; }
+.phoneCon .popupBox .popup-content > view:nth-child(2) { color: #176B4B; }

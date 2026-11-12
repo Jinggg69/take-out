@@ -8,6 +8,8 @@ import org.apache.ibatis.annotations.Select;
 
 @Mapper
 public interface UserMapper {
+    @Select("<script><bind name='_user' value='@com.junzhou.context.RequestScope@requireAuthenticatedUserId()'/> select id,name,avatar from `user` where id=#{id} and id=#{_user}</script>")
+    User getProfileById(Long id);
     @Select("<script><bind name='_user' value='@com.junzhou.context.RequestScope@requireUserId()'/> select id from `user` where id=#{id} and id=#{_user} for update</script>")
     Long lockById(Long id);
 

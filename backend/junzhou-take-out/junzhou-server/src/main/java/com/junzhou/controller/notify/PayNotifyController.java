@@ -48,6 +48,7 @@ public class PayNotifyController {
                     request.getHeader("Wechatpay-Serial"),request.getHeader("Wechatpay-Signature"));
             com.junzhou.entity.Orders order=accounts.locate(notice);
             com.junzhou.context.RequestScope.set(com.junzhou.context.RequestScope.forSystem(order.getTenantId(),order.getStoreId()));
+            if("MOCK".equals(order.getPaymentChannel())) throw new SecurityException("Real notification cannot own a mock order");
             accounts.properties(order);
             {
             if(refund) {

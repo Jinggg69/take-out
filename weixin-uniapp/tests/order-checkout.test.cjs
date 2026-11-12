@@ -24,8 +24,7 @@ function createCheckout(submit = () => Promise.resolve({ code: 1, data: { id: 7 
   quote = () => Promise.resolve({ code: 1, data: {
     items: [{ number: 1, amount: 119 }], goodsAmount: 119, packAmount: 1, packFee: 1, storeId: 1, configVersion: 0, deliveryFee: 6, amount: 126,
   } })) {
-  const store = load('store/index.js', { Vue: { use() {} }, Vuex: { Store: function (options) { return options } } })
-  store.commit = (key, value) => store.mutations[key](store.state, value)
+  const store = require('./helpers/pinia-store.cjs')()
   const requests = [], toasts = [], navigation = [], quoteRequests = []
   const component = load('pages/order/index.js', {
     mapState, mapMutations, Pikers: {}, AddressPop: {}, DishDetail: {}, DishInfo: {}, dayjs,
@@ -34,11 +33,11 @@ function createCheckout(submit = () => Promise.resolve({ code: 1, data: { id: 7 
     presentFormat: () => '2026-10-19 14:30:00', dateFormat: () => '2026-10-20 09:30:00',
     uni: { showToast: options => toasts.push(options), navigateTo: options => navigation.push(options) },
   })
-  const page = Object.assign(component.data(), component.methods, { $store: store })
+  const page = Object.assign(component.data(), component.methods, { $appStore: store })
   for (const [name, get] of Object.entries(component.computed)) {
     Object.defineProperty(page, name, { get() { return get.call(page) } })
   }
-  store.state.orderListData = [{ number: 1, amount: 119 }]
+  store.orderListData = [{ number: 1, amount: 119 }]
   page.address = '测试地址'
   page.addressBookId = 3
   page.arrivalTime = '立即派送'
@@ -66,23 +65,23 @@ test('地址性别为女士时正确显示，未知性别不擅自添加称谓',
 
 test('登录响应没有配送费时仍按 6 元计费，119 元菜品加 1 元打包费共 126 元', () => {
   const { page, store } = createCheckout()
-  store.commit('setDeliveryFee', undefined)
+  store.setDeliveryFee( undefined)
   page.computOrderInfo()
-  assert.equal(store.state.deliveryFee, 6)
+  assert.equal(store.deliveryFee, 6)
   assert.equal(page.orderDishPrice, 126)
 })
 
 test('门店配送费支持配置并由报价确定结算费', () => {
   const { page, store } = createCheckout()
-  store.commit('setDeliveryFee', '3.50')
+  store.setDeliveryFee( '3.50')
   page.computOrderInfo()
-  assert.equal(store.state.deliveryFee, 3.5)
+  assert.equal(store.deliveryFee, 3.5)
   assert.equal(page.orderDishPrice, 126)
 })
 
 test('数字字符串和小数单价按分计算总额', () => {
   const { page, store } = createCheckout()
-  store.state.orderListData = [{ number: '3', amount: '0.10' }, { number: '1', amount: '0.20' }]
+  store.orderListData = [{ number: '3', amount: '0.10' }, { number: '1', amount: '0.20' }]
   page.computOrderInfo()
   assert.equal(page.orderDishNumber, 4)
   assert.equal(page.orderDishPrice, 7.5)
@@ -121,7 +120,7 @@ test('服务端报价替换旧购物车单价、名称和结算费用', async ()
     packAmount: 2, packFee: 2, storeId: 1, configVersion: 0, deliveryFee: 6, amount: 42.70,
   } }))
   assert.equal(await page.refreshQuote(), true)
-  assert.equal(store.state.orderListData[0].name, '新菜名')
+  assert.equal(store.orderListData[0].name, '新菜名')
   assert.equal(page.orderDishPrice, 42.70)
   assert.equal(page.packAmount, 2)
   assert.equal(page.orderDishNumber, 2)
@@ -218,7 +217,7 @@ test('网络结果不明时显式重试复用首次请求，即使购物车已�
   const firstBody = JSON.stringify(requests[0])
   assert.equal(quoteRequests.length, 0)
   assert.ok(toasts.some(value => value.title.includes('重试')))
-  store.state.orderListData = []
+  store.orderListData = []
   page.computOrderInfo()
   page.quoteReady = false
   page.address = ''
@@ -320,47 +319,40 @@ test('decimal packaging fee is quoted independently of legacy item count', async
   assert.equal(page.orderDishPrice, 23.5)
 })
 
-test('switching store clears only local cart and drafts and invalidates unknown submission key', async () => {
+test('unconfirmed submission locks store selection and preserves its exact retry payload', async () => {
   const { page, store, requests } = createCheckout(async () => { throw { errMsg: 'timeout' } })
   await page.payOrderHandle()
   const key = page.pendingSubmission.clientRequestId
-  store.state.remarkData = 'old remark'
-  store.commit('selectStore', 2)
-  assert.equal(store.state.orderListData.length, 0)
-  assert.equal(store.state.remarkData, '')
+  assert.throws(() => store.selectContext({ merchantId: '1', storeId: '2' }), e => e.selectionLocked)
+  assert.equal(store.selectedStoreId, '1')
+  assert.equal(store.pendingSubmission.payload.clientRequestId, key)
   await page.payOrderHandle()
-  assert.equal(page.pendingSubmission, null)
-  assert.equal(page.quoteReady, false)
-  assert.equal(page.address, '')
-  assert.equal(requests.length, 1)
-  assert.ok(key)
+  assert.equal(requests[1], requests[0])
 })
 
-test('hidden checkout returning after switching away and back invalidates quote and retry key', async () => {
-  const { page, store, component } = createCheckout(async () => { throw { errMsg: 'timeout' } })
+test('hidden checkout retains unknown submission on return and never requotes', async () => {
+  const { page, component, store, quoteRequests } = createCheckout(async () => { throw { errMsg: 'timeout' } })
   await page.payOrderHandle()
-  store.commit('selectStore', 2)
-  store.commit('selectStore', 1)
+  const key = page.pendingSubmission.clientRequestId
   page.getAddressList = () => {}
   component.onShow.call(page)
-  assert.equal(page.pendingSubmission, null)
-  assert.equal(page.quoteReady, false)
-  assert.equal(page.address, '')
-  await page.quotePromise
+  assert.equal(page.pendingSubmission.clientRequestId, key)
+  assert.equal(store.pendingSubmission.payload.clientRequestId, key)
+  assert.equal(quoteRequests.length, 0)
 })
 
 test('old in-flight quote cannot repopulate cart after switching away and back', async () => {
   let finish
   const { page, store } = createCheckout(undefined, () => new Promise(resolve => { finish = resolve }))
   const pending = page.refreshQuote()
-  store.commit('selectStore', 2)
-  store.commit('selectStore', 1)
+  store.selectContext({ merchantId: '1', storeId: '2' })
+  store.selectContext({ merchantId: '1', storeId: '1' })
   page.ensureCurrentScope()
   finish({ code: 1, data: { items: [{ number: 1, amount: 119 }], goodsAmount: 119,
     packAmount: 1, packFee: 1, deliveryFee: 6, amount: 126, storeId: 1, configVersion: 1 } })
   assert.equal(await pending, false)
   assert.equal(page.quoteReady, false)
-  assert.equal(store.state.orderListData.length, 0)
+  assert.equal(store.orderListData.length, 0)
 })
 
 test('quote for another store never becomes payable', async () => {
@@ -410,7 +402,7 @@ test('切换自取重新报价且保留未知结果的原提交意图', async ()
 
 test('扫码堂食提交桌台和桌次，不传地址与配送时间', async () => {
   const { page, store, requests } = createCheckout()
-  store.state.diningContext = { id: 7, storeId: 1, currentSessionId: 'session-a', token: 'opaque-code' }
+  store.diningContext = { id: 7, storeId: 1, currentSessionId: 'session-a', token: 'opaque-code' }
   page.fulfillmentType='DINE_IN';page.address='';page.quotedDeliveryFee=0;page.packFee=0;page.orderDishPrice=119
   await page.payOrderHandle()
   assert.equal(requests.length,1)
@@ -419,4 +411,52 @@ test('扫码堂食提交桌台和桌次，不传地址与配送时间', async ()
   assert.equal(requests[0].diningToken,'opaque-code')
   assert.equal(requests[0].addressBookId,undefined)
   assert.equal(requests[0].estimatedDeliveryTime,undefined)
+})
+
+test('未选店不能报价或提交，不回退门店1', async () => {
+  const { page, store, requests, quoteRequests } = createCheckout()
+  store.clearSelection()
+  assert.equal(await page.refreshQuote(), false)
+  assert.equal(await page.payOrderHandle(), false)
+  assert.equal(requests.length, 0)
+  assert.equal(quoteRequests.length, 0)
+})
+
+test('重进结算恢复持久提交载荷并复用原始请求号', async () => {
+  const { page, store, component, requests } = createCheckout(async () => { throw { errMsg: 'timeout' } })
+  await page.payOrderHandle()
+  const original = JSON.stringify(requests[0])
+  page.pendingSubmission = null
+  page.initPlatform = () => {}; page.init = async () => {}; page.getAddressBookDefault = async () => {}
+  page.getEstimatedDeliveryTime = async () => {}; page.getDateDate = () => {}
+  await component.onLoad.call(page, {})
+  assert.equal(page.pendingSubmission.clientRequestId, store.pendingSubmission.payload.clientRequestId)
+  await page.payOrderHandle()
+  assert.equal(JSON.stringify(requests[1]), original)
+})
+
+
+test('冷启动堂食未决载荷在缺少桌次上下文时安全渲染且保持原载荷', () => {
+  const { page, store } = createCheckout()
+  const payload = { clientRequestId: 'dining-original', fulfillmentType: 'DINE_IN', tableId: 7, diningSessionId: 'original-session', diningToken: 'original-token' }
+  page.pendingSubmission = payload
+  page.fulfillmentType = 'DINE_IN'
+  store.diningContext = null
+  store.storeContext = { storeName: '原门店' }
+  const fragment = fs.readFileSync(path.join(root, 'pages/order/index.vue'), 'utf8').match(/<view v-if="fulfillmentType === 'DINE_IN'">[\s\S]*?<\/view>/)[0]
+  const Vue = require('vue')
+  const code = require('@vue/compiler-dom').compile(fragment).code
+  const render = new Function('Vue', code)(Vue)
+  assert.doesNotThrow(() => render(page, {}))
+  assert.equal(store.diningContext, null)
+  assert.equal(page.pendingSubmission, payload)
+  assert.match(page.diningSummary, /原门店/)
+  assert.match(page.diningSummary, /7/)
+})
+
+test('成功下单保留自取履约类型供成功页展示', async () => {
+  const { page, store } = createCheckout()
+  page.fulfillmentType = 'PICKUP'; page.contactName = '张三'; page.contactPhone = '13800000000'
+  await page.payOrderHandle()
+  assert.equal(store.orderData.fulfillmentType, 'PICKUP')
 })

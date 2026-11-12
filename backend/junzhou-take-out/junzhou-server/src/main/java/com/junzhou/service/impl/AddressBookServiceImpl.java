@@ -102,7 +102,7 @@ public class AddressBookServiceImpl implements AddressBookService {
     }
 
     private Long currentUserId() {
-        return com.junzhou.context.RequestScope.requireUserId();
+        return com.junzhou.context.RequestScope.requireAuthenticatedUserId();
     }
 
     private boolean hasEditableFields(AddressBook addressBook) {

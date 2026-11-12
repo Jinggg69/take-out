@@ -33,14 +33,14 @@
         <bind name="scopeTenant" value="@com.junzhou.context.RequestScope@requireTenantId()"/>
         <bind name="scopeStore" value="@com.junzhou.context.RequestScope@requireStoreId()"/>
         <bind name="scopeUser" value="@com.junzhou.context.RequestScope@requireUserId()"/>
-        insert into orders (tenant_id, store_id, payment_account_id, number, status, user_id, address_book_id, order_time,
+        insert into orders (tenant_id, store_id, payment_account_id, payment_channel, number, status, user_id, address_book_id, order_time,
                             checkout_time, pay_method, pay_status, amount, remark,
                             user_name, phone, address, consignee, cancel_reason,
                             rejection_reason, cancel_time, estimated_delivery_time,
                             delivery_status, delivery_time, pack_amount,
                             tableware_number, tableware_status, dispatch_time, wechat_transaction_id, refund_status,
                             payment_check_time, wechat_trade_state, client_request_id, submit_fingerprint, store_snapshot, pricing_snapshot, fulfillment_type, fulfillment_status, contact_name, contact_phone, table_id, table_snapshot, cart_fingerprint, pickup_number, pickup_credential, dining_session_id)
-        select #{scopeTenant}, #{scopeStore}, #{paymentAccountId}, #{number}, #{status}, #{userId}, #{addressBookId}, #{orderTime},
+        select #{scopeTenant}, #{scopeStore}, #{paymentAccountId}, coalesce(#{paymentChannel},'WECHAT'), #{number}, #{status}, #{userId}, #{addressBookId}, #{orderTime},
                 #{checkoutTime}, #{payMethod}, #{payStatus}, #{amount}, #{remark},
                 #{userName}, #{phone}, #{address}, #{consignee}, #{cancelReason},
                 #{rejectionReason}, #{cancelTime}, #{estimatedDeliveryTime},

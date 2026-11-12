@@ -14,10 +14,9 @@
             <view class="timeIcon"></view>
             等待支付：
             <text>{{ rocallTime }}</text>
-            <text>{{ paymentTime }}</text>
           </view>
         </view>
-        <view class="againBtn">
+        <view class="againBtn" v-if="orderDetailsData.storeAvailable !== false">
           <button class="new_btn" type="default" @click="handleCancel('center', orderDetailsData)" v-if="(!timeout && orderDetailsData.status === 1) ||
             orderDetailsData.status === 2 ||
             orderDetailsData.status === 3 ||

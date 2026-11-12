@@ -10,6 +10,7 @@ public class StoreSettings {
     private String name;
     private Long version;
     private String address;
+    private String contactPhone;
     private BigDecimal latitude;
     private BigDecimal longitude;
     private String opensAt;

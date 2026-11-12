@@ -6,7 +6,7 @@
           <image class="head_image" mode="aspectFill" :src="psersonUrl"></image>
         </view>
         <!-- 姓名及手机号 -->
-        <view class="phone_name"><view class="brand-member-label">均州鱼庄 · 我的账户</view>
+        <view class="phone_name"><view class="brand-member-label">我的账户</view>
           <!-- 姓名 -->
           <view class="name">
             <text class="name_text">{{ nickName }}</text>

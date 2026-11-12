@@ -10,11 +10,12 @@ const withoutImports = source => source.replace(/^import[\s\S]*?from\s+["'][^"']
 
 function createPage(respond) {
   const requests = [], toasts = [], redirects = []
+  const store = require('./helpers/pinia-store.cjs')()
   const context = vm.createContext({
     module: { exports: {} },
     simpleAddress: {},
     baseUrl: 'http://localhost:8080',
-    store: { state: { token: 'test-token' }, commit() {} },
+    getAppStore: () => store,
     uni: {
       getStorage() {},
       request(options) { requests.push(options); respond(options) },

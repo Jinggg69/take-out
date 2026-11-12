@@ -1,7 +1,7 @@
 <!--菜品信息-->
 <template>
   <view class="box order_list">
-    <view class="word_text"><view class="brand-order-heading"><image class="brand-order-logo" src="../../../static/brand/junzhou-logo.png" mode="aspectFit"></image><text>均州鱼庄</text></view>
+    <view class="word_text"><view class="brand-order-heading"><text>{{ $appStore.storeContext && $appStore.storeContext.merchantName || '商家' }}</text></view>
       <text class="word_style">{{ shopInfo.shopName }}</text>
     </view>
     <view class="order-type">
@@ -20,12 +20,12 @@
             }}</text>
           </view>
           <view class="dish_active">
-            <text>￥</text> {{ obj.amount.toFixed(2) }}
+            <text>￥</text> {{ Number(obj.amount || 0).toFixed(2) }}
           </view>
         </view>
       </view>
       <view class="iconUp">
-        <view @click="showDisplay = !showDisplay" v-if="orderListDataes.length > 3">
+        <view @click="$emit('toggle')" v-if="orderListDataes.length > 3">
           <text>{{ !showDisplay ? "展开更多" : "点击收起" }}</text>
           <image class="icon_img" :class="showDisplay ? 'icon_imgDown' : ''" src="../../../static/toRight.png" mode="">
           </image>
@@ -46,7 +46,7 @@
   </view>
 </template>
 <script>
-import { mapState } from "vuex";
+
 import { DELIVERY_FEE } from "../../../utils/order-pricing";
 export default {
   // 获取父级传的数据
@@ -83,7 +83,7 @@ export default {
     },
   },
   computed: {
-    ...mapState(["shopInfo"]),
+    shopInfo() { return this.$appStore.shopInfo },
   },
 };
 </script>

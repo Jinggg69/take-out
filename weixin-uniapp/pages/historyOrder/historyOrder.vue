@@ -2,7 +2,7 @@
 <template>
   <view class="history_order">
     <uni-nav-bar @clickLeft="goBack" left-icon="back" leftIcon="arrowleft" title="历史订单" statusBar="true" fixed="true"
-      color="#ffffff" backgroundColor="#9E2026"></uni-nav-bar>
+      color="#ffffff" backgroundColor="#164B3B"></uni-nav-bar>
     <!-- 根据scrollinto和:id="'tab'+index"切换下方轮播 -->
     <scroll-view scroll-x class="scroll-row" :scroll-into-view="scrollinto" :scroll-with-animation="true" enable-flex>
       <view v-for="(item, index) in tabBars" :key="index" :id="'tab' + index" class="scroll-row-item"
@@ -86,7 +86,7 @@ import {
   delShoppingCart,
   queryOrdersCheckStatus
 } from "../api/api.js";
-import { mapMutations } from "vuex";
+
 import Empty from "@/components/empty/empty";
 import { statusWord, getOvertime } from "@/utils/index.js";
 import { orderRefundLabel } from "@/utils/order-refund";
@@ -132,7 +132,7 @@ export default {
     };
   },
   onLoad() {
-    this.getList();
+    uni.switchTab({ url: "/pages/orders/index" });
   },
   onUnload() {
     this.showTitle = false;
@@ -163,7 +163,7 @@ export default {
   },
   methods: {
     orderTotal(order) { return orderSnapshotMoney(order, "amount", order.amount); },
-    ...mapMutations(["setAddressBackUrl"]),
+    setAddressBackUrl(...args) { return this.$appStore.setAddressBackUrl(...args) },
     numes(list) {
       let count = 0;
       let total = 0;
@@ -338,7 +338,7 @@ export default {
     width: 32rpx;
     height: 8rpx;
     display: block;
-    background: #9E2026;
+    background: #164B3B;
     border-radius: 8rpx;
     transform: translate(-50%, -50%);
     position: absolute;
@@ -349,10 +349,10 @@ export default {
 </style>
 
 <style lang="scss" scoped>
-.history_order { background: #FFF8EE; }
+.history_order { background: #F5F8F4; }
 .scroll-row { box-shadow: none; border-bottom: 1rpx solid #EADFD1; }
 .scroll-row-item { color: #756B62; margin-right: 56rpx; }
-.scroll-row-item-act { color: #9E2026; }
-.scroll-row-item-act .line { background: #9E2026; }
+.scroll-row-item-act { color: #164B3B; }
+.scroll-row-item-act .line { background: #164B3B; }
 .recent_orders { padding-bottom: calc(32rpx + env(safe-area-inset-bottom)); }
 </style>

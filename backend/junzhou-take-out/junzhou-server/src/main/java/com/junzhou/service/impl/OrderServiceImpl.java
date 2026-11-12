@@ -210,7 +210,12 @@ public class OrderServiceImpl implements OrderService {
         order.setTablewareStatus(ordersSubmitDTO.getTablewareStatus()==null ? 1 : ordersSubmitDTO.getTablewareStatus());
         if (ordersSubmitDTO.getTablewareNumber() != null) order.setTablewareNumber(ordersSubmitDTO.getTablewareNumber());
         order.setAmount(quote.getAmount());
-        order.setStoreSnapshot(JSON.toJSONString(settings));
+        JSONObject storeSnapshot=(JSONObject)JSON.toJSON(settings);
+        storeSnapshot.put("merchantId",com.junzhou.context.RequestScope.requireTenantId().toString());
+        String merchantName=orderMapper.currentMerchantName();
+        if(merchantName==null) throw new OrderBusinessException("商家已停用，请重新选择");
+        storeSnapshot.put("merchantName",merchantName);
+        order.setStoreSnapshot(storeSnapshot.toJSONString());
         JSONObject priceSnapshot = new JSONObject();
         priceSnapshot.put("goodsAmount",quote.getGoodsAmount());
         priceSnapshot.put("packFee",quote.getPackFee());
@@ -234,6 +239,7 @@ public class OrderServiceImpl implements OrderService {
         order.setUserId(userId);
 
         order.setPaymentAccountId(paymentAccounts.currentAccountId());
+        order.setPaymentChannel(paymentAccounts.channelForNewOrders());
         orderMapper.insert(order);
         if(order.getId()==null) throw new OrderBusinessException("订单支付账户或归属已变化，请重试");
         //向订单明细表插入多条数据
@@ -275,6 +281,8 @@ public class OrderServiceImpl implements OrderService {
         if (!Orders.UN_PAID.equals(order.getPayStatus())) {
             throw new OrderBusinessException(MessageConstant.ORDER_STATUS_ERROR);
         }
+        if("MOCK".equals(paymentAccounts.channelForNewOrders()) && !"MOCK".equals(order.getPaymentChannel()))
+            throw new OrderBusinessException("这是原微信渠道订单，请创建新的模拟订单");
         User user = userMapper.getById(userId);
 
         JSONObject jsonObject = paymentAccounts.provider(order).pay(
@@ -290,6 +298,8 @@ public class OrderServiceImpl implements OrderService {
 
         OrderPaymentVO vo = jsonObject.toJavaObject(OrderPaymentVO.class);
         vo.setPackageStr(jsonObject.getString("package"));
+        vo.setChannel("MOCK".equals(order.getPaymentChannel()) ? "MOCK" : "WECHAT");
+        vo.setOrderId(order.getId());
         return vo;
     }
 

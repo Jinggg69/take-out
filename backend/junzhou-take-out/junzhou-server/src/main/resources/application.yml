@@ -48,6 +48,7 @@ logging:
 
 sky:
   payment:
+    channel: ${PAYMENT_CHANNEL:wechat}
     jobs-enabled: ${PAYMENT_JOBS_ENABLED:true}
   shop:
     # 实际门店完整地址，例如：北京市海淀区上地十街10号

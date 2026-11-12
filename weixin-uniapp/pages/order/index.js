@@ -6,10 +6,7 @@ import {
 	getAddressBookDefault,
 	queryAddressBookList, getEstimatedDeliveryTime
 } from '../api/api.js'
-import {
-	mapState,
-	mapMutations,
-} from 'vuex'
+
 import {
 	baseUrl
 } from '../../utils/env'
@@ -24,7 +21,7 @@ import Pikers from '@/components/uni-piker/index.vue'//餐具信息
 import AddressPop from "./components/address.vue" //地址
 import DishDetail from "./components/dishDetail.vue" //菜品详情
 import DishInfo from "./components/dishInfo.vue" //菜品信息
-import dayjs from "@/utils/lib/dayjs.min.js";
+import dayjs from 'dayjs';
 import { DELIVERY_FEE } from '../../utils/order-pricing'
 import { createClientRequestId, isDefiniteSubmissionFailure } from '../../utils/order-submission'
 export default {
@@ -101,6 +98,13 @@ export default {
 		}
 	},
 	computed: {
+        diningSummary() {
+            const dining = this.$appStore.diningContext
+            const payload = this.pendingSubmission
+            const storeName = (dining && dining.storeName) || (this.$appStore.storeContext && this.$appStore.storeContext.storeName) || '原门店'
+            const tableName = (dining && dining.name) || (payload && payload.tableId != null ? '桌台 ' + payload.tableId : '请核对原桌台')
+            return storeName + ' · ' + tableName
+        },
 		orderDeliveryFee() {
 			return this.quotedDeliveryFee
 		},
@@ -152,14 +156,19 @@ export default {
 		DishInfo
 	},
 	async onLoad(options) {
-        const dining = this.$store.state.diningContext
-        if (dining && String(dining.storeId) === String(this.$store.state.selectedStoreId)) this.fulfillmentType = 'DINE_IN'
+        const dining = this.$appStore.diningContext
+        const preferred = this.$appStore.fulfillmentType
+        this.fulfillmentType = ['DELIVERY', 'PICKUP', 'DINE_IN'].includes(preferred) ? preferred : 'DELIVERY'
+        if (this.fulfillmentType === 'DINE_IN' && (!dining || String(dining.storeId) !== String(this.$appStore.selectedStoreId))) this.fulfillmentType = 'DELIVERY'
+        const saved = this.$appStore.pendingSubmission
+        this.pendingSubmission = saved && (saved.payload || saved)
+        if (this.pendingSubmission) this.fulfillmentType = this.pendingSubmission.fulfillmentType
 		this.checkoutScope = this.currentScope()
 		const scope = this.currentScope()
 		this.initPlatform()
-		this.psersonUrl = this.$store.state.baseUserInfo && this.$store.state.baseUserInfo.avatarUrl
-		this.nickName = this.$store.state.baseUserInfo && this.$store.state.baseUserInfo.nickName
-		this.gender = this.$store.state.baseUserInfo && this.$store.state.baseUserInfo.gender
+		this.psersonUrl = this.$appStore.baseUserInfo && this.$appStore.baseUserInfo.avatarUrl
+		this.nickName = this.$appStore.baseUserInfo && this.$appStore.baseUserInfo.nickName
+		this.gender = this.$appStore.baseUserInfo && this.$appStore.baseUserInfo.gender
 		this.remark = this.remarkData()
 		await this.init()
 		if (scope !== this.currentScope()) return
@@ -188,12 +197,19 @@ export default {
 	onShow() {
 		if (this.checkoutScope !== null) {
 			const changed = this.ensureCurrentScope()
-			if (changed || (!this.quoteReady && !this.pendingSubmission)) this.refreshQuote()
+			this.remark = this.$appStore.remarkData || ''
+            const address = this.$appStore.addressData
+            if (address && address.detail) {
+                this.address = (address.provinceName || '') + (address.cityName || '') + (address.districtName || '') + address.detail
+                this.addressBookId = address.id; this.phoneNumber = address.phone; this.nickName = address.consignee; this.gender = address.sex
+            }
+            if (changed || (!this.quoteReady && !this.pendingSubmission)) this.refreshQuote()
 			if (!this.addressList.length) this.getAddressList()
 		}
 	},
 	watch: {
-		'$store.state.storeGeneration'() { this.ensureCurrentScope() }
+		'$appStore.storeGeneration'() { this.ensureCurrentScope() },
+        '$appStore.authEpoch'() { this.ensureCurrentScope() }
 	},
 	onReady() {
 		uni.getSystemInfo({
@@ -204,7 +220,7 @@ export default {
 	},
 	methods: {
 		currentScope() {
-			return String(this.$store.state.selectedStoreId || 1) + ':' + (this.$store.state.storeGeneration || 0)
+			return String(this.$appStore.selectedStoreId) + ':' + (this.$appStore.storeGeneration || 0) + ':' + this.$appStore.userId + ':' + this.$appStore.authEpoch
 		},
 		ensureCurrentScope() {
 			const scope = this.currentScope()
@@ -214,31 +230,33 @@ export default {
 			this.quoteReady = false; this.quotePromise = null; this.quoteVersion = null
 			this.pendingSubmission = null; this.submissionComplete = false; this.isHandlePy = false
 			this.quotedDeliveryFee = 0; this.packFee = 0; this.packAmount = 0; this.orderDishPrice = 0; this.orderDishNumber = 0
-            if (this.fulfillmentType === 'DINE_IN' && !this.$store.state.diningContext) this.fulfillmentType = 'DELIVERY'
+            if (this.fulfillmentType === 'DINE_IN' && !this.$appStore.diningContext) this.fulfillmentType = 'DELIVERY'
 			this.remark = ''; this.arrivalTime = '立即派送'; this.orderTime = ''
 			this.address = ''; this.addressBookId = ''; this.addressList = []
 			this.tablewareData = '无需餐具'; this.tableware = ''; this.status = 0; this.num = 0
 			this.orderPriceError = '门店已切换，请重新确认地址和价格'
 			return true
 		},
-		...mapState(['orderListData', 'remarkData', 'addressData', 'storeInfo', 'shopInfo', 'deliveryFee']),
-		...mapMutations(['setAddressBackUrl', 'setOrderData', 'setArrivalTime', 'setRemark', 'setGender']),
+		orderListData() { return this.$appStore.orderListData }, remarkData() { return this.$appStore.remarkData }, addressData() { return this.$appStore.addressData }, storeInfo() { return this.$appStore.storeInfo }, shopInfo() { return this.$appStore.shopInfo }, deliveryFee() { return this.$appStore.deliveryFee },
+		setAddressBackUrl(...args) { return this.$appStore.setAddressBackUrl(...args) }, setOrderData(...args) { return this.$appStore.setOrderData(...args) }, setArrivalTime(...args) { return this.$appStore.setArrivalTime(...args) }, setRemark(...args) { return this.$appStore.setRemark(...args) }, setGender(...args) { return this.$appStore.setGender(...args) },
 		init() {
 			this.computOrderInfo()
-			return this.refreshQuote()
+			return this.pendingSubmission ? Promise.resolve(false) : this.refreshQuote()
 		},
 		// Quote failures must never leave an earlier price eligible for submission.
         async changeFulfillment(type) {
             if (this.isHandlePy || this.pendingSubmission || this.quotePromise || this.submissionComplete || type === this.fulfillmentType) return
-            if (type === 'DINE_IN' && !this.$store.state.diningContext) {
+            if (type === 'DINE_IN' && !this.$appStore.diningContext) {
                 uni.showToast({ title: '请先在首页扫码确认桌台', icon: 'none' }); return
             }
             this.fulfillmentType = type
+            this.$appStore.setFulfillmentType(type)
             this.quoteReady = false
             await this.refreshQuote()
         },
 		refreshQuote() {
 			this.ensureCurrentScope()
+            if (!this.$appStore.selectedStoreId || this.pendingSubmission) return Promise.resolve(false)
 			const scope = this.currentScope()
 			if (this.quotePromise) return this.quotePromise
 			this.quoteReady = false
@@ -261,7 +279,7 @@ export default {
 						count += quantity
 					}
 					const pack = Number(quote.packAmount), packFee = Number(quote.packFee), fee = Number(quote.deliveryFee), total = Number(quote.amount)
-					if (String(quote.storeId) !== String(this.$store.state.selectedStoreId || 1) || quote.configVersion == null
+					if (String(quote.storeId) !== String(this.$appStore.selectedStoreId) || quote.configVersion == null
 						|| quote.packFee == null || !Number.isFinite(Number(quote.goodsAmount))
 						|| !Number.isFinite(packFee) || packFee < 0 || Math.abs(packFee * 100 - Math.round(packFee * 100)) > 0.000001
 						|| !Number.isInteger(pack) || pack !== count || !Number.isFinite(fee) || fee < 0
@@ -271,7 +289,7 @@ export default {
 						|| Math.abs(total * 100 - goodsCents - packFee * 100 - fee * 100) > 0.000001) {
 						throw { msg: '报价金额异常，请刷新价格' }
 					}
-					this.$store.commit('initdishListMut', quote.items)
+					this.$appStore.initdishListMut(quote.items)
 					this.quotedDeliveryFee = fee
 					this.computOrderInfo()
 					this.packAmount = pack
@@ -357,11 +375,11 @@ export default {
 		goAddress() {
 			this.setAddressBackUrl('/pages/order/index')
 			if (this.addressList.length === 0) {
-				uni.redirectTo({
+				uni.navigateTo({
 					url: '/pages/addOrEditAddress/addOrEditAddress'
 				})
 			} else {
-				uni.redirectTo({
+				uni.navigateTo({
 					url: '/pages/address/address'
 				})
 			}
@@ -402,6 +420,7 @@ export default {
 		// 支付下单
 		async payOrderHandle() {
 			if (this.ensureCurrentScope()) return false
+            if (!this.$appStore.selectedStoreId) { uni.showToast({ title: '请先选择门店', icon: 'none' }); return false }
 			const scope = this.currentScope()
 			if (this.isHandlePy || this.submissionComplete) return
 			if (!this.pendingSubmission && this.fulfillmentType === 'DELIVERY' && !this.address) {
@@ -433,9 +452,9 @@ export default {
 					clientRequestId: createClientRequestId(),
 					payMethod: 1,
 					fulfillmentType: this.fulfillmentType,
-                    tableId: this.fulfillmentType === 'DINE_IN' ? this.$store.state.diningContext && this.$store.state.diningContext.id : undefined,
-                    diningSessionId: this.fulfillmentType === 'DINE_IN' ? this.$store.state.diningContext && this.$store.state.diningContext.currentSessionId : undefined,
-                    diningToken: this.fulfillmentType === 'DINE_IN' ? this.$store.state.diningContext && this.$store.state.diningContext.token : undefined,
+                    tableId: this.fulfillmentType === 'DINE_IN' ? this.$appStore.diningContext && this.$appStore.diningContext.id : undefined,
+                    diningSessionId: this.fulfillmentType === 'DINE_IN' ? this.$appStore.diningContext && this.$appStore.diningContext.currentSessionId : undefined,
+                    diningToken: this.fulfillmentType === 'DINE_IN' ? this.$appStore.diningContext && this.$appStore.diningContext.token : undefined,
                     contactName: this.fulfillmentType === 'PICKUP' ? this.contactName.trim() : undefined,
                     contactPhone: this.fulfillmentType === 'PICKUP' ? this.contactPhone : undefined,
                     addressBookId: this.fulfillmentType === 'DELIVERY' ? this.addressBookId : undefined,
@@ -446,19 +465,21 @@ export default {
 					tablewareStatus: this.status,
 					tablewareNumber: this.num,
 					packAmount: this.packAmount,
-					storeId: this.$store.state.selectedStoreId || 1,
+					storeId: this.$appStore.selectedStoreId,
 					configVersion: this.quoteVersion,
 					amount: this.orderDishPrice,
 					shopId: this.shopInfo().shopId,
 					deliveryFee: this.orderDeliveryFee
 				}
 				this.pendingSubmission = params
+                this.$appStore.setPendingSubmission({ payload: params, storeId: params.storeId })
 				const res = await submitOrderSubmit(params)
 				if (scope !== this.currentScope()) return false
 				if (res && [1, 200].includes(Number(res.code)) && res.data && res.data.id) {
 					this.submissionComplete = true
 					this.pendingSubmission = null
-					this.setOrderData(res.data)
+                    this.$appStore.setPendingSubmission(null)
+					this.setOrderData({ ...res.data, fulfillmentType: params.fulfillmentType, storeId: params.storeId })
 					this.setRemark('')
 
 					uni.navigateTo({
@@ -471,6 +492,7 @@ export default {
 				if (scope !== this.currentScope()) return false
 				if (isDefiniteSubmissionFailure(error)) {
 					this.pendingSubmission = null
+                    this.$appStore.setPendingSubmission(null)
 					await this.refreshQuote()
 					uni.showToast({ title: (error && error.msg) || '下单失败，请确认后重试', icon: 'none' })
 				} else {
@@ -502,7 +524,7 @@ export default {
 		// 进入备注页
 		goRemark() {
 			this.setAddressBackUrl('/pages/order/index')
-			uni.redirectTo({
+			uni.navigateTo({
 				url: '/pages/remark/index'
 			})
 		},

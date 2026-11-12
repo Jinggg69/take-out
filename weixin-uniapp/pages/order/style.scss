@@ -23,7 +23,7 @@ $desc-font-color: #756B62;
     width: 100%;
     height: 160rpx;
     // 注释掉背景色
-    // background: linear-gradient(90deg, #9E2026, #E9793C);
+    // background: linear-gradient(90deg, #164B3B, #E9793C);
     .restaurant_info {
       position: absolute;
       z-index: 9;
@@ -376,7 +376,7 @@ $desc-font-color: #756B62;
         top: -8rpx;
         // text-align: center;
         border-radius: 20rpx;
-        background-color: #9E2026;
+        background-color: #164B3B;
         color: #fff;
         font-weight: 500;
       }
@@ -416,7 +416,7 @@ $desc-font-color: #756B62;
         // color: #302824;
         // border-radius: 0 72rpx 72rpx 0;
         border-radius: 72rpx;
-        background: #9E2026;
+        background: #164B3B;
         font-size: 30rpx;
         font-family: PingFangSC, PingFangSC-Medium;
         font-weight: 500;
@@ -652,8 +652,8 @@ $desc-font-color: #756B62;
     height: 86rpx;
     line-height: 86rpx;
     border-radius: 8rpx;
-    background: #9E2026;
-    border: 1px solid #9E2026;
+    background: #164B3B;
+    border: 1px solid #164B3B;
     opacity: 1;
     font-size: 30rpx;
     font-family: PingFangSC, PingFangSC-Medium;
@@ -677,8 +677,8 @@ $desc-font-color: #756B62;
     }
     &:active,
     &:visited {
-      background: #9E2026;
-      border: 1px solid #9E2026;
+      background: #164B3B;
+      border: 1px solid #164B3B;
       color: #302824;
     }
   }
@@ -737,7 +737,7 @@ $desc-font-color: #756B62;
   line-height: 36rpx;
   color: #756B62;
   text {
-    color: #9E2026;
+    color: #164B3B;
   }
 }
 .timeIcon {
@@ -954,7 +954,7 @@ $desc-font-color: #756B62;
   .city-column_select {
     background: url(../../static/brand/radio-selected.png) no-repeat 90% 30rpx;
     background-size: 32rpx 32rpx;
-    color: #9E2026;
+    color: #164B3B;
   }
 }
 .picker-view {
@@ -1058,3 +1058,15 @@ $desc-font-color: #756B62;
 }
 
 @import "../../styles/brand-transactions.scss";
+
+.checkout-mode { padding: 24rpx !important; }
+.fulfillment-options { display: flex; gap: 16rpx; margin-bottom: 20rpx; }
+.fulfillment-options button { flex: 1; margin: 0; padding: 18rpx 12rpx; font-size: 26rpx; line-height: 1.5; background: #F0F4F1; color: #58636F; border-radius: 12rpx; }
+.fulfillment-options button[aria-pressed="true"] { background: #E5F2EA; color: #176B4B; font-weight: 600; }
+.checkout-mode > view:not(.fulfillment-options), .pickup-notice { color: #58636F; font-size: 24rpx; line-height: 1.65; }
+.pickup-contact { padding: 24rpx !important; }
+.contact-row { display: flex; align-items: center; gap: 20rpx; min-height: 96rpx; border-bottom: 1rpx solid #E6E9EC; font-size: 26rpx; }
+.contact-row:last-child { border: 0; }
+.contact-row text { min-width: 150rpx; }
+.contact-row input { flex: 1; min-width: 0; height: 88rpx; font-size: 26rpx; }
+.footer_order_buttom .order_number { background: #E5F2EA; border-radius: 50%; }

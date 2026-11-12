@@ -39,7 +39,8 @@ public class JwtTokenUserInterceptor implements HandlerInterceptor {
             request.setAttribute(USER_ATTRIBUTE, userId);
             return true;
         } catch (Exception ex) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            BaseContext.removeCurrentId(); RequestScope.clear(); request.removeAttribute(USER_ATTRIBUTE);
+            MiniappResponses.error(response,HttpServletResponse.SC_UNAUTHORIZED,"请重新登录");
             return false;
         }
     }

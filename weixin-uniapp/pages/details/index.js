@@ -1,14 +1,15 @@
 
 import {
 	getOrderDetail,
+	getMyOrderDetail,
 	repetitionOrder,
-	delShoppingCart,
 	reminderOrder,
 	cancelOrder,
 } from '../api/api.js'
-import { mapState, mapMutations } from 'vuex'
+
 import { baseUrl } from '../../utils/env'
 import { call } from '@/utils/index.js'
+import { selectStoreContext } from '../../services/context.js'
 import Status from './components/status.vue'//订单状态
 import OrderDetail from "./components/orderDetail.vue" //菜品详情
 import DeliveryInfo from "./components/deliveryInfo.vue" //配送信息
@@ -18,6 +19,7 @@ export default {
 	data() {
 		return {
 			showDisplay: false,
+            historyMerchantId: null,
 			rocallTime: '',
 			textTip: '',
 			showConfirm: false,
@@ -38,7 +40,7 @@ export default {
             try { return JSON.parse(this.orderDetailsData.storeSnapshot || '{}') || {} } catch (error) { return {} }
         },
 		orderListDataes: function () {
-			return this.orderListData()
+			return this.orderDetailsData.orderDetailList || []
 		},
 
 		// // 处理订单详情列表
@@ -61,47 +63,74 @@ export default {
 	//   组件
 	components: { Status, OrderDetail, DeliveryInfo, OrderInfo },
 	onLoad(options) {
+		this.historyMerchantId = options.merchantId || null
 		this.getBaseData(options.orderId)
 	},
 
+	onUnload() { clearTimeout(this.times) },
 	methods: {
+        async prepareOrderStore() {
+            const order = this.orderDetailsData
+            if (order.storeAvailable === false || !order.storeId) { uni.showToast({ title: '该门店已停用，仅可查看历史订单', icon: 'none' }); return false }
+            try {
+                await selectStoreContext(order.storeId)
+                return this.canWriteOrder()
+            } catch (error) { uni.showToast({ title: error.msg || '原门店暂不可用', icon: 'none' }); return false }
+        },
+        canWriteOrder() {
+            const order = this.orderDetailsData
+            if (order.storeAvailable === false || !order.storeId || String(order.storeId) !== String(this.$appStore.selectedStoreId) || (this.historyMerchantId && String(this.historyMerchantId) !== String(this.$appStore.selectedMerchantId))) {
+                uni.showToast({ title: '请先选择订单原门店后操作', icon: 'none' }); return false
+            }
+            return true
+        },
         copyPickupToken() {
             if (this.orderDetailsData.pickupToken) uni.setClipboardData({ data: this.orderDetailsData.pickupToken })
         },
-		...mapMutations(['setOrderData', 'initdishListMut']),
-		...mapState(['shopInfo', 'orderListData', 'shopPhone', 'orderData']),
+		setOrderData(...args) { return this.$appStore.setOrderData(...args) },
+		shopInfo() { return this.$appStore.shopInfo }, orderListData() { return this.$appStore.orderListData }, shopPhone() { return this.$appStore.shopPhone }, orderData() { return this.$appStore.orderData },
 		// 获取订单详情
 		getBaseData(id) {
-			getOrderDetail(id).then(res => {
+			return (this.historyMerchantId ? getMyOrderDetail(id, { merchantId: this.historyMerchantId }) : getOrderDetail(id)).then(res => {
 				if (res.code === 1) {
-					this.orderDetailsData = res.data
-					this.initdishListMut(this.orderDetailsData.orderDetailList)
+					const data = res.data
+                    this.orderDetailsData = this.historyMerchantId ? {
+                        ...data, id: data.orderId, number: data.orderNumber,
+                        orderDetailList: (data.orderDetails || []).map(item => ({ ...item, amount: item.unitPrice == null || item.unitPrice === '' ? null : Number(item.unitPrice) })),
+                        pricingSnapshot: JSON.stringify({ amount: data.amount, packFee: data.packFee, deliveryFee: data.deliveryFee }),
+                        storeSnapshot: JSON.stringify({ name: data.storeName }),
+                        shopName: data.storeName, address: data.deliveryAddress, phone: data.contactPhone,
+                        consignee: data.contactName, tableSnapshot: data.tableName
+                    } : data
+					// Keep historical lines local to this order.
 					if (this.orderDetailsData.status === 1) {
-						this.runTimeBack(this.orderDetailsData.orderTime)
+						if (!this.historyMerchantId) this.runTimeBack(this.orderDetailsData.orderTime)
 					}
 				}
-			})
+			}).catch(error => { uni.showToast({ title: error.msg || '订单加载失败', icon: 'none' }) })
 		},
 
 		// 催单
-		handleReminder(val) {
+		async handleReminder(val) {
+            if (!await this.prepareOrderStore()) return
 			reminderOrder(val.id).then(res => {
 				if (res.code === 1) {
 					this.showConfirm = true
 					this.textTip = '您的催单信息已发出！'
-					this.$refs.status.$refs.commonPopup.open(val.type)
+					this.$refs.commonPopup.open(val.type)
 					this.orderId = val.id
 				}
 			})
 		},
 		// 取消订单接口
-		cancel(type, obj) {
+		async cancel(type, obj) {
+            if (!await this.prepareOrderStore()) return
 			cancelOrder(obj.id).then(res => {
 				if (res.code === 1) {
 					this.isPayment = true
 					this.showConfirm = true
 					this.textTip = '您的订单已取消！'
-					this.$refs.status.$refs.commonPopup.open(type)
+					this.$refs.commonPopup.open(type)
 					this.orderId = obj.id
 				}
 			})
@@ -112,18 +141,17 @@ export default {
 				this.cancel(val.type, val.obj)
 			} else {
 				this.showConfirm = false
-				this.$refs.status.$refs.commonPopup.open(val.type)
+				this.$refs.commonPopup.open(val.type)
 				this.textTip = '请联系商家进行取消！'
 			}
 		},
 		// 再来一单
 		async oneMoreOrder(id) {
-			// 先清空购物车
-			await delShoppingCart()
+			if (!await this.prepareOrderStore()) return
 			repetitionOrder(id).then(res => {
 				if (res.code === 1) {
-					uni.redirectTo({
-						url: '/pages/index/index'
+					uni.switchTab({
+						url: '/pages/menu/index'
 					})
 				}
 			})
@@ -154,7 +182,7 @@ export default {
 			if (msec < 0) {
 				this.timeout = true
 				clearTimeout(this.times)
-				this.cancel('center', this.orderDetailsData) //超时的时候取消订单
+				// Expiry is handled by the server. //超时的时候取消订单
 			} else {
 				let min = parseInt(msec / 1000 / 60 % 60)
 				let sec = parseInt(msec / 1000 % 60)
@@ -174,7 +202,7 @@ export default {
 					if (min === 0 && sec === 0) {
 						this.timeout = true
 						clearTimeout(this.times)
-						this.cancel('center', this.orderDetailsData) //超时的时候取消订单
+						// Expiry is handled by the server. //超时的时候取消订单
 						return
 					}
 					this.times = setTimeout(function () {
@@ -190,12 +218,12 @@ export default {
 		},
 		// 返回上一级
 		goBack() {
-			uni.redirectTo({
-				url: '/pages/historyOrder/historyOrder'
+			uni.switchTab({
+				url: '/pages/orders/index'
 			})
 		},
 		openPopuos(type) {
-			this.$refs.status.$refs.commonPopup.open(type)
+			this.$refs.commonPopup.open(type)
 		},
 		// 联系商家进行退款弹层
 		handleRefund(type) {
@@ -216,14 +244,17 @@ export default {
 		},
 		// closePopupInfo
 		closePopupInfo(type) {
-			this.$refs.status.$refs.commonPopup.close(type)
+			this.$refs.commonPopup.close(type)
 			this.getBaseData(this.orderId)
 		},
 		// 立即支付
-		handlePay(id) {
+		async handlePay(id) {
+            if (!await this.prepareOrderStore()) return
 			const obj = {
 				orderNumber: this.orderDetailsData.number,
 				orderAmount: this.orderDetailsData.amount,
+                fulfillmentType: this.orderDetailsData.fulfillmentType,
+                storeId: this.orderDetailsData.storeId,
 				orderTime: this.orderDetailsData.orderTime
 			}
 			this.setOrderData(obj)

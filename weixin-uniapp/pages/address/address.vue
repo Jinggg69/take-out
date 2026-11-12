@@ -8,7 +8,7 @@
       statusBar="true"
       fixed="true"
       color="#ffffff"
-      backgroundColor="#9E2026"
+      backgroundColor="#164B3B"
     ></uni-nav-bar>
     <view
       class="address"
@@ -65,7 +65,7 @@
               <radio
                 class="item_radio"
                 v-if="testValue"
-                color="#9E2026"
+                color="#164B3B"
                 :value="item.id"
                 :checked="item.isDefault === 1 && isActive === index"
                 @click.stop="getRadio(index, item)"
@@ -73,6 +73,10 @@
             >
           </view>
         </view>
+      </view>
+      <view v-if="loadError" class="address-load-error" role="alert">
+        <text>{{ loadError }}</text>
+        <button @click="getAddressList">重新加载地址</button>
       </view>
       <!-- 无地址展示 -->
       <empty
@@ -97,7 +101,7 @@
 
 <script>
 import { queryAddressBookList, putAddressBookDefault } from "../api/api.js";
-import { mapState, mapMutations } from "vuex";
+
 import uniNavBar from "@/components/uni-nav-bar/uni-nav-bar.vue";
 import Empty from "@/components/empty/empty";
 export default {
@@ -112,6 +116,7 @@ export default {
       formRouter: "",
       isActive: null,
       isEmpty: false,
+      loadError: "",
     };
   },
   onShow(options) {
@@ -122,17 +127,16 @@ export default {
     }
   },
   computed: {
-    ...mapState(["addressBackUrl"]),
+    addressBackUrl() { return this.$appStore.addressBackUrl },
     statusBarHeight() {
       return uni.getSystemInfoSync().statusBarHeight + "px";
     },
   },
   methods: {
-    ...mapMutations(["setAddress"]),
+    setAddress(...args) { return this.$appStore.setAddress(...args) },
     goBack() {
-      uni.redirectTo({
-        url: this.addressBackUrl,
-      });
+      if (this.addressBackUrl === '/pages/order/index') uni.navigateBack({ delta: 1 });
+      else uni.switchTab({ url: this.addressBackUrl || '/pages/my/my' });
     },
     getLableVal(item) {
       switch (item) {
@@ -146,24 +150,23 @@ export default {
           return "其他";
       }
     },
-    getAddressList() {
+    async getAddressList() {
       this.testValue = false;
+      this.loadError = '';
       uni.showLoading({ title: "加载中", mask: true });
-      queryAddressBookList().then((res) => {
-        if (res.code === 1) {
-          setTimeout(function () {
-            uni.hideLoading();
-          }, 100);
-          this.testValue = true;
-          this.addressList = res.data;
-          this.isEmpty = true;
-          this.addressList.map((val, index) => {
-            if (val.isDefault === 1) {
-              this.isActive = index;
-            }
-          });
-        }
-      });
+      try {
+        const res = await queryAddressBookList();
+        if (!res || res.code !== 1) throw { msg: res && res.msg || '地址加载失败，请重试' };
+        this.testValue = true;
+        this.addressList = res.data || [];
+        this.isEmpty = !this.addressList.length;
+        this.isActive = this.addressList.findIndex(item => item.isDefault === 1);
+      } catch (error) {
+        this.loadError = error && (error.msg || error.message) || '地址加载失败，请重试';
+        uni.showToast({ title: this.loadError, icon: 'none' });
+      } finally {
+        uni.hideLoading();
+      }
     },
 
     addOrEdit(type, item) {
@@ -190,10 +193,8 @@ export default {
       if (this.addressBackUrl !== "/pages/order/index") {
         return false;
       }
-      uni.redirectTo({
-        url: "/pages/order/index?address=" + JSON.stringify(item),
-      });
       this.setAddress(item);
+      uni.navigateBack({ delta: 1 });
     },
     getRadio(index, item) {
       // // 提供默认接口
@@ -348,8 +349,8 @@ export default {
       height: 86rpx;
       line-height: 86rpx;
       border-radius: 8rpx;
-      background: #9E2026;
-      border: 1px solid #9E2026;
+      background: #164B3B;
+      border: 1px solid #164B3B;
       opacity: 1;
       font-size: 30rpx;
       font-family: PingFangSC, PingFangSC-Medium;
@@ -380,7 +381,7 @@ export default {
 </style>
 
 <style lang="scss" scoped>
-.address { width: 100%; background: #FFF8EE; }
+.address { width: 100%; background: #F5F8F4; }
 .address .address_content { padding-bottom: calc(160rpx + env(safe-area-inset-bottom)); box-sizing: border-box; }
 .address .address_content .address_liests { height: auto; min-height: 256rpx; border: 1rpx solid #EADFD1; border-radius: 20rpx; }
 .address .address_content .address_liests .list_item_top .item_left .details { height: auto; align-items: flex-start; }
@@ -389,6 +390,6 @@ export default {
 .address .address_content .address_liests .list_item_top .item_left .sale .name, .address .address_content .address_liests .list_item_top .item_left .sale .num { color: #756B62; font-size: 26rpx; }
 .address .address_content .address_liests .list_item_bottom { border-color: #EADFD1; }
 .address .add_address { bottom: calc(24rpx + env(safe-area-inset-bottom)); }
-.address .add_address .add_btn { min-height: 88rpx; background: #9E2026; border-color: #9E2026; color: #FFF8EE; border-radius: 16rpx; }
+.address .add_address .add_btn { min-height: 88rpx; background: #164B3B; border-color: #164B3B; color: #F5F8F4; border-radius: 16rpx; }
 .address .add_address .add_btn::after { border: 0; }
 </style>
