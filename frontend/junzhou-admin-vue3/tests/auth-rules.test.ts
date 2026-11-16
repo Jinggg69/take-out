@@ -9,12 +9,19 @@ test('login retains the original minimum length without restricting employee nam
   assert.ok(errors.username)
   assert.ok(errors.password)
 })
-test('change-password keeps the original 6-20 alphanumeric and confirmation rules', () => {
+test('change-password accepts provisioned old passwords while keeping 6-20 alphanumeric new passwords', () => {
   assert.deepEqual(validatePasswordChange({ oldPassword: 'abc123', newPassword: 'DEF456', affirmPassword: 'DEF456' }), {})
   const errors = validatePasswordChange({ oldPassword: '短密码', newPassword: 'x'.repeat(21), affirmPassword: 'different' })
-  assert.ok(errors.oldPassword)
+  assert.equal(errors.oldPassword, undefined)
   assert.ok(errors.newPassword)
   assert.ok(errors.affirmPassword)
+})
+
+test('old password accepts symbols and long bootstrap credentials, and remains required', () => {
+  for (const oldPassword of ['Safe-password-123!', 'a'.repeat(128), '!']) {
+    assert.deepEqual(validatePasswordChange({ oldPassword, newPassword: 'New123456', affirmPassword: 'New123456' }), {})
+  }
+  assert.ok(validatePasswordChange({ oldPassword: '', newPassword: 'New123456', affirmPassword: 'New123456' }).oldPassword)
 })
 test('unauthenticated users reach only explicitly public routes', () => {
   const guard = createAuthGuard(() => undefined)

@@ -40,6 +40,7 @@ public class JwtTokenAdminInterceptor implements HandlerInterceptor {
      * @throws Exception
      */
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        com.junzhou.platform.PlatformContext.clear();
         BaseContext.removeCurrentId();
         RequestScope.clear();
         com.junzhou.security.RbacRequestContext.clear(request);
@@ -81,6 +82,7 @@ public class JwtTokenAdminInterceptor implements HandlerInterceptor {
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
                                 Object handler, Exception ex) {
+        com.junzhou.platform.PlatformContext.clear();
         BaseContext.removeCurrentId();
         RequestScope.clear();
         com.junzhou.security.RbacRequestContext.clear(request);

@@ -24,13 +24,13 @@ watch(visible, open => {
   }
 })
 function validateField(field: keyof PasswordForm) {
-  const error = validatePasswordChange(form)[field]
+  const error = validatePasswordChange(form, user.accountType === 'PLATFORM')[field]
   if (error) errors.value[field] = error
   else delete errors.value[field]
 }
 async function save() {
   if (saving.value) return
-  message.value = ''; errors.value = validatePasswordChange(form)
+  message.value = ''; errors.value = validatePasswordChange(form, user.accountType === 'PLATFORM')
   if (Object.keys(errors.value).length) { await nextTick(); feedback.value?.focus(); return }
   saving.value = true
   try {
@@ -95,7 +95,7 @@ async function save() {
           v-model="form.newPassword"
           type="password"
           autocomplete="new-password"
-          placeholder="6至20位数字或字母，区分大小写"
+          :placeholder="user.accountType === 'PLATFORM' ? '8至128位，区分大小写' : '6至20位数字或字母，区分大小写'"
           show-password
           :disabled="saving"
           :aria-invalid="Boolean(errors.newPassword)"

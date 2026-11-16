@@ -20,6 +20,9 @@ public class EmployeeLoginVO implements Serializable {
     @ApiModelProperty("主键值")
     private Long id;
 
+    @Builder.Default
+    private String accountType = "EMPLOYEE";
+
     @ApiModelProperty("用户名")
     private String userName;
 

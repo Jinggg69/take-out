@@ -59,7 +59,7 @@ async function submit() {
           <h1 id="login-title">
             登录管理系统
           </h1>
-          <p>使用员工账号登录均州鱼庄</p>
+          <p>使用您的管理账号登录</p>
         </header>
         <FormFeedback
           ref="feedback"

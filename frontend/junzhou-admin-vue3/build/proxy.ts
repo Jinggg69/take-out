@@ -1,6 +1,6 @@
 import type { ProxyOptions } from 'vite'
 
-export function createDevProxy(apiTarget: string): Record<'/api' | '/ws', ProxyOptions> {
+export function createDevProxy(apiTarget: string): Record<'/api' | '/platform' | '/ws', ProxyOptions> {
   let target: URL
   try {
     target = new URL(apiTarget)
@@ -12,6 +12,7 @@ export function createDevProxy(apiTarget: string): Record<'/api' | '/ws', ProxyO
   }
   const apiPrefix = target.pathname.replace(/\/$/, '')
   return {
+    '/platform': { target: target.origin, changeOrigin: true },
     '/api': {
       target: target.origin,
       changeOrigin: true,

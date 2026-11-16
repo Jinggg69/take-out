@@ -17,7 +17,8 @@ export const router = createRouter({
       meta: { title: '登录 · 均州鱼庄管理系统', notNeedAuth: true },
     },
     {
-      path: '/', redirect: '/dashboard',
+      path: '/', redirect: () => sessionCookies.getUserInfo().accountType === 'PLATFORM' ? '/platform/tenants' : '/dashboard',
+      meta: { title: '管理系统', accountType: 'EMPLOYEE' },
       component: () => import('@/layouts/AppLayout.vue'),
       children: [
         ...primaryNavigation.map(item => ({
@@ -61,6 +62,17 @@ export const router = createRouter({
       ],
     },
     {
+      path: '/platform', redirect: '/platform/tenants',
+      component: () => import('@/layouts/PlatformLayout.vue'),
+      meta: { title: '平台管理', accountType: 'PLATFORM' },
+      children: ['tenants', 'stores'].map(resource => ({
+        path: resource, name: `platform-${resource}`,
+        component: () => import('@/views/platform/PlatformManagement.vue'),
+        props: { resource },
+        meta: { title: `${resource === 'tenants' ? '商户管理' : '门店管理'} · 平台管理`, accountType: 'PLATFORM' as const },
+      })),
+    },
+    {
       path: '/404',
       name: 'not-found',
       component: () => import('@/views/error/NotFoundView.vue'),
@@ -70,7 +82,7 @@ export const router = createRouter({
   ],
 })
 
-const authGuard = createAuthGuard(sessionCookies.getToken)
+const authGuard = createAuthGuard(sessionCookies.getToken, () => sessionCookies.getUserInfo().accountType === 'PLATFORM' ? 'PLATFORM' : 'EMPLOYEE')
 router.beforeEach(to => {
   routePending.value = true
   if (to.name === 'employee-form') {

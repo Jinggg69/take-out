@@ -29,6 +29,8 @@ public class EmployeeController {
 
     @Autowired
     private EmployeeService employeeService;
+    @Autowired(required = false)
+    private com.junzhou.platform.PlatformAuthService platformAuth;
     @Autowired
     private AdminSessionService adminSessionService;
 
@@ -40,7 +42,8 @@ public class EmployeeController {
      */
     @PostMapping("/login")
     public Result<EmployeeLoginVO> login(@RequestBody EmployeeLoginDTO employeeLoginDTO) {
-        EmployeeLoginVO employeeLoginVO = employeeService.loginWithSession(employeeLoginDTO);
+        EmployeeLoginVO employeeLoginVO = platformAuth == null ? null : platformAuth.loginIfPlatform(employeeLoginDTO);
+        if (employeeLoginVO == null) employeeLoginVO = employeeService.loginWithSession(employeeLoginDTO);
         log.info("员工登录成功，employeeId={}", employeeLoginVO.getId());
         return Result.success(employeeLoginVO);
     }

@@ -54,6 +54,19 @@ try:
     sql(migration,schema)
     assert sql("SELECT pickup_credential FROM orders WHERE number='old-pickup'",schema)==credential
     assert sql("SELECT status,pickup_verified_by FROM orders WHERE number='old-pickup'",schema)=="5\t1"
+    daily=(ROOT / "database/migrations/20261116_01_daily_pickup_number.sql").read_text(encoding="utf-8")
+    sql("UPDATE orders SET order_time='2026-11-16 09:00:00' WHERE number='old-pickup'",schema)
+    sql("INSERT INTO orders(tenant_id,store_id,number,status,user_id,order_time,amount,fulfillment_type,pickup_number) VALUES(1,1,'second-pickup',3,1,'2026-11-16 10:00:00',10,'PICKUP','OLD'),(1,1,'tomorrow-pickup',3,1,'2026-11-17 10:00:00',10,'PICKUP','OLD')",schema)
+    sql(daily,schema)
+    assert sql("SELECT pickup_number FROM orders WHERE number='old-pickup'",schema)=="1"
+    assert sql("SELECT pickup_number FROM orders WHERE number='second-pickup'",schema)=="2"
+    assert sql("SELECT pickup_number FROM orders WHERE number='tomorrow-pickup'",schema)=="1"
+    assert sql("SELECT status,pickup_verified_by FROM orders WHERE number='old-pickup'",schema)=="5\t1"
+    snapshot=sql("SELECT id,pickup_number,pickup_date FROM orders ORDER BY id",schema)
+    sql(daily,schema)
+    assert sql("SELECT id,pickup_number,pickup_date FROM orders ORDER BY id",schema)==snapshot
+    assert sql("SELECT last_number FROM store_pickup_sequence WHERE pickup_date='2026-11-16'",schema)=="2"
+    print("PASS: daily numeric backfill, next-day reset, migration rerun and audit preservation")
     tables=sql("SHOW TABLES",schema).splitlines()
     assert all(re.fullmatch(r"[A-Za-z0-9_]+", name) for name in tables)
     sql("SET FOREIGN_KEY_CHECKS=0;"+";".join("DROP TABLE `"+name+"`" for name in tables)+";SET FOREIGN_KEY_CHECKS=1;",schema)

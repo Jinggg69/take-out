@@ -10,11 +10,12 @@ export function validateLogin(form: LoginPayload): FieldErrors<LoginPayload> {
   return errors
 }
 
-export function validatePasswordChange(form: PasswordForm): FieldErrors<PasswordForm> {
+export function validatePasswordChange(form: PasswordForm, platform = false): FieldErrors<PasswordForm> {
   const errors: FieldErrors<PasswordForm> = {}
   for (const field of ['oldPassword', 'newPassword'] as const) {
     if (!form[field]) errors[field] = field === 'oldPassword' ? '请输入原始密码' : '请输入新密码'
-    else if (!/^[0-9A-Za-z]{6,20}$/.test(form[field])) errors[field] = '请输入6至20位数字或字母，区分大小写'
+    else if (!platform && field === 'newPassword' && !/^[0-9A-Za-z]{6,20}$/.test(form[field])) errors[field] = '请输入6至20位数字或字母，区分大小写'
+    else if (platform && field === 'newPassword' && (form[field].length < 8 || form[field].length > 128)) errors[field] = '新密码需要8至128位'
   }
   if (!form.affirmPassword) errors.affirmPassword = '请再次输入密码'
   else if (form.affirmPassword !== form.newPassword) errors.affirmPassword = '密码不一致，请重新输入密码'

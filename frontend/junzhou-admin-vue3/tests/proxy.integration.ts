@@ -74,6 +74,10 @@ test('the actual Vite config forwards HTTP and WebSocket to their original names
         signal: AbortSignal.timeout(5000),
       })
       assert.equal((await query.json()).path, '/admin/dish/page?status=0&name=%E9%B1%BC')
+      const platform = await fetch(`${origin}/platform/tenants?page=1&pageSize=10`, {
+        headers: { token: 'platform-token' }, signal: AbortSignal.timeout(5000),
+      })
+      assert.deepEqual(await platform.json(), { path: '/platform/tenants?page=1&pageSize=10', token: 'platform-token', body: '' })
       websocket = new WebSocket(`ws://127.0.0.1:${port}/ws/fixture-client`)
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('WebSocket proxy handshake timed out')), 5000)
