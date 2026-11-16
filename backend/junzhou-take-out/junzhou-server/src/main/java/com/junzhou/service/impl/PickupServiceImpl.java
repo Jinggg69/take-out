@@ -21,10 +21,10 @@ public class PickupServiceImpl implements PickupService {
     }
     /** 条件更新保证并发核销仅一次成功，重复请求不改写审计字段。 */
     @Override @Transactional
-    public void verify(Long id,String credential) {
+    public void verify(Long id,String pickupNumber) {
         RequestScope.requireEmployeeTenantId();
-        if (id==null || id<=0 || credential==null || !credential.matches("[0-9a-f]{32}")
-                || orders.pickupVerify(id,credential,RequestScope.current().getEmployeeId(),LocalDateTime.now())!=1)
-            throw new OrderBusinessException("核销失败，请核对凭证、门店及订单支付状态");
+        if (id==null || id<=0 || pickupNumber==null || !pickupNumber.matches("[1-9][0-9]{0,18}")
+                || orders.pickupVerify(id,pickupNumber,RequestScope.current().getEmployeeId(),LocalDateTime.now())!=1)
+            throw new OrderBusinessException("核销失败，请核对取餐号、门店及订单支付状态");
     }
 }

@@ -19,9 +19,7 @@ import java.time.LocalDateTime;
 public class Orders implements Serializable {
     // Loaded from the scoped order row; notifications must retain ownership after commit.
     private String pickupNumber;
-    @com.fasterxml.jackson.annotation.JsonIgnore
-    @lombok.ToString.Exclude
-    private String pickupCredential;
+    private java.time.LocalDate pickupDate;
     private LocalDateTime pickupVerifiedAt;
     private Long pickupVerifiedBy;
     private String diningSessionId;

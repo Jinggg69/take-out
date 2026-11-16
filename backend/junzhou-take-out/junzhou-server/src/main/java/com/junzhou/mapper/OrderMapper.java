@@ -13,9 +13,11 @@ import java.util.List;
 public interface OrderMapper {
     @org.apache.ibatis.annotations.Select("<script><bind name='tenant' value='@com.junzhou.context.RequestScope@requireTenantId()'/><bind name='store' value='@com.junzhou.context.RequestScope@requireStoreId()'/>select t.name from tenant t join store s on s.tenant_id=t.id where t.id=#{tenant} and s.id=#{store} and t.status=1 and s.status=1</script>")
     String currentMerchantName();
+    int reservePickupNumber(@Param("date") java.time.LocalDate date);
+    Long currentPickupNumber(@Param("date") java.time.LocalDate date);
     int dineComplete(Long id);
     int pickupReady(Long id);
-    int pickupVerify(@Param("id") Long id,@Param("credential") String credential,@Param("employeeId") Long employeeId,@Param("now") LocalDateTime now);
+    int pickupVerify(@Param("id") Long id,@Param("pickupNumber") String pickupNumber,@Param("employeeId") Long employeeId,@Param("now") LocalDateTime now);
     @org.apache.ibatis.annotations.Select("<script><bind name='tenant' value='@com.junzhou.context.RequestScope@requireTenantId()'/><bind name='store' value='@com.junzhou.context.RequestScope@requireStoreId()'/>select name from store_dining_table where id=#{id} and tenant_id=#{tenant} and store_id=#{store} and enabled=1 for update</script>")
     String lockDiningTable(Long id);
     Orders getBySubmission(@Param("userId") Long userId,@Param("requestId") String requestId);

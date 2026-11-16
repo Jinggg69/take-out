@@ -25,7 +25,7 @@
           <view>当前方式：{{ fulfillmentType === 'DINE_IN' ? '堂食' : fulfillmentType === 'PICKUP' ? '到店自取，无配送费' : '外卖配送' }}</view>
         </view>
         <view v-if="fulfillmentType === 'PICKUP'" class="box boxPad pickup-contact">
-          <view class="pickup-notice">制作完成后，凭核销凭证到店取餐</view>
+          <view class="pickup-notice">制作完成后，凭取餐号到店取餐</view>
           <label class="contact-row"><text>取餐联系人</text><input v-model="contactName" maxlength="32" aria-label="取餐联系人" placeholder="请填写取餐联系人" :disabled="isHandlePy || !!pendingSubmission" /></label>
           <label class="contact-row"><text>联系手机号</text><input v-model="contactPhone" type="number" maxlength="11" aria-label="联系手机号" placeholder="请填写11位手机号" :disabled="isHandlePy || !!pendingSubmission" /></label>
         </view>

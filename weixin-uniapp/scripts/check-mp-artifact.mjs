@@ -2,6 +2,7 @@ import { readFile, readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
+import { checkWxss } from './check-wxss.mjs'
 
 const output = fileURLToPath(new URL('../unpackage/dist/build/mp-weixin/', import.meta.url))
 const app = JSON.parse(await readFile(path.join(output, 'app.json'), 'utf8'))
@@ -22,3 +23,4 @@ async function bytes(directory) {
 const size = await bytes(output)
 assert.ok(size < 2 * 1024 * 1024, 'Main package exceeds the chosen 2 MiB budget')
 console.log(`PASS: merchant entry, four native tabs, page files and icons; ${(size / 1024 / 1024).toFixed(2)} MiB main package`)
+await checkWxss(output)

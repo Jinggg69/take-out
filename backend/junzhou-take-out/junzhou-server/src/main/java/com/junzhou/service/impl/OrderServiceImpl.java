@@ -186,6 +186,7 @@ public class OrderServiceImpl implements OrderService {
 
         //向订单表插入一条数据
         Orders order = new Orders();
+        LocalDateTime orderTime = LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai"));
         // Explicit client-owned fields only. Monetary values come exclusively from the server quotation.
         order.setAddressBookId(addressBook==null ? null : addressBook.getId());
         order.setFulfillmentType(type);
@@ -193,8 +194,12 @@ public class OrderServiceImpl implements OrderService {
         if (com.junzhou.payment.Fulfillment.PICKUP.equals(type)) {
             order.setContactName(ordersSubmitDTO.getContactName().trim());
             order.setContactPhone(ordersSubmitDTO.getContactPhone());
-            order.setPickupNumber(UUID.randomUUID().toString().substring(0,8).toUpperCase(java.util.Locale.ROOT));
-            order.setPickupCredential(UUID.randomUUID().toString().replace("-",""));
+            java.time.LocalDate pickupDate = orderTime.toLocalDate();
+            if (orderMapper.reservePickupNumber(pickupDate) == 0) {
+                throw new OrderBusinessException("门店不可用，请重新下单");
+            }
+            order.setPickupDate(pickupDate);
+            order.setPickupNumber(String.valueOf(orderMapper.currentPickupNumber(pickupDate)));
             order.setPhone(ordersSubmitDTO.getContactPhone());
             order.setConsignee(ordersSubmitDTO.getContactName().trim());
         }
@@ -224,7 +229,7 @@ public class OrderServiceImpl implements OrderService {
         priceSnapshot.put("packAmount",quote.getPackAmount());
         order.setPricingSnapshot(priceSnapshot.toJSONString());
         order.setPackAmount(quote.getPackAmount());
-        order.setOrderTime(LocalDateTime.now());
+        order.setOrderTime(orderTime);
         order.setPayStatus(Orders.UN_PAID);
         order.setStatus(Orders.PENDING_PAYMENT);
         order.setNumber(UUID.randomUUID().toString().replace("-",""));
@@ -366,9 +371,6 @@ public class OrderServiceImpl implements OrderService {
         Orders order = requireOrder(id, false);
         requireUserOrder(order);
         OrderVO vo=toOrderVO(order);
-        if ("PICKUP".equals(order.getFulfillmentType()) && Orders.PAID.equals(order.getPayStatus())
-                && order.getRefundStatus()==null && !Orders.CANCELLED.equals(order.getStatus())
-                && !Orders.COMPLETED.equals(order.getStatus())) vo.setPickupToken(order.getPickupCredential());
         return vo;
     }
 

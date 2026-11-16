@@ -107,9 +107,18 @@ public class MockPaymentGateway {
             result.put("trade_type","JSAPI"); result.put("transaction_id","MOCK_"+order.getNumber());
             JSONObject amount=new JSONObject(); amount.put("total",row.get("amount_fen")); amount.put("currency","CNY"); result.put("amount",amount);
             JSONObject payer=new JSONObject(); payer.put("openid",row.get("payer_openid")); result.put("payer",payer);
-            result.put("success_time",((Timestamp)row.get("paid_at")).toInstant().atOffset(ZoneOffset.ofHours(8)).toString());
+            result.put("success_time",formatSuccessTime(row.get("paid_at")));
         }
         return result;
+    }
+    /** MySQL DATETIME is returned as LocalDateTime; H2 may return Timestamp. */
+    static String formatSuccessTime(Object value) {
+        java.time.ZoneId zone=java.time.ZoneId.of("Asia/Shanghai");
+        java.time.OffsetDateTime paidAt;
+        if(value instanceof java.time.LocalDateTime) paidAt=((java.time.LocalDateTime)value).atZone(zone).toOffsetDateTime();
+        else if(value instanceof Timestamp) paidAt=((Timestamp)value).toInstant().atZone(zone).toOffsetDateTime();
+        else throw new IllegalStateException("Unsupported mock payment timestamp");
+        return paidAt.format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME);
     }
     @Transactional public void close(Long id) {
         Orders order=requireOrder(id,true);

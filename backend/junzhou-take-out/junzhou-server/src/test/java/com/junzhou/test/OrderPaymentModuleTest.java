@@ -373,24 +373,24 @@ class OrderPaymentModuleTest {
     }
 
     @Test
-    void pickupCredentialIsPrivateAndVerificationIsSingleUse() throws Exception {
+    void pickupNumberStartsAtOneAndVerificationIsSingleUse() throws Exception {
         String body="{\"fulfillmentType\":\"PICKUP\",\"contactName\":\"张三\",\"contactPhone\":\"13800000000\",\"payMethod\":1,\"amount\":27}";
         mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(jsonPath("$.code").value(1));
         Long id=jdbc.queryForObject("select id from orders where id<>10",Long.class);
         jdbc.update("update orders set status=3,pay_status=1,fulfillment_status='PREPARING' where id=?",id);
         String user=mvc.perform(get("/user/order/orderDetail/"+id).header("authentication",token())).andReturn().getResponse().getContentAsString();
-        String credential=JSON.parseObject(user).getJSONObject("data").getString("pickupToken");
+        String credential=JSON.parseObject(user).getJSONObject("data").getString("pickupNumber");
         assertNotNull(credential);
-        assertTrue(credential.matches("[0-9a-f]{32}"));
+        assertEquals("1",credential);
         mvc.perform(get("/admin/order/details/"+id).header("token",adminToken()))
             .andExpect(jsonPath("$.data.pickupToken").doesNotExist()).andExpect(jsonPath("$.data.pickupCredential").doesNotExist());
-        adminPut("/admin/order/pickup/verify/"+id,"{\"credential\":\""+credential+"\"}",0);
+        adminPut("/admin/order/pickup/verify/"+id,"{\"pickupNumber\":\""+credential+"\"}",0);
         adminPut("/admin/order/pickup/ready/"+id,"{}",1);
-        adminPut("/admin/order/pickup/verify/"+id,"{\"credential\":\"wrong\"}",0);
-        adminPut("/admin/order/pickup/verify/"+id,"{\"credential\":\""+credential+"\"}",1);
+        adminPut("/admin/order/pickup/verify/"+id,"{\"pickupNumber\":\"wrong\"}",0);
+        adminPut("/admin/order/pickup/verify/"+id,"{\"pickupNumber\":\""+credential+"\"}",1);
         java.sql.Timestamp verified=jdbc.queryForObject("select pickup_verified_at from orders where id=?",java.sql.Timestamp.class,id);
-        adminPut("/admin/order/pickup/verify/"+id,"{\"credential\":\""+credential+"\"}",0);
+        adminPut("/admin/order/pickup/verify/"+id,"{\"pickupNumber\":\""+credential+"\"}",0);
         assertEquals(verified,jdbc.queryForObject("select pickup_verified_at from orders where id=?",java.sql.Timestamp.class,id));
         assertEquals(5,statusOf(id));
     }
@@ -398,22 +398,22 @@ class OrderPaymentModuleTest {
     @ParameterizedTest
     @ValueSource(strings={"status=1,pay_status=0", "status=6,pay_status=1", "pay_status=2", "pay_status=3", "pay_status=4", "refund_status='REQUESTED'", "fulfillment_type='DELIVERY'", "store_id=2", "tenant_id=2"})
     void invalidPickupCannotBeVerified(String change) throws Exception {
-        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_credential='0123456789abcdef0123456789abcdef' where id=10");
+        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_number='1' where id=10");
         jdbc.update("update orders set "+change+" where id=10");
-        adminPut("/admin/order/pickup/verify/10","{\"credential\":\"0123456789abcdef0123456789abcdef\"}",0);
+        adminPut("/admin/order/pickup/verify/10","{\"pickupNumber\":\"1\"}",0);
         assertNull(jdbc.queryForObject("select pickup_verified_at from orders where id=10",java.sql.Timestamp.class));
     }
 
     @Test
     void concurrentPickupVerificationChangesExactlyOneRow() throws Exception {
-        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_credential='0123456789abcdef0123456789abcdef' where id=10");
+        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_number='1' where id=10");
         ExecutorService pool=Executors.newFixedThreadPool(6);
         CountDownLatch start=new CountDownLatch(1);
         java.util.List<Future<Boolean>> results=new java.util.ArrayList<>();
         try {
             for(int i=0;i<6;i++) results.add(pool.submit(()->{
                 RequestScope.set(new RequestScope(1L,null,1L,1L,Collections.singleton(1L)));
-                try { start.await(); context.getBean(com.junzhou.service.PickupService.class).verify(10L,"0123456789abcdef0123456789abcdef");return true; }
+                try { start.await(); context.getBean(com.junzhou.service.PickupService.class).verify(10L,"1");return true; }
                 catch(com.junzhou.exception.OrderBusinessException ex){return false;}
                 finally{RequestScope.clear();}
             }));
@@ -425,8 +425,8 @@ class OrderPaymentModuleTest {
     }
 
     @Test
-    void pickupFiltersAndCredentialVisibilityRespectOwnership() throws Exception {
-        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_credential='0123456789abcdef0123456789abcdef' where id=10");
+    void pickupFiltersRespectOwnership() throws Exception {
+        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_number='1' where id=10");
         mvc.perform(get("/admin/order/conditionSearch").header("token",adminToken()).param("page","1").param("pageSize","10").param("fulfillmentType","PICKUP").param("fulfillmentStatus","PREPARING"))
             .andExpect(jsonPath("$.data.total").value(0));
         mvc.perform(get("/admin/order/conditionSearch").header("token",adminToken()).param("page","1").param("pageSize","10").param("fulfillmentType","PICKUP").param("fulfillmentStatus","READY"))
@@ -444,8 +444,78 @@ class OrderPaymentModuleTest {
         mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(jsonPath("$.code").value(1));
         assertEquals("PICKUP",jdbc.queryForObject("select fulfillment_type from orders where id<>10",String.class));
+        assertEquals("1",jdbc.queryForObject("select pickup_number from orders where id<>10",String.class));
+        assertEquals(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")),jdbc.queryForObject("select pickup_date from orders where id<>10",java.sql.Date.class).toLocalDate());
         mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(jsonPath("$.code").value(1));
+        assertEquals(1L,jdbc.queryForObject("select last_number from store_pickup_sequence",Long.class));
+    }
+
+    @Test
+    void pickupVerificationUsesSelectedOrderAcrossDays() throws Exception {
+        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_number='1',order_time='2026-11-15 23:59:00' where id=10");
+        adminPut("/admin/order/pickup/verify/10","{\"pickupNumber\":\"2\"}",0);
+        adminPut("/admin/order/pickup/verify/10","{\"pickupNumber\":\"1\"}",1);
+        assertEquals(5,statusOf(10));
+    }
+
+    private Long allocatePickupNumber(java.time.LocalDate date) {
+        return new TransactionTemplate(context.getBean(PlatformTransactionManager.class)).execute(status -> {
+            OrderMapper mapper = context.getBean(OrderMapper.class);
+            assertTrue(mapper.reservePickupNumber(date) > 0);
+            return mapper.currentPickupNumber(date);
+        });
+    }
+
+    @Test
+    void pickupNumbersRestartForEachStoreAndBusinessDate() {
+        java.time.LocalDate day = java.time.LocalDate.of(2026,11,16);
+        RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
+        assertEquals(1L,allocatePickupNumber(day));
+        assertEquals(2L,allocatePickupNumber(day));
+        assertEquals(1L,allocatePickupNumber(day.plusDays(1)));
+        assertEquals(3L,allocatePickupNumber(day));
+        jdbc.update("insert into store(id,tenant_id,status) values(2,1,1)");
+        RequestScope.set(new RequestScope(null,42L,1L,2L,Collections.emptySet()));
+        assertEquals(1L,allocatePickupNumber(day));
+        jdbc.update("insert into tenant(id,status) values(2,1)");
+        jdbc.update("insert into store(id,tenant_id,status) values(3,2,1)");
+        RequestScope.set(new RequestScope(null,42L,2L,3L,Collections.emptySet()));
+        assertEquals(1L,allocatePickupNumber(day));
+        RequestScope.set(new RequestScope(null,42L,1L,3L,Collections.emptySet()));
+        assertEquals(0,context.getBean(OrderMapper.class).reservePickupNumber(day));
+    }
+
+    @Test
+    void rolledBackSubmissionDoesNotConsumePickupNumber() {
+        java.time.LocalDate day = java.time.LocalDate.of(2026,11,16);
+        RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
+        new TransactionTemplate(context.getBean(PlatformTransactionManager.class)).execute(status -> {
+            assertEquals(1L,allocatePickupNumber(day));
+            status.setRollbackOnly();
+            return null;
+        });
+        assertEquals(1L,allocatePickupNumber(day));
+    }
+
+    @Test
+    void simultaneousPickupNumbersAreUniqueAndSequential() throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(6);
+        CountDownLatch start = new CountDownLatch(1);
+        java.util.List<Future<Long>> results = new java.util.ArrayList<>();
+        try {
+            for (int i=0;i<6;i++) results.add(pool.submit(() -> {
+                RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
+                try {
+                    start.await();
+                    return allocatePickupNumber(java.time.LocalDate.of(2026,11,16));
+                } finally { RequestScope.clear(); }
+            }));
+            start.countDown();
+            java.util.Set<Long> actual = new java.util.TreeSet<>();
+            for (Future<Long> result : results) actual.add(result.get(15,TimeUnit.SECONDS));
+            assertEquals(new java.util.TreeSet<>(java.util.Arrays.asList(1L,2L,3L,4L,5L,6L)),actual);
+        } finally { pool.shutdownNow(); }
     }
 
     @Test

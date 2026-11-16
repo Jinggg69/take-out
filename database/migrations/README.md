@@ -271,3 +271,16 @@ python scripts/test-dining-session-migration.py 与 python scripts/test-order-pi
 ## 20261112_02_mock_payment.sql：学习演示支付渠道
 
 新增订单不可变 payment_channel（历史默认 WECHAT）和持久 mock_payment 表。先完成支付账户及生命周期迁移，停写备份后执行本迁移，再部署后端。脚本不改商户身份、门店账户映射或历史资金记录。Mock 默认关闭，启用与完整演示步骤见 [Mock支付说明](../mock-payment.md)。迁移演练命令：`python scripts/test-mock-payment-migration.py`，仅使用本机随机临时库。
+
+
+## 20261116_01_daily_pickup_number.sql
+
+自取订单改为每家门店按北京时间自然日从 1 分配数字取餐号。使用门店日期计数器，在下单事务中递增。重复提交返回原号码，失败事务回滚计数，取消和退款后号码不回收。
+
+在维护窗口停止旧后端的订单写入，备份 orders 表后执行此增量脚本，再启动新后端并更新管理端和小程序。旧自取订单按租户、门店、下单日期分组，以原下单时间和 ID 排序转换为数字号码，已核销时间、员工及支付状态保留。历史 order_time 按原本的本地业务时间解释，缺失时间统一归入 1970-01-01。迁移可重复执行，已转换的号码保持原值，计数器只向前推进。顾客和店员须刷新旧订单页面后使用新号码。
+
+管理端核销请求为 PUT /admin/order/pickup/verify/{id}，请求体为 {"pickupNumber":"1"}。核销校验所选订单的号码、租户门店、支付及待取状态，并记录员工和时间。跨日未取单沿用下单当日号码，店员核对订单日期和餐品后操作。
+
+运行时与界面已删除单独核销凭证，数据库中的 pickup_credential 为兼容历史迁移保留为闲置列。新增 pickup_date、store_pickup_sequence 和订单门店日期号码唯一索引。全新开发库初始化已包含此迁移。
+
+验证命令为 python scripts/test-order-pickup-migration.py，使用自动创建和清理的临时 MySQL 库，覆盖旧单转换、重复迁移、日期门店隔离、并发编号、回滚和新库初始化。

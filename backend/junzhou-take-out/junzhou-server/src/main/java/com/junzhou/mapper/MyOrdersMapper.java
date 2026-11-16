@@ -39,7 +39,7 @@ public interface MyOrdersMapper {
 
     @Data class Merchant { private Long id; private String name; private Integer status; }
 
-    /** Internal projection only, never returned by the controller. No credential columns selected. */
+    /** Internal projection only, never returned by the controller. */
     @Data @EqualsAndHashCode(callSuper=true)
     class Row extends Orders {
         private String currentMerchantName, currentStoreName;

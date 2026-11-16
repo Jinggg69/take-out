@@ -39,6 +39,7 @@ class MyOrdersIsolationTest {
         db.update("insert into tenant values(1,'Current merchant',1),(2,'Other merchant',1),(3,'Disabled',0)");
         db.update("insert into store values(11,1,'Current first',1),(12,1,'Current second',0),(21,2,'Foreign',1),(31,3,'Disabled store',0)");
         db.execute("create table orders(id bigint primary key,number varchar(50),tenant_id bigint,store_id bigint,user_id bigint,order_time timestamp,status int,pay_status int,refund_status varchar(20),amount decimal(10,2),store_snapshot text,pricing_snapshot text,client_request_id varchar(64),fulfillment_type varchar(20),fulfillment_status varchar(32),pack_amount int,contact_name varchar(40),contact_phone varchar(20),consignee varchar(40),phone varchar(20),address varchar(200),remark varchar(200),pickup_number varchar(40),table_snapshot varchar(80),cancel_reason varchar(80),rejection_reason varchar(80),estimated_delivery_time timestamp)");
+        db.execute("alter table orders add pickup_credential varchar(32)");
         db.execute("create table order_detail(id bigint primary key,order_id bigint,name varchar(80),image varchar(200),number int,amount decimal(10,2),dish_flavor varchar(80))");
         order(101,42,1,11,5,1,null); order(102,42,1,12,6,3,"PROCESSING");
         order(103,84,1,11,5,1,null); order(104,42,2,21,5,1,null);order(105,42,3,31,6,4,"ABNORMAL");
@@ -91,6 +92,17 @@ class MyOrdersIsolationTest {
             .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value(0));
         assertNull(RequestScope.current());assertNull(BaseContext.getCurrentId());verifyNoInteractions(scopes);
     }
+    @Test void pickupNumberIsVisibleToOwnerWithoutSeparateCredential() throws Exception {
+        db.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pickup_number='1' where id=101");
+        assertEquals("1", detail(1,101).path("pickupNumber").asText());
+        assertFalse(detail(1,101).has("pickupToken"));
+        assertFalse(detail(1,101).has("pickupCredential"));
+        as(84);
+        assertEquals(404,assertThrows(MiniappApiException.class,()->detail(1,101)).getStatus());
+        as(42);
+        assertEquals(404,assertThrows(MiniappApiException.class,()->detail(2,101)).getStatus());
+    }
+
     @Test void currentMerchantCrossStoreIsAlwaysBoundToAuthenticatedUser()throws Exception {
         JsonNode result=list(1L,null,null,null,null,null);
         assertEquals(2,result.get("total").asInt());assertEquals("102",result.at("/records/0/orderId").asText());

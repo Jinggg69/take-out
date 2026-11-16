@@ -77,17 +77,17 @@ function openReason(row: OrderRecord, kind: 'reject' | 'cancel', fromDetail: boo
 async function perform(row: OrderRecord, action: OrderAction, fromDetail = false, reason?: string) {
   if (busy.value || !visibleOrderActions(row).includes(action)) return
   if ((action === 'reject' || action === 'cancel') && reason === undefined) { openReason(row, action, fromDetail); return }
-  let credential = ''
+  let pickupNumber = ''
   if (action === 'verify') {
     try {
-      const result = await ElMessageBox.prompt('请核对顾客订单并输入其出示的核销凭证', '核销取餐', { inputPattern: /^[0-9a-f]{32}$/, inputErrorMessage: '请输入32位核销凭证', confirmButtonText: '确认核销', cancelButtonText: '取消' })
-      credential = result.value
+      const result = await ElMessageBox.prompt('请核对订单日期和顾客餐品，再输入取餐号', '核销取餐', { inputPattern: /^[1-9][0-9]{0,18}$/, inputErrorMessage: '请输入有效的数字取餐号', confirmButtonText: '确认核销', cancelButtonText: '取消' })
+      pickupNumber = result.value
     } catch { return }
     if (!alive || busy.value) return
   }
   busy.value = true; actionError.value = ''; reasonError.value = ''
   try {
-    const { data } = await (action === 'reject' ? api.reject({ id: row.id, rejectionReason: reason! }) : action === 'cancel' ? api.cancel({ id: row.id, cancelReason: reason! }) : action === 'verify' ? api.verify(row.id, credential) : api[action](row.id))
+    const { data } = await (action === 'reject' ? api.reject({ id: row.id, rejectionReason: reason! }) : action === 'cancel' ? api.cancel({ id: row.id, cancelReason: reason! }) : action === 'verify' ? api.verify(row.id, pickupNumber) : api[action](row.id))
     if (!alive) return
     if (String(data.code) !== '1') throw new Error(data.msg || `${actionLabels[action]}失败，请重试`)
     ElMessage.success('操作成功'); reasonVisible.value = false

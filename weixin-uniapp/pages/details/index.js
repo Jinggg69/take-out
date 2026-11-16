@@ -84,9 +84,6 @@ export default {
             }
             return true
         },
-        copyPickupToken() {
-            if (this.orderDetailsData.pickupToken) uni.setClipboardData({ data: this.orderDetailsData.pickupToken })
-        },
 		setOrderData(...args) { return this.$appStore.setOrderData(...args) },
 		shopInfo() { return this.$appStore.shopInfo }, orderListData() { return this.$appStore.orderListData }, shopPhone() { return this.$appStore.shopPhone }, orderData() { return this.$appStore.orderData },
 		// 获取订单详情
