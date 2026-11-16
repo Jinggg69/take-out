@@ -425,7 +425,7 @@ class OrderPaymentModuleTest {
     }
 
     @Test
-    void pickupFiltersRespectOwnership() throws Exception {
+    void pickupFiltersAndCredentialVisibilityRespectOwnership() throws Exception {
         jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_number='1' where id=10");
         mvc.perform(get("/admin/order/conditionSearch").header("token",adminToken()).param("page","1").param("pageSize","10").param("fulfillmentType","PICKUP").param("fulfillmentStatus","PREPARING"))
             .andExpect(jsonPath("$.data.total").value(0));
@@ -433,6 +433,54 @@ class OrderPaymentModuleTest {
             .andExpect(jsonPath("$.data.total").value(1)).andExpect(jsonPath("$.data.records[0].pickupCredential").doesNotExist()).andExpect(jsonPath("$.data.records[0].pickupToken").doesNotExist());
         jdbc.update("update orders set user_id=84 where id=10");
         mvc.perform(get("/user/order/orderDetail/10").header("authentication",token())).andExpect(jsonPath("$.code").value(0));
+    }
+
+    private Long allocatePickupNumber(java.time.LocalDate date) {
+        return new TransactionTemplate(context.getBean(PlatformTransactionManager.class)).execute(status -> {
+            OrderMapper mapper = context.getBean(OrderMapper.class);
+            assertTrue(mapper.reservePickupNumber(date) > 0);
+            return mapper.currentPickupNumber(date);
+        });
+    }
+
+    @Test void dailyPickupNumbersAreScopedAndRollbackWithTheOrder() {
+        java.time.LocalDate day = java.time.LocalDate.of(2026,11,16);
+        RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
+        assertEquals(1L,allocatePickupNumber(day));
+        assertEquals(2L,allocatePickupNumber(day));
+        assertEquals(1L,allocatePickupNumber(day.plusDays(1)));
+        new TransactionTemplate(context.getBean(PlatformTransactionManager.class)).execute(status -> {
+            assertEquals(3L,allocatePickupNumber(day));
+            status.setRollbackOnly();
+            return null;
+        });
+        assertEquals(3L,allocatePickupNumber(day));
+        jdbc.update("insert into store(id,tenant_id,status) values(2,1,1)");
+        RequestScope.set(new RequestScope(null,42L,1L,2L,Collections.emptySet()));
+        assertEquals(1L,allocatePickupNumber(day));
+        jdbc.update("insert into tenant(id,status) values(2,1)");
+        jdbc.update("insert into store(id,tenant_id,status) values(3,2,1)");
+        RequestScope.set(new RequestScope(null,42L,2L,3L,Collections.emptySet()));
+        assertEquals(1L,allocatePickupNumber(day));
+        RequestScope.set(new RequestScope(null,42L,1L,3L,Collections.emptySet()));
+        assertEquals(0,context.getBean(OrderMapper.class).reservePickupNumber(day));
+    }
+
+    @Test void concurrentPickupNumbersAreUnique() throws Exception {
+        ExecutorService pool=Executors.newFixedThreadPool(6);
+        CountDownLatch start=new CountDownLatch(1);
+        java.util.List<Future<Long>> results=new java.util.ArrayList<>();
+        try {
+            for(int i=0;i<6;i++) results.add(pool.submit(() -> {
+                RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
+                try { start.await(); return allocatePickupNumber(java.time.LocalDate.of(2026,11,16)); }
+                finally { RequestScope.clear(); }
+            }));
+            start.countDown();
+            java.util.Set<Long> numbers=new java.util.TreeSet<>();
+            for(Future<Long> result:results) numbers.add(result.get(15,TimeUnit.SECONDS));
+            assertEquals(new java.util.TreeSet<>(java.util.Arrays.asList(1L,2L,3L,4L,5L,6L)),numbers);
+        } finally { pool.shutdownNow(); }
     }
 
     @Test
@@ -457,65 +505,6 @@ class OrderPaymentModuleTest {
         adminPut("/admin/order/pickup/verify/10","{\"pickupNumber\":\"2\"}",0);
         adminPut("/admin/order/pickup/verify/10","{\"pickupNumber\":\"1\"}",1);
         assertEquals(5,statusOf(10));
-    }
-
-    private Long allocatePickupNumber(java.time.LocalDate date) {
-        return new TransactionTemplate(context.getBean(PlatformTransactionManager.class)).execute(status -> {
-            OrderMapper mapper = context.getBean(OrderMapper.class);
-            assertTrue(mapper.reservePickupNumber(date) > 0);
-            return mapper.currentPickupNumber(date);
-        });
-    }
-
-    @Test
-    void pickupNumbersRestartForEachStoreAndBusinessDate() {
-        java.time.LocalDate day = java.time.LocalDate.of(2026,11,16);
-        RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
-        assertEquals(1L,allocatePickupNumber(day));
-        assertEquals(2L,allocatePickupNumber(day));
-        assertEquals(1L,allocatePickupNumber(day.plusDays(1)));
-        assertEquals(3L,allocatePickupNumber(day));
-        jdbc.update("insert into store(id,tenant_id,status) values(2,1,1)");
-        RequestScope.set(new RequestScope(null,42L,1L,2L,Collections.emptySet()));
-        assertEquals(1L,allocatePickupNumber(day));
-        jdbc.update("insert into tenant(id,status) values(2,1)");
-        jdbc.update("insert into store(id,tenant_id,status) values(3,2,1)");
-        RequestScope.set(new RequestScope(null,42L,2L,3L,Collections.emptySet()));
-        assertEquals(1L,allocatePickupNumber(day));
-        RequestScope.set(new RequestScope(null,42L,1L,3L,Collections.emptySet()));
-        assertEquals(0,context.getBean(OrderMapper.class).reservePickupNumber(day));
-    }
-
-    @Test
-    void rolledBackSubmissionDoesNotConsumePickupNumber() {
-        java.time.LocalDate day = java.time.LocalDate.of(2026,11,16);
-        RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
-        new TransactionTemplate(context.getBean(PlatformTransactionManager.class)).execute(status -> {
-            assertEquals(1L,allocatePickupNumber(day));
-            status.setRollbackOnly();
-            return null;
-        });
-        assertEquals(1L,allocatePickupNumber(day));
-    }
-
-    @Test
-    void simultaneousPickupNumbersAreUniqueAndSequential() throws Exception {
-        ExecutorService pool = Executors.newFixedThreadPool(6);
-        CountDownLatch start = new CountDownLatch(1);
-        java.util.List<Future<Long>> results = new java.util.ArrayList<>();
-        try {
-            for (int i=0;i<6;i++) results.add(pool.submit(() -> {
-                RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
-                try {
-                    start.await();
-                    return allocatePickupNumber(java.time.LocalDate.of(2026,11,16));
-                } finally { RequestScope.clear(); }
-            }));
-            start.countDown();
-            java.util.Set<Long> actual = new java.util.TreeSet<>();
-            for (Future<Long> result : results) actual.add(result.get(15,TimeUnit.SECONDS));
-            assertEquals(new java.util.TreeSet<>(java.util.Arrays.asList(1L,2L,3L,4L,5L,6L)),actual);
-        } finally { pool.shutdownNow(); }
     }
 
     @Test

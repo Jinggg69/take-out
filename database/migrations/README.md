@@ -284,3 +284,7 @@ python scripts/test-dining-session-migration.py 与 python scripts/test-order-pi
 运行时与界面已删除单独核销凭证，数据库中的 pickup_credential 为兼容历史迁移保留为闲置列。新增 pickup_date、store_pickup_sequence 和订单门店日期号码唯一索引。全新开发库初始化已包含此迁移。
 
 验证命令为 python scripts/test-order-pickup-migration.py，使用自动创建和清理的临时 MySQL 库，覆盖旧单转换、重复迁移、日期门店隔离、并发编号、回滚和新库初始化。
+
+## 平台超级管理员（2026-11-16）
+
+备份并在维护窗口选择应用库后，依次执行 `20261116_01_platform_auth.sql` 和 `20261116_02_platform_management.sql`。新增平台账号、持久会话、审计及租户门店逻辑删除标记；不自动创建账号或修改既有商户授权。新库完整初始化已同步。共享登录、交互账号引导、代理设置和删除边界见 [平台管理员说明](../platform-admin.md)。

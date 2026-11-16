@@ -37,7 +37,6 @@ BEGIN
     ) existing ON existing.tenant_id=o.tenant_id AND existing.store_id=o.store_id
       AND existing.pickup_date=COALESCE(DATE(o.order_time),'1970-01-01')
     WHERE o.fulfillment_type='PICKUP' AND o.pickup_date IS NULL;
-
   START TRANSACTION;
   UPDATE orders o JOIN _pickup_number_backfill b ON b.id=o.id
     SET o.pickup_number=CAST(b.pickup_number AS CHAR),o.pickup_date=b.pickup_date;
@@ -48,7 +47,6 @@ BEGIN
     ON DUPLICATE KEY UPDATE last_number=GREATEST(store_pickup_sequence.last_number,VALUES(last_number));
   COMMIT;
   DROP TEMPORARY TABLE _pickup_number_backfill;
-
   IF NOT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='orders' AND index_name='uk_order_pickup_number') THEN
     CREATE UNIQUE INDEX uk_order_pickup_number ON orders(tenant_id,store_id,pickup_date,pickup_number);
   END IF;

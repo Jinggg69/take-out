@@ -126,6 +126,7 @@ public class EmployeeServiceImpl implements EmployeeService {
      */
     @Override
     public void save(EmployeeDTO employeeDTO) {
+        com.junzhou.platform.PlatformUsernames.requireEmployee(employeeDTO.getUsername());
         Employee employee = new Employee();
 
         //对象属性拷贝
@@ -208,6 +209,7 @@ public class EmployeeServiceImpl implements EmployeeService {
      */
     @Override
     public void update(EmployeeDTO employeeDTO) {
+        com.junzhou.platform.PlatformUsernames.requireEmployee(employeeDTO.getUsername());
         Employee employee = new Employee();
         BeanUtils.copyProperties(employeeDTO,employee);
         // employee.setUpdateTime(LocalDateTime.now());

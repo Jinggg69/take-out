@@ -6,5 +6,6 @@ declare module 'vue-router' {
     notNeedAuth?: boolean
     pageTitle?: string
     activeMenu?: string
+    accountType?: 'PLATFORM' | 'EMPLOYEE'
   }
 }

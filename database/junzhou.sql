@@ -1177,7 +1177,6 @@ BEGIN
     ) existing ON existing.tenant_id=o.tenant_id AND existing.store_id=o.store_id
       AND existing.pickup_date=COALESCE(DATE(o.order_time),'1970-01-01')
     WHERE o.fulfillment_type='PICKUP' AND o.pickup_date IS NULL;
-
   START TRANSACTION;
   UPDATE orders o JOIN _pickup_number_backfill b ON b.id=o.id
     SET o.pickup_number=CAST(b.pickup_number AS CHAR),o.pickup_date=b.pickup_date;
@@ -1188,11 +1187,69 @@ BEGIN
     ON DUPLICATE KEY UPDATE last_number=GREATEST(store_pickup_sequence.last_number,VALUES(last_number));
   COMMIT;
   DROP TEMPORARY TABLE _pickup_number_backfill;
-
   IF NOT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='orders' AND index_name='uk_order_pickup_number') THEN
     CREATE UNIQUE INDEX uk_order_pickup_number ON orders(tenant_id,store_id,pickup_date,pickup_number);
   END IF;
 END$$
 CALL _junzhou_daily_pickup()$$
 DROP PROCEDURE _junzhou_daily_pickup$$
+DELIMITER ;
+
+
+-- Integrated platform migration: 20261116_01_platform_auth.sql
+-- Platform identities and hashed opaque sessions have no merchant ownership or JWT sessions.
+CREATE TABLE IF NOT EXISTS platform_admin (
+ id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ username VARCHAR(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+ password VARCHAR(255) NOT NULL,
+ name VARCHAR(64) NOT NULL,
+ status TINYINT NOT NULL DEFAULT 1,
+ created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ UNIQUE KEY uk_platform_username(username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS platform_session (
+ id CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
+ admin_id BIGINT NOT NULL,
+ expires_at DATETIME(3) NOT NULL,
+ created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ KEY idx_platform_session_admin(admin_id),
+ KEY idx_platform_session_expiry(expires_at),
+ CONSTRAINT fk_platform_session_admin FOREIGN KEY(admin_id) REFERENCES platform_admin(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+
+-- Integrated platform migration: 20261116_02_platform_management.sql
+-- Platform lifecycle metadata only. Preserve all tenant/store/order/payment identities.
+-- Stop writers and back up before applying; MySQL DDL commits implicitly.
+DELIMITER $$
+DROP PROCEDURE IF EXISTS _junzhou_platform_management$$
+CREATE PROCEDURE _junzhou_platform_management()
+BEGIN
+  IF DATABASE() IS NULL OR DATABASE() IN ('mysql','sys','information_schema','performance_schema') THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Select the application database';
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='tenant' AND column_name='deleted_at') THEN
+    ALTER TABLE tenant ADD COLUMN deleted_at datetime NULL;
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='store' AND column_name='deleted_at') THEN
+    ALTER TABLE store ADD COLUMN deleted_at datetime NULL;
+  END IF;
+  IF (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name IN ('tenant','store') AND column_name='deleted_at' AND data_type='datetime' AND is_nullable='YES') <> 2 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Incompatible tenant/store deleted_at columns';
+  END IF;
+  CREATE TABLE IF NOT EXISTS platform_audit (
+    id bigint NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    admin_id bigint NOT NULL,
+    action varchar(64) NOT NULL,
+    target_type varchar(16) NOT NULL,
+    target_id bigint NOT NULL,
+    created_at datetime NOT NULL,
+    KEY idx_platform_audit_admin(admin_id,created_at),
+    KEY idx_platform_audit_target(target_type,target_id,created_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+END$$
+CALL _junzhou_platform_management()$$
+DROP PROCEDURE _junzhou_platform_management$$
 DELIMITER ;
