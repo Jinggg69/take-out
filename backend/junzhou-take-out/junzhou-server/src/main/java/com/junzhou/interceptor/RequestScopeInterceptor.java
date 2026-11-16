@@ -3,6 +3,9 @@ package com.junzhou.interceptor;
 import com.junzhou.context.BaseContext;
 import com.junzhou.context.RequestScope;
 import com.junzhou.service.TenantScopeService;
+import com.junzhou.annotation.MiniappEntry;
+import org.springframework.core.annotation.AnnotationUtils;
+import org.springframework.web.method.HandlerMethod;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.AsyncHandlerInterceptor;
@@ -20,6 +23,25 @@ public class RequestScopeInterceptor implements AsyncHandlerInterceptor {
         RequestScope.clear();
         com.junzhou.security.RbacRequestContext.begin(request);
         try {
+            if (!request.getRequestURI().startsWith(request.getContextPath() + "/admin/") && handler instanceof HandlerMethod) {
+                HandlerMethod method=(HandlerMethod)handler;
+                MiniappEntry entry=AnnotationUtils.findAnnotation(method.getMethod(),MiniappEntry.class);
+                if(entry==null) entry=AnnotationUtils.findAnnotation(method.getBeanType(),MiniappEntry.class);
+                if(entry!=null) {
+                    Long user=(Long)request.getAttribute(JwtTokenUserInterceptor.USER_ATTRIBUTE);
+                    if(entry.value()==MiniappEntry.Scope.PUBLIC) {
+                        BaseContext.removeCurrentId();
+                    } else {
+                        if(user==null || user<=0) {
+                            BaseContext.removeCurrentId();
+                            com.junzhou.security.RbacRequestContext.clear(request);
+                            MiniappResponses.error(response,401,"请先登录"); return false;
+                        }
+                        RequestScope.set(new RequestScope(null,user,null,null,java.util.Collections.emptySet()));
+                    }
+                    return true;
+                }
+            }
             String value = request.getHeader("X-Store-Id");
             Long store = value == null || value.isEmpty() ? null : Long.valueOf(value);
             RequestScope scope;
@@ -45,17 +67,20 @@ public class RequestScopeInterceptor implements AsyncHandlerInterceptor {
             RequestScope.set(scope);
             return true;
         } catch (SecurityException | IllegalArgumentException ex) {
+            RequestScope.clear(); BaseContext.removeCurrentId();
             com.junzhou.security.RbacRequestContext.clear(request);
-            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            MiniappResponses.error(response,HttpServletResponse.SC_FORBIDDEN,"门店不可用或无权访问");
             return false;
         } catch (DataAccessException ex) {
+            RequestScope.clear(); BaseContext.removeCurrentId();
             com.junzhou.security.RbacRequestContext.clear(request);
-            response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+            MiniappResponses.error(response,HttpServletResponse.SC_SERVICE_UNAVAILABLE,"服务暂不可用，请稍后重试");
             return false;
         }
     }
     @Override public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         RequestScope.clear();
+        BaseContext.removeCurrentId();
         com.junzhou.security.RbacRequestContext.clear(request);
     }
     @Override public void afterConcurrentHandlingStarted(HttpServletRequest request, HttpServletResponse response, Object handler) {

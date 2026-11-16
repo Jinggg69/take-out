@@ -14,4 +14,5 @@ public class DiningTable {
     private String qrToken;
     private String currentSessionId;
     private String storeName;
+    private String merchantName;
 }

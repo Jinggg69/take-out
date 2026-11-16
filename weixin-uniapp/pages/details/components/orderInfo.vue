@@ -12,7 +12,7 @@
       </view>
       <view>
         <view>支付方式</view>
-        <view>{{ orderDetailsData.payMethod === 1 ? "微信" : "支付宝" }}</view>
+        <view>{{ orderDetailsData.payMethod === 1 ? "微信" : "以订单支付记录为准" }}</view>
       </view>
       <view>
         <view>订单备注</view>
@@ -25,7 +25,7 @@
         <view>{{
           orderDetailsData.tablewareStatus === 1
             ? orderDetailsData.tablewareNumber
-            : orderDetailsData.tablewareNumber
+            : orderDetailsData.tablewareNumber || "—"
         }}</view>
       </view>
     </view>

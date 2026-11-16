@@ -12,6 +12,7 @@ public interface PaymentAccountService {
      * @throws IllegalStateException if account configuration is missing or inconsistent
      */
     String currentAccountId();
+    default String channelForNewOrders() { return "WECHAT"; }
     /**
      * Resolve and validate the original account under the current order scope.
      * @param order persisted order carrying its original ownership and account

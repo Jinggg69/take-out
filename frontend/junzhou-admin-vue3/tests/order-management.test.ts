@@ -10,10 +10,10 @@ test('order API preserves paths, verbs and exact mutation bodies', async () => {
   const calls: { method?: string; url?: string; data: unknown; params: unknown }[] = []
   const api = createOrderApi(axios.create({ adapter: async config => { calls.push({ method: config.method, url: config.url, data: config.data ? JSON.parse(config.data) : undefined, params: config.params }); return { data: { code: 1, data: null }, status: 200, statusText: 'OK', headers: new AxiosHeaders(), config } } }))
   await api.getPage({ page: 1, pageSize: 10 }); await api.getStatistics(); await api.getDetail('900000000000000001')
-  await api.accept(7); await api.reject({ id: 7, rejectionReason: '已打烊' }); await api.cancel({ id: 8, cancelReason: '客户电话取消' }); await api.delivery(9); await api.complete(9)
+  await api.accept(7); await api.reject({ id: 7, rejectionReason: '已打烊' }); await api.cancel({ id: 8, cancelReason: '客户电话取消' }); await api.delivery(9); await api.complete(9); await api.verify(10, "12")
   assert.deepEqual(calls.map(c => [c.method, c.url, c.data]), [
     ['get', '/order/conditionSearch', undefined], ['get', '/order/statistics', undefined], ['get', '/order/details/900000000000000001', undefined],
-    ['put', '/order/confirm', { id: 7 }], ['put', '/order/rejection', { id: 7, rejectionReason: '已打烊' }], ['put', '/order/cancel', { id: 8, cancelReason: '客户电话取消' }], ['put', '/order/delivery/9', undefined], ['put', '/order/complete/9', undefined],
+    ['put', '/order/confirm', { id: 7 }], ['put', '/order/rejection', { id: 7, rejectionReason: '已打烊' }], ['put', '/order/cancel', { id: 8, cancelReason: '客户电话取消' }], ['put', '/order/delivery/9', undefined], ['put', '/order/complete/9', undefined], ['put', '/order/pickup/verify/10', { pickupNumber: '12' }],
   ])
 })
 test('order query uses full-day bounds and omits all-status and empty fields', () => {

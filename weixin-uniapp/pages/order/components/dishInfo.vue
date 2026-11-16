@@ -9,7 +9,7 @@
           <uni-list-item showArrow title="备注" class="uniListItem">
             <template v-slot:footer>
               <text class="temarkText">{{
-                remark ? remark : "推荐使用无接触配送"
+                remark ? remark : "添加订单备注"
               }}</text>
             </template>
           </uni-list-item>
@@ -21,7 +21,7 @@
         <uni-list>
           <uni-list-item showArrow title="餐具数量" class="uniListItem">
             <template v-slot:footer>
-              <text>已在店选择：{{ tablewareData }}</text>
+              <text>{{ tablewareData }}</text>
             </template>
           </uni-list-item>
         </uni-list>
@@ -65,7 +65,7 @@
                   <label v-for="item in radioGroup" :key="item">
                     <radio
                       :value="item"
-                      color="#9E2026"
+                      color="#164B3B"
                       :checked="item == activeRadio"
                     />{{ item }}
                   </label>

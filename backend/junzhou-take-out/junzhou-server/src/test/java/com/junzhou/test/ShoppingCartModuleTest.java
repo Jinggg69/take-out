@@ -68,7 +68,7 @@ class ShoppingCartModuleTest {
         jdbc.execute("insert into setmeal_dish (setmeal_id,dish_id,copies) values (5,5,2)");
         seed(84, "微辣", 7);
         carts = context.getBean(ShoppingCartService.class);
-        jdbc.execute("create table tenant(id bigint,status int); insert into tenant values(1,1)");
+        jdbc.execute("create table tenant(id bigint,status int); insert into tenant(id,status) values(1,1)");
         jdbc.execute("create table store(id bigint,tenant_id bigint,status int); insert into store values(1,1,1)");
         jdbc.execute("create table store_dish(tenant_id bigint,store_id bigint,dish_id bigint,on_sale int,sold_out int,override_price decimal(10,2))");
         jdbc.execute("insert into store_dish select tenant_id,1,id,1,0,null from dish");

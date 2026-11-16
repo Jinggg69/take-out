@@ -1,68 +1,50 @@
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const path = require('node:path')
-const vm = require('node:vm')
 const test = require('node:test')
-function client(response, transport = false) {
-  const context = vm.createContext({ store: { state: {}, commit() {} }, baseUrl: 'https://test.invalid', uni: {
-    getStorage() {}, request: options => transport ? options.fail(response) : options.success(response),
-  } })
-  const source = fs.readFileSync(path.join(__dirname, '../utils/request.js'), 'utf8')
-  vm.runInContext(source.replace(/^import[^\n]*/gm, '').replace('export function', 'function'), context)
-  return context.request
+const { loadStore, loadRequest } = require('./core-harness.cjs')
+function client() {
+  const { store } = loadStore(); const requests = []
+  const request = loadRequest(store, { request: options => requests.push(options) })
+  return { store, request, requests }
 }
-test('HTTP5xx code0 preserves status so checkout cannot treat unknown result as a confirmed business rejection', async () => {
-  await assert.rejects(client({ statusCode: 503, data: { code: 0, msg: '服务异常' } })({}), error => error.statusCode === 503 && error.msg === '服务异常')
+const ok = options => options.success({ statusCode: 200, data: { code: 1, data: 'ok' } })
+test('public calls omit store and auth; store calls require explicit selection; identity requires login', async () => {
+  const c = client()
+  await assert.rejects(c.request({}), e => e.missingStore)
+  await assert.rejects(c.request({ scope: 'identity' }), e => e.statusCode === 401)
+  const p = c.request({ scope: 'public' }); assert.equal(c.requests[0].header['X-Store-Id'], undefined); assert.equal(c.requests[0].header.authentication, undefined); ok(c.requests[0]); await p
+  assert.equal(c.requests.length, 1)
 })
-test('HTTP5xx code1 must not navigate as a successful order submission', async () => {
-  await assert.rejects(client({ statusCode: 500, data: { code: 1, data: { id: 7 } } })({}), error => error.statusCode === 500)
+test('identity requests survive store changes but reject identity epoch changes', async () => {
+  const c = client(); c.store.setSession({ token: 'a', userId: 'u' })
+  const p = c.request({ scope: 'identity' }); c.store.selectContext({ merchantId: '1', storeId: '2' }); ok(c.requests[0]); await p
+  const stale = c.request({ scope: 'identity' }); c.store.clearAuth(); c.store.setSession({ token: 'a', userId: 'u' }); ok(c.requests[1]); await assert.rejects(stale, e => e.staleIdentity)
 })
-test('HTTP4xx preserves status and useful error message', async () => {
-  await assert.rejects(client({ statusCode: 401, data: { code: 0, msg: '请重新登录' } })({}), error => error.statusCode === 401 && error.msg === '请重新登录')
+for (const outcome of ['success', 'fail']) test(`store ${outcome} response rejects after switching away and back`, async () => {
+  const c = client(); c.store.selectContext({ merchantId: '1', storeId: '2' })
+  const p = c.request({}); c.store.selectContext({ merchantId: '1', storeId: '3' }); c.store.selectContext({ merchantId: '1', storeId: '2' })
+  if (outcome === 'success') ok(c.requests[0]); else c.requests[0].fail({ errMsg: 'timeout' })
+  await assert.rejects(p, e => e.staleStore)
 })
-test('transport failure preserves a useful message without claiming business code0', async () => {
-  await assert.rejects(client({ errMsg: 'request:fail timeout' }, true)({}), error => error.msg.includes('网络') && error.errMsg === 'request:fail timeout' && error.code !== 0)
+test('401 clears session but never replays a write or loses user recovery', async () => {
+  const c = client(); c.store.setSession({ token: 'a', userId: 'u' }); c.store.selectContext({ merchantId: '1', storeId: '2' }); c.store.setPendingSubmission({ requestId: 'req' })
+  const p = c.request({ method: 'POST' }); c.requests[0].success({ statusCode: 401, data: { code: 0, msg: '重新登录' } })
+  await assert.rejects(p, e => e.statusCode === 401)
+  assert.equal(c.store.token, ''); assert.equal(c.requests.length, 1)
+  c.store.setSession({ token: 'b', userId: 'u' }); assert.equal(c.store.pendingSubmission.requestId, 'req')
 })
-test('HTTP2xx business code0 and successful response keep existing contracts', async () => {
-  await assert.rejects(client({ statusCode: 200, data: { code: 0, msg: '价格已变化' } })({}), error => error.code === 0 && error.msg === '价格已变化')
-  assert.equal((await client({ statusCode: 200, data: { code: 1, data: { id: 7 } } })({})).data.id, 7)
+for (const [status, code] of [[503, 0], [500, 1], [400, 0], [200, 0]]) test(`preserves HTTP ${status}/code ${code} failure`, async () => {
+  const c = client(); const p = c.request({ scope: 'public' }); c.requests[0].success({ statusCode: status, data: { code, msg: '失败' } }); await assert.rejects(p, e => e.statusCode === status && e.msg === '失败')
 })
-test('empty HTTP2xx body rejects as unknown without throwing from the native success callback', async () => {
-  await assert.rejects(client({ statusCode: 200, data: null })({}), error => error.statusCode === 200 && error.code !== 0 && typeof error.msg === 'string')
-})
-
-
-function scopedClient(state = {}) {
-  const requests = []
-  const context = vm.createContext({ store: { state, commit() {} }, baseUrl: '', uni: {
-    request: options => requests.push(options),
-  } })
-  const source = fs.readFileSync(path.join(__dirname, '../utils/request.js'), 'utf8')
-  vm.runInContext(source.replace(/^import[^\n]*/gm, '').replace('export function', 'function'), context)
-  return { request: context.request, requests, state }
-}
-
-test('login retains default store header and later requests use selected store', async () => {
-  const client = scopedClient()
-  const first = client.request({ url: '/user/user/login' })
-  assert.equal(client.requests[0].header['X-Store-Id'], '1')
-  client.requests[0].success({ statusCode: 200, data: { code: 1 } })
-  await first
-  client.state.selectedStoreId = 9
-  const second = client.request({})
-  assert.equal(client.requests[1].header['X-Store-Id'], '9')
-  client.requests[1].success({ statusCode: 200, data: { code: 1 } })
-  await second
+test('network and empty-body failures remain unknown, without business code zero', async () => {
+  const c = client(); const p = c.request({ scope: 'public' }); c.requests[0].fail({ errMsg: 'request:fail timeout' }); await assert.rejects(p, e => e.code !== 0 && e.errMsg.includes('timeout'))
+  const empty = c.request({ scope: 'public' }); c.requests[1].success({ statusCode: 200, data: null }); await assert.rejects(empty, e => e.code !== 0 && e.statusCode === 200)
 })
 
-for (const outcome of ['success', 'fail']) {
-  test(`stale ${outcome} response discarded after switching away and back`, async () => {
-    const client = scopedClient({ selectedStoreId: 1, storeGeneration: 0 })
-    const pending = client.request({})
-    client.state.selectedStoreId = 2; client.state.storeGeneration++
-    client.state.selectedStoreId = 1; client.state.storeGeneration++
-    client.requests[0][outcome](outcome === 'success'
-      ? { statusCode: 200, data: { code: 1, data: ['old cart'] } } : { errMsg: 'timeout' })
-    await assert.rejects(pending, error => error.staleStore === true)
-  })
-}
+test('late 401 cannot log out a newer session and public rejection leaves login intact', async () => {
+  const c = client(); c.store.setSession({ token: 'a', userId: 'u' })
+  const old = c.request({ scope: 'identity' }); c.store.setSession({ token: 'b', userId: 'u' })
+  c.requests[0].success({ statusCode: 401, data: { code: 0 } }); await assert.rejects(old, e => e.staleIdentity)
+  assert.equal(c.store.token, 'b')
+  const publicCall = c.request({ scope: 'public' }); c.requests[1].success({ statusCode: 401, data: { code: 0 } }); await assert.rejects(publicCall, e => e.statusCode === 401)
+  assert.equal(c.store.token, 'b')
+})

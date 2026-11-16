@@ -1,120 +1,29 @@
 {
-  "pages": [{
-      "path": "pages/index/index",
-      "style": {
-        "navigationStyle": "custom",
-        "navigationBarTitleText": "均州鱼庄"
-      }
-    },
-    {
-      "path": "pages/order/index",
-      "style": {
-				"navigationStyle": "custom",
-        "navigationBarTitleText": "提交订单",
-        "enablePullDownRefresh": false,
-        "navigationBarBackgroundColor": "#9E2026"
-
-      }
-    },
-	{
-	  "path": "pages/details/index",
-	  "style": {
-			"navigationStyle": "custom",
-	    "navigationBarTitleText": "订单详情",
-	    "enablePullDownRefresh": false,
-	    "navigationBarBackgroundColor": "#9E2026"
-	
-	  }
-	},
-	{
-	  "path": "pages/pay/index",
-	  "style": {
-	    "navigationBarTitleText": "支付订单",
-	    "enablePullDownRefresh": false,
-	    "navigationBarBackgroundColor": "#9E2026"
-	  }
-	},
-    {
-      "path": "pages/success/index",
-      "style": {
-        "navigationBarTitleText": "提交成功",
-        "enablePullDownRefresh": false,
-        "navigationBarBackgroundColor": "#9E2026"
-      }
-    },
-    {
-      "path": "pages/nonet/index",
-      "style": {
-        "navigationBarTitleText": "无网络"
-      }
-    }, {
-      "path": "pages/address/address",
-      "style": {
-        "navigationStyle": "custom",
-        "navigationBarTitleText": "地址管理",
-        "enablePullDownRefresh": false,
-        "navigationBarBackgroundColor": "#9E2026"
-      }
-    },{
-      "path": "pages/remark/index",
-      "style": {
-        "navigationStyle": "custom",
-        "navigationBarTitleText": "订单备注",
-        "enablePullDownRefresh": false,
-        "navigationBarBackgroundColor": "#9E2026"
-      }
-    },
-    {
-      "path": "pages/my/my",
-      "style": {
-				"navigationStyle": "custom",
-        "navigationBarTitleText": "个人中心",
-        "enablePullDownRefresh": false,
-        "navigationBarBackgroundColor": "#9E2026"
-        // "navigationBarTextStyle": "black"
-      }
-    },
-    {
-      "path": "pages/addOrEditAddress/addOrEditAddress",
-      "style": {
-        "navigationStyle": "custom",
-        "navigationBarTitleText": "新增收货地址",
-        "enablePullDownRefresh": false,
-        "navigationBarBackgroundColor": "#9E2026"
-      }
-
-    },
-    {
-      "path": "pages/historyOrder/historyOrder",
-      "style": {
-				"navigationStyle": "custom",
-        "navigationBarTitleText": "历史订单",
-        "enablePullDownRefresh": false,
-        "navigationBarBackgroundColor": "#9E2026"
-
-      }
-    }
-    ],
-  "globalStyle": {
-    "navigationBarTextStyle": "white",
-    "navigationBarTitleText": "均州鱼庄",
-    "navigationBarBackgroundColor": "#9E2026",
-    // "navigationBarBackground": "#E95F3C",
-    "backgroundColor": "#FFF8EE"
+  "pages": [
+    { "path": "pages/merchants/index", "style": { "navigationBarTitleText": "选择商家" } },
+    { "path": "pages/stores/index", "style": { "navigationBarTitleText": "选择门店" } },
+    { "path": "pages/index/index", "style": { "navigationBarTitleText": "首页" } },
+    { "path": "pages/menu/index", "style": { "navigationBarTitleText": "点单", "disableScroll": true } },
+    { "path": "pages/orders/index", "style": { "navigationBarTitleText": "订单" } },
+    { "path": "pages/my/my", "style": { "navigationBarTitleText": "我的" } },
+    { "path": "pages/order/index", "style": { "navigationStyle": "custom", "navigationBarTitleText": "确认订单" } },
+    { "path": "pages/details/index", "style": { "navigationStyle": "custom", "navigationBarTitleText": "订单详情" } },
+    { "path": "pages/pay/index", "style": { "navigationBarTitleText": "支付订单" } },
+    { "path": "pages/success/index", "style": { "navigationBarTitleText": "提交成功" } },
+    { "path": "pages/address/address", "style": { "navigationStyle": "custom", "navigationBarTitleText": "收货地址" } },
+    { "path": "pages/addOrEditAddress/addOrEditAddress", "style": { "navigationStyle": "custom", "navigationBarTitleText": "编辑地址" } },
+    { "path": "pages/remark/index", "style": { "navigationStyle": "custom", "navigationBarTitleText": "订单备注" } },
+    { "path": "pages/historyOrder/historyOrder", "style": { "navigationBarTitleText": "历史订单" } },
+    { "path": "pages/nonet/index", "style": { "navigationBarTitleText": "连接失败" } }
+  ],
+  "tabBar": {
+    "color": "#647169", "selectedColor": "#176B4B", "backgroundColor": "#FFFFFF", "borderStyle": "white",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "首页", "iconPath": "static/tabbar/home.png", "selectedIconPath": "static/tabbar/home-active.png" },
+      { "pagePath": "pages/menu/index", "text": "点单", "iconPath": "static/tabbar/menu.png", "selectedIconPath": "static/tabbar/menu-active.png" },
+      { "pagePath": "pages/orders/index", "text": "订单", "iconPath": "static/tabbar/orders.png", "selectedIconPath": "static/tabbar/orders-active.png" },
+      { "pagePath": "pages/my/my", "text": "我的", "iconPath": "static/tabbar/user.png", "selectedIconPath": "static/tabbar/user-active.png" }
+    ]
   },
-  "condition": { // 模式配置，仅开发期间生效
-    "current": 0, // 当前激活的模式(list 的索引项)
-    "list": [{
-      "name": "历史订单", // 模式名称
-      "path": "pages/historyOrder/historyOrder", // 启动页面，必选
-      "query": "" // 启动参数，在页面的onLoad函数里面得到
-    }]
-  }
-  // "easycom": {
-  // 		"autoscan": true,
-  // 		"custom": {
-  // 			// uni-ui 规则如下配置
-  // 			"^uni-(.*)": "@dcloudio/uni-ui/lib/uni-$1/uni-$1.vue"
-  // 		}
-  // 	}
+  "globalStyle": { "navigationBarTextStyle": "black", "navigationBarTitleText": "点餐", "navigationBarBackgroundColor": "#FFFFFF", "backgroundColor": "#F7F8FA" }
 }

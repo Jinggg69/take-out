@@ -39,7 +39,7 @@ public class OrderController {
     @PutMapping("/pickup/verify/{id}")
     @RequireActions({PermissionAction.ORDER_PICKUP_VERIFY})
     public Result<Void> pickupVerify(@PathVariable Long id,@RequestBody java.util.Map<String,String> body) {
-        pickup.verify(id,body.get("credential")); return Result.success();
+        pickup.verify(id,body.get("pickupNumber")); return Result.success();
     }
 
 

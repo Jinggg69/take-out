@@ -1,67 +1,85 @@
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const path = require('node:path')
-const vm = require('node:vm')
 const test = require('node:test')
-const root = path.resolve(__dirname, '..')
-const strip = value => value.replace(/^import[\s\S]*?from\s*["'][^"']+["'];?[^\n]*/gm, '')
-function loadStore(persisted) {
-  const writes = []
-  const context = vm.createContext({ module: { exports: {} }, DELIVERY_FEE: 6,
-    Vue: { use() {} }, Vuex: { Store: function(options) { return options } },
-    uni: { getStorageSync: () => persisted, setStorageSync: (key, value) => writes.push([key, value]) } })
-  vm.runInContext(strip(fs.readFileSync(path.join(root, 'store/index.js'), 'utf8')).replace('export default store', 'module.exports = store'), context)
-  const store = context.module.exports
-  store.commit = (key, value) => store.mutations[key](store.state, value)
-  return { store, writes }
-}
-
-test('selected store defaults to one, persists and reloads without reusing local cart', () => {
-  const { store, writes } = loadStore('')
-  assert.equal(store.state.selectedStoreId, 1)
-  store.state.orderListData = [{ id: 7 }]
-  store.commit('selectStore', 9)
-  assert.equal(store.state.storeGeneration, 1)
-  assert.equal(store.state.orderListData.length, 0)
-  assert.equal(writes[0][1], 9)
-  store.commit('selectStore', '9')
-  assert.equal(writes.length, 1)
-  assert.equal(loadStore(writes[0][1]).store.state.selectedStoreId, 9)
+const { loadStore } = require('./core-harness.cjs')
+const ctx = id => ({ merchantId: '7', merchantName: '商家', storeId: String(id), storeName: '门店', deliveryFee: '3.00' })
+test('first launch never assumes a store; cached selection requires validation', () => {
+  const { store } = loadStore(new Map([['selectedStoreId', 1], ['lastSelection', ctx(2)]]))
+  store.restoreSession()
+  assert.equal(store.selectedStoreId, null)
+  assert.equal(store.lastSelection.storeId, '2')
+  assert.equal(store.$id, 'app')
+  assert.equal(store.state, undefined)
+  assert.equal(store.commit, undefined)
+})
+test('switch resets local checkout and generation without deleting server carts', () => {
+  const { store } = loadStore()
+  store.selectContext(ctx(2)); store.orderListData = [{ id: 4 }]; store.remarkData = '辣'
+  store.selectContext(ctx(3))
+  assert.equal(store.storeGeneration, 2)
+  assert.equal(store.orderListData.length, 0)
+  assert.equal(store.remarkData, '')
+  store.selectMerchant({ merchantId: '8', merchantName: '另一商家' })
+  assert.equal(store.selectedStoreId, null)
+  assert.equal(store.selectedMerchantId, '8')
+})
+test('unresolved submission and payment lock switching and restore only for their user', () => {
+  const storage = new Map()
+  const { store } = loadStore(storage)
+  store.setSession({ token: 'a', userId: 'u1' }); store.selectContext(ctx(2))
+  store.setPendingSubmission({ requestId: 'req1', storeId: '2', payload: { amount: 4 } })
+  assert.throws(() => store.selectContext(ctx(3)), e => e.selectionLocked)
+  store.clearAuth()
+  const next = loadStore(storage).store
+  next.setSession({ token: 'b', userId: 'u2' })
+  assert.equal(next.pendingSubmission, null)
+  next.setSession({ token: 'c', userId: 'u1' })
+  assert.equal(next.pendingSubmission.requestId, 'req1')
+  assert.equal(next.pendingSubmission.storeId, '2')
+  assert.throws(() => next.selectContext(ctx(3)), e => e.selectionLocked)
+  next.selectContext(ctx(2)); next.setPendingSubmission(null)
+  next.setPaymentInFlight({ orderId: '9' })
+  assert.throws(() => next.clearSelection(), e => e.selectionLocked)
+})
+test('ensureLogin is single flight using only wx code and server profile', async () => {
+  let calls = 0
+  const { store } = loadStore(new Map(), { uni: { login: options => { calls++; options.success({ code: 'wx-code' }) } }, userLogin: async p => { assert.equal(p.code, 'wx-code'); return { data: { token: 'a', id: 'u1' } } }, getUserProfile: async () => ({ data: { userId: 'u1', nickname: '服务端名字' } }) })
+  await Promise.all([store.ensureLogin(), store.ensureLogin()])
+  assert.equal(calls, 1)
+  assert.equal(store.baseUserInfo.nickname, '服务端名字')
 })
 
-test('index store switch clears menu and dialogs, reloads without cleaning server cart', () => {
-  const { store } = loadStore(1)
-  let reloads = 0, serverClears = 0
-  const context = vm.createContext({ module: { exports: {} }, mapState: () => ({}), mapMutations: () => ({}),
-    navBar: {}, Phone: {}, popMask: {}, popCart: {}, dishDetail: {}, delShoppingCart: () => serverClears++ })
-  vm.runInContext(strip(fs.readFileSync(path.join(root, 'pages/index/index.js'), 'utf8')).replace('export default', 'module.exports ='), context)
-  const component = context.module.exports
-  const page = Object.assign(component.data(), component.methods, { $store: store, init: () => reloads++ })
-  page.stores = [{ id: 1 }, { id: 2 }]
-  page.dishListItems = [{ id: 10 }]; page.openMoreNormPop = true
-  page.switchStore({ detail: { value: 1 } })
-  assert.equal(store.state.selectedStoreId, 2)
-  assert.equal(page.dishListItems.length, 0)
-  assert.equal(page.openMoreNormPop, false)
-  assert.equal(page.shopStatus, null)
-  assert.equal(reloads, 1)
-  assert.equal(serverClears, 0)
+test('choosing only a merchant cannot retain a previously selected store', () => {
+  const { store } = loadStore(); store.selectContext(ctx(2))
+  store.selectMerchant({ merchantId: '7', merchantName: '商家' })
+  assert.equal(store.selectedMerchantId, '7'); assert.equal(store.selectedStoreId, null)
 })
-
-const context = vm.createContext({})
-vm.runInContext(fs.readFileSync(path.join(root, 'utils/order-snapshot.js'), 'utf8').replace(/export /g, ''), context)
+test('switching directly between users preserves the previous user unresolved submission', () => {
+  const { store } = loadStore(); store.setSession({ token: 'a', userId: 'u1' }); store.selectContext(ctx(2)); store.setPendingSubmission({ requestId: 'req' })
+  store.setSession({ token: 'b', userId: 'u2' }); assert.equal(store.pendingSubmission, null)
+  store.setSession({ token: 'c', userId: 'u1' }); assert.equal(store.pendingSubmission.requestId, 'req')
+})
+const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm')
+const snapshots = vm.createContext({})
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../utils/order-snapshot.js'), 'utf8').replace(/export /g, ''), snapshots)
 test('historical decimal fees and store name use immutable snapshots', () => {
-  const order = { packAmount: 2, deliveryFee: 6, amount: 30,
-    pricingSnapshot: JSON.stringify({ packFee: 3.5, deliveryFee: 0, amount: 23.5 }),
-    storeSnapshot: JSON.stringify({ name: '二店' }) }
-  assert.equal(context.orderSnapshotMoney(order, 'packFee', order.packAmount), 3.5)
-  assert.equal(context.orderSnapshotMoney(order, 'deliveryFee', order.deliveryFee), 0)
-  assert.equal(context.orderSnapshotMoney(order, 'amount', order.amount), 23.5)
-  assert.equal(context.orderSnapshotStoreName(order), '二店')
+  const order = { packAmount: 2, deliveryFee: 6, amount: 30, pricingSnapshot: JSON.stringify({ packFee: 3.5, deliveryFee: 0, amount: 23.5 }), storeSnapshot: JSON.stringify({ name: '二店' }) }
+  assert.equal(snapshots.orderSnapshotMoney(order, 'packFee', order.packAmount), 3.5)
+  assert.equal(snapshots.orderSnapshotMoney(order, 'deliveryFee', order.deliveryFee), 0)
+  assert.equal(snapshots.orderSnapshotMoney(order, 'amount', order.amount), 23.5)
+  assert.equal(snapshots.orderSnapshotStoreName(order), '二店')
 })
-test('legacy or malformed order snapshots fall back to stored legacy values', () => {
-  for (const pricingSnapshot of [null, '', '{bad', '[]', '{"packFee":null}', '{"packFee":-1}']) {
-    assert.equal(context.orderSnapshotMoney({ pricingSnapshot }, 'packFee', 2), 2)
-  }
-  assert.equal(context.orderSnapshotStoreName({ storeSnapshot: 'bad', shopName: '原店' }), '原店')
+test('malformed historical snapshots fall back to recorded legacy values', () => {
+  for (const pricingSnapshot of [null, '', '{bad', '[]', '{"packFee":null}', '{"packFee":-1}']) assert.equal(snapshots.orderSnapshotMoney({ pricingSnapshot }, 'packFee', 2), 2)
+  assert.equal(snapshots.orderSnapshotStoreName({ storeSnapshot: 'bad', shopName: '原店' }), '原店')
+})
+
+test('switching stores resets fulfillment so a stale table cannot become the new order mode', () => {
+  const { store } = loadStore(); store.selectContext(ctx(2)); store.setFulfillmentType('DINE_IN'); store.setDiningContext({ id: 9 })
+  store.selectContext(ctx(3)); assert.equal(store.fulfillmentType, 'DELIVERY'); assert.equal(store.diningContext, null)
+})
+test('a previous user async checkout cannot be persisted for the new user', () => {
+  const { store } = loadStore(); store.setSession({ token: 'a', userId: 'u2' })
+  assert.throws(() => store.setPendingSubmission({ userId: 'u1', requestId: 'old' }), e => e.staleIdentity)
+  assert.throws(() => store.setPaymentInFlight({ userId: 'u1', orderId: 'old' }), e => e.staleIdentity)
+  assert.equal(store.pendingSubmission, null); assert.equal(store.paymentInFlight, null)
 })

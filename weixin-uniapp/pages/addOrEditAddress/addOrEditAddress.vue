@@ -9,7 +9,7 @@
       statusBar="true"
       fixed="true"
       color="#ffffff"
-      backgroundColor="#9E2026"
+      backgroundColor="#164B3B"
     ></uni-nav-bar>
     <view
       class="add_edit"
@@ -125,7 +125,7 @@
       :pickerValueDefault="cityPickerValueDefault"
       @onConfirm="onConfirm"
       @isClass="isClass"
-      themeColor="#9E2026"
+      themeColor="#164B3B"
     ></simple-address>
   </view>
 </template>
@@ -566,7 +566,7 @@ export default {
       border: 0 none;
     }
     .add_btn {
-      background: #9E2026;
+      background: #164B3B;
 
       .img_btn {
         width: 44rpx;
@@ -599,7 +599,7 @@ export default {
 </style>
 
 <style lang="scss" scoped>
-.add_edit { width: 100%; height: auto; min-height: 100%; background: #FFF8EE; padding: 24rpx 20rpx calc(48rpx + env(safe-area-inset-bottom)); box-sizing: border-box; }
+.add_edit { width: 100%; height: auto; min-height: 100%; background: #F5F8F4; padding: 24rpx 20rpx calc(48rpx + env(safe-area-inset-bottom)); box-sizing: border-box; }
 .form_address { border: 1rpx solid #EADFD1; border-radius: 20rpx; background: #fff; }
 .add_edit .form_address .form_item { flex-wrap: wrap; padding: 24rpx 0; border-color: #EADFD1; }
 .add_edit .form_address .form_item .title { width: 140rpx; color: #302824; }
@@ -608,13 +608,13 @@ export default {
 .add_edit .form_address .form_item .radio .radio-item { min-height: 72rpx; }
 .add_edit .form_address .detail { height: 140rpx; font-size: 28rpx; line-height: 1.6; padding-top: 16rpx; }
 .add_edit .form_address .form_item .tag_text { height: 64rpx; line-height: 62rpx; width: 88rpx; border-color: #EADFD1; color: #756B62; }
-.add_edit .form_address .form_item .tag_text.active, .add_edit .form_address .form_item .tag_text:nth-child(3).active, .add_edit .form_address .form_item .tag_text:nth-child(4).active { background: #FFF8EE; color: #9E2026; border-color: #9E2026; }
+.add_edit .form_address .form_item .tag_text.active, .add_edit .form_address .form_item .tag_text:nth-child(3).active, .add_edit .form_address .form_item .tag_text:nth-child(4).active { background: #F5F8F4; color: #164B3B; border-color: #164B3B; }
 .add_edit .add_address button { width: 100%; min-height: 88rpx; border-radius: 16rpx; margin: 24rpx 0 0; }
-.add_edit .add_address .add_btn { background: #9E2026; color: #FFF8EE; }
-.add_edit .add_address .save-error { display: block; padding-top: 16rpx; color: #9E2026; font-size: 26rpx; line-height: 1.6; }
-.add_edit .add_address .del_btn { background: #fff; color: #9E2026; border: 1rpx solid #EADFD1; }
+.add_edit .add_address .add_btn { background: #164B3B; color: #F5F8F4; }
+.add_edit .add_address .save-error { display: block; padding-top: 16rpx; color: #164B3B; font-size: 26rpx; line-height: 1.6; }
+.add_edit .add_address .del_btn { background: #fff; color: #164B3B; border: 1rpx solid #EADFD1; }
 ::v-deep .uni-easyinput__content-input { color: #302824; font-size: 28rpx; min-height: 72rpx; }
 ::v-deep .simple-address-content { border-radius: 24rpx 24rpx 0 0; overflow: hidden; padding-bottom: env(safe-area-inset-bottom); }
-::v-deep .simple-address__header { background: #FFF8EE; border-bottom: 1rpx solid #EADFD1; }
+::v-deep .simple-address__header { background: #F5F8F4; border-bottom: 1rpx solid #EADFD1; }
 ::v-deep .picker-item { color: #302824; }
 </style>

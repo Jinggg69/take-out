@@ -54,12 +54,52 @@ try:
     sql(migration,schema)
     assert sql("SELECT pickup_credential FROM orders WHERE number='old-pickup'",schema)==credential
     assert sql("SELECT status,pickup_verified_by FROM orders WHERE number='old-pickup'",schema)=="5\t1"
+    daily = (ROOT / "database/migrations/20261116_01_daily_pickup_number.sql").read_text(encoding="utf-8")
+    sql("UPDATE orders SET order_time='2026-11-16 09:00:00' WHERE number='old-pickup';"
+        "INSERT INTO tenant(id,code,name) VALUES(99,'pickup-other','Other');"
+        "INSERT INTO store(id,tenant_id,code,name) VALUES(21,1,'pickup-second','Second'),(22,99,'pickup-other','Other');",schema)
+    for number,tenant,store,when in [
+        ("same-day",1,1,"2026-11-16 10:00:00"),
+        ("next-day",1,1,"2026-11-17 00:00:00"),
+        ("second-store",1,21,"2026-11-16 10:00:00"),
+        ("other-tenant",99,22,"2026-11-16 10:00:00"),
+    ]:
+        sql(f"INSERT INTO orders(tenant_id,store_id,number,status,user_id,order_time,amount,fulfillment_type,pickup_number) "
+            f"VALUES({tenant},{store},'{number}',3,1,'{when}',10,'PICKUP','OLD');",schema)
+    sql(daily,schema)
+    assert sql("SELECT pickup_number,pickup_date,status,pickup_verified_by FROM orders WHERE number='old-pickup'",schema)=="1\t2026-11-16\t5\t1"
+    assert sql("SELECT pickup_number FROM orders WHERE number='same-day'",schema)=="2"
+    assert sql("SELECT COUNT(*) FROM orders WHERE number IN ('next-day','second-store','other-tenant') AND pickup_number='1'",schema)=="3"
+    assert sql("SELECT pickup_date IS NULL FROM orders WHERE number='delivery'",schema)=="1"
+    before=sql("SELECT id,pickup_number,pickup_date FROM orders ORDER BY id",schema)
+    sql(daily,schema)
+    assert sql("SELECT id,pickup_number,pickup_date FROM orders ORDER BY id",schema)==before
+
+    # Run the application's actual upsert against MySQL, with separate concurrent connections.
+    import concurrent.futures
+    import xml.etree.ElementTree as ET
+    mapper=ET.parse(ROOT / "backend/junzhou-take-out/junzhou-server/src/main/resources/mapper/OrderMapper.xml").getroot()
+    reserve="".join(mapper.find("insert[@id='reservePickupNumber']").itertext())
+    reserve=reserve.replace("#{tenant}","1").replace("#{store}","1").replace("#{date}","'2026-11-16'")
+    read="SELECT last_number FROM store_pickup_sequence WHERE tenant_id=1 AND store_id=1 AND pickup_date='2026-11-16'"
+    def allocate(_):
+        return int(sql("START TRANSACTION;"+reserve+";"+read+";COMMIT;",schema))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+        assert sorted(pool.map(allocate,range(6)))==list(range(3,9))
+    sql("START TRANSACTION;"+reserve+";ROLLBACK;",schema)
+    assert sql(read,schema)=="8"
+    sql(daily,schema)
+    assert sql(read,schema)=="8"
+    assert allocate(0)==9
+    sql("UPDATE orders SET pickup_number='1' WHERE number='same-day'",schema,succeeds=False)
     tables=sql("SHOW TABLES",schema).splitlines()
     assert all(re.fullmatch(r"[A-Za-z0-9_]+", name) for name in tables)
     sql("SET FOREIGN_KEY_CHECKS=0;"+";".join("DROP TABLE `"+name+"`" for name in tables)+";SET FOREIGN_KEY_CHECKS=1;",schema)
     sql(init,schema)
     assert sql("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='orders' AND column_name IN ('pickup_number','pickup_credential','pickup_verified_at','pickup_verified_by')",schema)=="4"
-    print("PASS: pickup credential backfill, delivery preservation, RBAC catalogue without implicit grants, rerun preserves credential/audit, fresh initialization")
+    assert sql("SELECT COUNT(*) FROM store_pickup_sequence",schema)=="0"
+    assert sql("SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='orders' AND index_name='uk_order_pickup_number'",schema)=="4"
+    print("PASS: legacy migration, daily numeric backfill, store/date/tenant isolation, concurrent MySQL allocation, rollback, idempotent migration, audit preservation and fresh initialization")
 
 finally:
     if owned:

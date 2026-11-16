@@ -51,7 +51,7 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
                 .addPathPatterns("/admin/**")
                 .excludePathPatterns("/admin/employee/login");
         registry.addInterceptor(jwtTokenUserInterceptor)
-                .addPathPatterns("/user/shoppingCart/**", "/user/order/**", "/user/addressBook/**", "/user/dining/**");
+                .addPathPatterns("/user/shoppingCart/**", "/user/order/**", "/user/addressBook/**", "/user/dining/**", "/user/me", "/user/me/**");
         registry.addInterceptor(requestScopeInterceptor)
                 .addPathPatterns("/admin/**", "/user/**")
                 .excludePathPatterns("/admin/employee/login", "/user/user/login");
@@ -65,9 +65,9 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
     @Bean
     public Docket docket() {
         ApiInfo apiInfo = new ApiInfoBuilder()
-                .title("均州鱼庄接口文档")
+                .title("均州点餐餐饮系统接口文档")
                 .version("2.0")
-                .description("均州鱼庄管理端与用户端接口")
+                .description("多租户 SaaS 餐饮平台管理端与用户端接口")
                 .build();
         Docket docket = new Docket(DocumentationType.SWAGGER_2)
                 .apiInfo(apiInfo)

@@ -79,6 +79,12 @@ public class StoreSettingsService {
         } catch (RuntimeException ex) { throw new OrderBusinessException("请填写有效的营业时间"); }
         money(s.getMinimumOrderAmount()); money(s.getPackFeePerItem()); money(s.getDeliveryFee());
         if (s.getFreeDeliveryThreshold() != null) money(s.getFreeDeliveryThreshold());
+        if (s.getContactPhone() != null) {
+            String phone = s.getContactPhone().trim();
+            if (!phone.isEmpty() && (phone.length() > 32 || !phone.matches("[+0-9() -]+") || !phone.matches(".*[0-9].*")))
+                throw new OrderBusinessException("请填写有效的门店联系电话，最多32个字符");
+            s.setContactPhone(phone.isEmpty() ? null : phone);
+        }
     }
 
     private void money(BigDecimal value) {

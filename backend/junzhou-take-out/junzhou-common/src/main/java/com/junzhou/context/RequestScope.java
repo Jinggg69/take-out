@@ -64,8 +64,14 @@ public final class RequestScope {
     /** 获取用户身份，员工身份不能替代顾客身份。 */
     public static Long requireUserId() {
         requireStoreId();
+        return requireAuthenticatedUserId();
+    }
+
+    /** 用户自身入口专用；不能代替门店业务的 requireUserId。 */
+    public static Long requireAuthenticatedUserId() {
         RequestScope scope = CURRENT.get();
-        if (scope.userId == null || scope.userId <= 0 || scope.employeeId != null) throw new SecurityException("Missing user scope");
+        if (scope == null || scope.userId == null || scope.userId <= 0 || scope.employeeId != null || scope.system)
+            throw new SecurityException("Missing user scope");
         return scope.userId;
     }
 

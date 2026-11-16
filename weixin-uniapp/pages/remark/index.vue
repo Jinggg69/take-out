@@ -8,7 +8,7 @@
       statusBar="true"
       fixed="true"
       color="#ffffff"
-      backgroundColor="#9E2026"
+      backgroundColor="#164B3B"
     ></uni-nav-bar>
     <view class="wrap">
       <view class="box">
@@ -21,7 +21,8 @@
                 placeholder-class="textarea-placeholder"
                 v-model="remark"
                 placeholder="无接触配送，将商品挂家门口或放前台，地址封闭管理时请电话联系"
-                >{{ getVal }}</textarea
+                maxlength="100" @input="limitRemark"
+                ></textarea
               >
               <text class="numText"
                 ><text :class="numVal === 0 ? 'tip' : ''">{{ numVal }}</text
@@ -46,47 +47,28 @@
 </template>
 
 <script>
-import { mapState, mapMutations } from "vuex";
+
 export default {
   data() {
     return {
       remark: "",
-      numVal: 0,
     };
   },
   computed: {
-    getVal: function () {
-      let leng = this.validateTextLength(this.remark);
-      if (leng <= 50) {
-        this.numVal = Math.floor(leng);
-      } else {
-        this.remark = this.remark.substring(0, 50);
-      }
-    },
+    numVal() { return Math.floor(this.validateTextLength(this.remark)); },
   },
-  onLoad() {
-    console.log(this.remarkData());
-    if (this.getRemark === "") {
-      this.remark = this.remark;
-    } else {
-      this.remark = this.remarkData();
-      this.numVal = this.remark.length;
-    }
-  },
+  onLoad() { this.remark = this.$appStore.remarkData || ''; },
   methods: {
-    ...mapMutations(["setRemark"]),
-    ...mapState(["remarkData"]),
+    limitRemark() { while (this.validateTextLength(this.remark) > 50) this.remark = this.remark.slice(0, -1); },
+    setRemark(...args) { return this.$appStore.setRemark(...args) },
+    remarkData() { return this.$appStore.remarkData },
     goBack() {
-      uni.redirectTo({
-        url: "/pages/order/index",
-      });
+      uni.navigateBack({ delta: 1 });
     },
     // 保存返回订单页
     handleSaveRemark() {
-      uni.redirectTo({
-        url: "/pages/order/index",
-      });
       this.setRemark(this.remark);
+      uni.navigateBack({ delta: 1 });
     },
     validateTextLength(value) {
       // 中文、中文标点、全角字符按1长度，英文、英文符号、数字按0.5长度计算

@@ -1,0 +1,16 @@
+'Log files:
+D:\take-out\.npm-cache\_logs\2026-11-12T10_48_22_768Z-debug-0.log
+
+# npm resolution error report
+
+While resolving: junzhou-ordering-miniapp@2.0.0
+Found: vue@3.4.21
+node_modules/vue
+  vue@"3.4.21" from the root project
+
+Could not resolve dependency:
+peer vue@"^2.7.0 || ^3.5.11" from pinia@2.3.1
+node_modules/pinia
+  pinia@"2.3.1" from the root project
+
+Fix the upstream dependency conflict, or retry this command with --force or --legacy-peer-deps to accept an incorrect (and potentially broken) dependency resolution.

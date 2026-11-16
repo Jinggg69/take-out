@@ -32,7 +32,7 @@ function createPage({ now = '2026-10-19T13:14:00', estimate, shop = { shopId: 1 
   const component = context.module.exports
   const page = Object.assign(component.data(), component.methods)
   Object.assign(page, {
-    $store: { state: { baseUserInfo: {} } },
+    $appStore: require('./helpers/pinia-store.cjs')(),
     shopInfo: () => shop,
     addressData: () => ({}), remarkData: () => '',
     setArrivalTime: value => arrivals.push(value), setGender() {},

@@ -4,15 +4,19 @@ const path = require('node:path')
 const vm = require('node:vm')
 const test = require('node:test')
 
-function setup({ confirm, prepay, cashierError, cashier } = {}) {
+function setup({ confirm, prepay, cashierError, cashier, mockResult, storage = new Map() } = {}) {
   const toasts = [], routes = [], requests = [], timers = new Map()
   let timerId = 0, paymentCalls = 0, confirmations = 0
   const script = fs.readFileSync(path.join(__dirname, '../pages/pay/index.vue'), 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1]
+  const { store } = require('./core-harness.cjs').loadStore(storage)
+  store.setSession({ token: 'test', userId: 'user-a' })
+  store.selectContext({ merchantId: '1', storeId: '1' })
   const context = vm.createContext({
     module: { exports: {} }, console,
     mapState: () => ({}),
     paymentOrder: async params => { requests.push(params); return prepay ? prepay() : { code: 1, data: { packageStr: 'prepay_id=test' } } },
     confirmOrderPayment: async id => { confirmations++; return confirm ? confirm(confirmations, id) : { code: 1, data: { status: 1, payStatus: 0 } } },
+    submitMockPayment: async (id, outcome) => mockResult ? mockResult(id, outcome) : ({ code: 1, data: { status: 1, payStatus: 0 } }),
     cancelOrder: async () => ({ code: 1 }),
     setTimeout: (fn, ms) => {
       const id = ++timerId
@@ -23,6 +27,7 @@ function setup({ confirm, prepay, cashierError, cashier } = {}) {
     },
     clearTimeout: id => timers.delete(id),
     uni: {
+      getStorageSync: key => storage.get(key), setStorageSync: (key,value) => storage.set(key, JSON.parse(JSON.stringify(value))), removeStorageSync: key => storage.delete(key),
       showToast: options => toasts.push(options),
       redirectTo: options => routes.push(options),
       requestPayment: options => {
@@ -37,6 +42,7 @@ function setup({ confirm, prepay, cashierError, cashier } = {}) {
   vm.runInContext(script.replace(/^import[\s\S]*?from\s*["'][^"']+["'];?[^\n]*/gm, '').replace('export default', 'module.exports ='), context)
   const component = context.module.exports
   const page = Object.assign(component.data(), component.methods, {
+    $appStore: store,
     orderId: 10, orderDataInfo: { orderNumber: 'order-10', orderTime: '2099-01-01 12:00:00' },
   })
   return { page, component, toasts, routes, requests, timers, get paymentCalls() { return paymentCalls }, get confirmations() { return confirmations } }
@@ -166,4 +172,150 @@ test('收银台回调未返回时切后台，返回后查单且迟到回调不�
   assert.equal(h.paymentCalls, 1)
   assert.equal(h.confirmations, 1)
   assert.equal(h.routes.length, 1)
+})
+
+test('后端指定MOCK时打开模拟收银台，完全不调用微信收银台', async () => {
+  const h = setup({ prepay: async () => ({ code: 1, data: { channel: 'MOCK', orderId: 10 } }) })
+  await h.page.handleSave()
+  assert.equal(h.paymentCalls, 0)
+  assert.equal(h.page.mockCashier, true)
+  assert.equal(h.page.paying, false)
+  assert.equal(h.confirmations, 0)
+})
+
+test('模拟成功先提交后台结果并确认持久状态再跳转', async () => {
+  const outcomes = []
+  const h = setup({ mockResult: async (id, outcome) => { outcomes.push([id, outcome]); return { code: 1, data: { payStatus: 1, status: 2 } } }, confirm: async () => ({ code: 1, data: { payStatus: 1, status: 2 } }) })
+  h.page.mockCashier = true
+  await h.page.chooseMock('SUCCESS')
+  assert.deepEqual(outcomes, [[10, 'SUCCESS']])
+  assert.equal(h.paymentCalls, 0)
+  assert.equal(h.confirmations, 1)
+  assert.ok(h.routes[0].url.includes('/success/'))
+})
+
+for (const outcome of ['FAILED', 'CANCELLED']) test(`模拟${outcome}保持待付款并允许重新选择`, async () => {
+  const h = setup()
+  h.page.mockCashier = true
+  await h.page.chooseMock(outcome)
+  assert.equal(h.confirmations, 0)
+  assert.equal(h.paymentCalls, 0)
+  assert.equal(h.page.paying, false)
+  assert.equal(h.page.needsConfirmation, false)
+  assert.equal(h.routes.length, 0)
+})
+
+test('模拟接口结果不确定时保留查单入口，重复选择不会并发提交', async () => {
+  let reject
+  let calls = 0
+  const h = setup({ mockResult: () => { calls++; return new Promise((_, r) => { reject = r }) } })
+  h.page.mockCashier = true
+  const work = h.page.chooseMock('SUCCESS')
+  await h.page.chooseMock('SUCCESS')
+  assert.equal(calls, 1)
+  reject({ msg: '网络异常' })
+  await work
+  assert.equal(h.page.needsConfirmation, true)
+  assert.equal(h.page.paying, false)
+  assert.equal(h.routes.length, 0)
+})
+
+test('模拟成功页保留模拟标记，避免看起来像真实扣款', async () => {
+  const h = setup({ prepay: async () => ({ code: 1, data: { channel: 'MOCK', orderId: 10 } }), mockResult: async () => ({ code: 1, data: { status: 2, payStatus: 1 } }), confirm: async () => ({ code: 1, data: { status: 2, payStatus: 1 } }) })
+  await h.page.handleSave()
+  await h.page.chooseMock('SUCCESS')
+  assert.ok(h.routes[0].url.includes('mock=1'))
+  assert.ok(h.toasts.some(x => x.title === '模拟支付成功'))
+})
+
+test('支付请求及隐藏后待核查期间真实Pinia持续阻止切店', async () => {
+  let finish
+  const h = setup({ prepay: () => new Promise(resolve => { finish = resolve }) })
+  const work = h.page.handleSave()
+  assert.throws(() => h.page.$appStore.selectContext({ merchantId: '1', storeId: '2' }), e => e.selectionLocked)
+  finish({ code: 1, data: { packageStr: 'test' } })
+  await work
+  h.component.onUnload.call(h.page)
+  assert.equal(h.page.$appStore.paymentInFlight.orderId, 10)
+  assert.throws(() => h.page.$appStore.selectContext({ merchantId: '1', storeId: '2' }), e => e.selectionLocked)
+})
+
+test('支付结果不确定时保留按用户的恢复凭据，重进只查单', async () => {
+  const storage = new Map()
+  const h = setup({ storage })
+  h.page.needsConfirmation = true
+  h.page.updatePaymentLock(true)
+  assert.equal(h.page.$appStore.paymentInFlight.orderId, 10)
+  h.component.onUnload.call(h.page)
+  assert.equal(h.page.$appStore.paymentInFlight.orderId, 10)
+  assert.equal(storage.get('checkoutRecovery:user-a').paymentInFlight.orderId, 10)
+  assert.equal(storage.get('paymentRecovery:user-a').orderId, 10)
+  const restored = setup({ storage, confirm: async () => ({ code: 1, data: { status: 2, payStatus: 1 } }) })
+  restored.component.onLoad.call(restored.page, { orderId: 10 })
+  assert.equal(restored.page.needsConfirmation, true)
+  await restored.page.handleSave()
+  assert.equal(restored.requests.length, 0)
+  assert.equal(restored.paymentCalls, 0)
+  assert.equal(restored.confirmations, 1)
+  assert.equal(storage.has('paymentRecovery:user-a'), false)
+})
+
+
+test('未知支付冷启动恢复同一用户门店锁，换用户隔离且旧页面不能清锁', async () => {
+  const storage = new Map()
+  const h = setup({ storage })
+  await h.page.handleSave()
+  h.component.onHide.call(h.page)
+  const { store: cold } = require('./core-harness.cjs').loadStore(storage)
+  cold.restoreSession()
+  assert.equal(cold.paymentInFlight.orderId, 10)
+  assert.equal(cold.paymentInFlight.storeId, '1')
+  assert.throws(() => cold.selectContext({ merchantId: '1', storeId: '2' }), e => e.selectionLocked)
+  h.page.$appStore.setSession({ token: 'b', userId: 'user-b' })
+  assert.equal(h.page.$appStore.paymentInFlight, null)
+  h.component.onUnload.call(h.page)
+  assert.equal(storage.get('checkoutRecovery:user-a').paymentInFlight.orderId, 10)
+  h.page.$appStore.setSession({ token: 'a', userId: 'user-a' })
+  assert.equal(h.page.$appStore.paymentInFlight.orderId, 10)
+})
+
+for (const result of [{ status: 2, payStatus: 1 }, { status: 6, payStatus: 0 }]) test('服务端确认终态后清除全局支付锁 ' + result.status, async () => {
+  const storage = new Map()
+  const h = setup({ storage, confirm: async () => ({ code: 1, data: result }) })
+  h.page.needsConfirmation = true
+  h.page.updatePaymentLock(true)
+  await h.page.handleSave()
+  h.component.onUnload.call(h.page)
+  assert.equal(h.page.$appStore.paymentInFlight, null)
+  assert.equal(storage.get('checkoutRecovery:user-a').paymentInFlight, null)
+  assert.equal(storage.has('paymentRecovery:user-a'), false)
+})
+
+test('预支付请求期间杀进程，从真实Pinia恢复订单号金额且只查单', async () => {
+  const storage = new Map()
+  let finish
+  const h = setup({ storage, prepay: () => new Promise(resolve => { finish = resolve }) })
+  h.page.orderDataInfo.orderAmount = 23.5
+  h.page.orderDataInfo.fulfillmentType = 'PICKUP'
+  const work = h.page.handleSave()
+  const disk = new Map([...storage].map(([key, value]) => [key, JSON.parse(JSON.stringify(value))]))
+  h.component.onHide.call(h.page)
+  finish({ code: 1, data: { packageStr: 'late' } })
+  await work
+  assert.equal(disk.get('checkoutRecovery:user-a').paymentInFlight.orderDataInfo.orderNumber, 'order-10')
+  assert.equal(disk.has('paymentRecovery:user-a'), false)
+  const restored = setup({ storage: disk, confirm: async () => ({ code: 1, data: { status: 2, payStatus: 1 } }) })
+  restored.component.created.call(restored.page)
+  assert.equal(restored.page.orderDataInfo.orderNumber, undefined)
+  restored.component.onLoad.call(restored.page, { orderId: 10 })
+  assert.equal(restored.page.orderDataInfo.orderNumber, 'order-10')
+  assert.equal(restored.page.orderDataInfo.orderAmount, 23.5)
+  assert.equal(restored.page.orderDataInfo.fulfillmentType, 'PICKUP')
+  assert.equal(restored.page.needsConfirmation, true)
+  await restored.page.handleSave()
+  assert.equal(restored.requests.length, 0)
+  assert.equal(restored.paymentCalls, 0)
+  assert.equal(restored.confirmations, 1)
+  assert.equal(restored.page.$appStore.paymentInFlight, null)
+  assert.equal(restored.page.$appStore.orderData.fulfillmentType, 'PICKUP')
 })

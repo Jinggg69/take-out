@@ -50,7 +50,7 @@ export function createOrderApi(client: AxiosInstance) {
     delivery: (id: OrderId) => write(`/order/delivery/${encodeURIComponent(id)}`),
     dineComplete: (id: OrderId) => write(`/order/dine/complete/${encodeURIComponent(id)}`),
     ready: (id: OrderId) => write(`/order/pickup/ready/${encodeURIComponent(id)}`),
-    verify: (id: OrderId, credential: string) => write(`/order/pickup/verify/${encodeURIComponent(id)}`, { credential }),
+    verify: (id: OrderId, pickupNumber: string) => write(`/order/pickup/verify/${encodeURIComponent(id)}`, { pickupNumber }),
     complete: (id: OrderId) => write(`/order/complete/${encodeURIComponent(id)}`),
   }
 }

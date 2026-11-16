@@ -40,10 +40,11 @@ export default {
       if (this.orderDetailsData.sex == 0) {
         // 男
         return this.orderDetailsData.consignee.charAt(0) + "先生";
-      } else {
+      } else if (String(this.orderDetailsData.sex) === "1") {
         // 女
         return this.orderDetailsData.consignee.charAt(0) + "女士";
       }
+      return this.orderDetailsData.consignee;
     },
   },
 };

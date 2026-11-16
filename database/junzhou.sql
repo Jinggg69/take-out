@@ -166,8 +166,10 @@ CREATE TABLE `order_detail` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb3 COLLATE=utf8_bin COMMENT='订单明细表';
 
+DROP TABLE IF EXISTS `mock_payment`;
 DROP TABLE IF EXISTS `orders`;
 CREATE TABLE `orders` (
+  `payment_channel` varchar(16) NOT NULL DEFAULT 'WECHAT',
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
   `number` varchar(50) COLLATE utf8_bin DEFAULT NULL COMMENT '订单号',
   `status` int NOT NULL DEFAULT '1' COMMENT '订单状态 1待付款 2待接单 3已接单 4派送中 5已完成 6已取消 7退款',
@@ -1090,3 +1092,107 @@ END$$
 DELIMITER ;
 CALL _junzhou_stage6();
 DROP PROCEDURE _junzhou_stage6;
+
+-- Mock payment schema and immutable channel (historical default WECHAT).
+-- Apply after payment-account and order lifecycle migrations, with writers stopped.
+-- Historical orders stay WECHAT. This migration does not modify merchant identity or store mappings.
+DROP PROCEDURE IF EXISTS _junzhou_mock_payment;
+DELIMITER $$
+CREATE PROCEDURE _junzhou_mock_payment()
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='orders' AND column_name='payment_channel') THEN
+  ALTER TABLE orders ADD COLUMN payment_channel varchar(16) NOT NULL DEFAULT 'WECHAT';
+ END IF;
+ IF EXISTS(SELECT 1 FROM orders WHERE payment_channel NOT IN ('WECHAT','MOCK') OR payment_channel IS NULL) THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Invalid existing payment channel; investigate before migration';
+ END IF;
+ CREATE TABLE IF NOT EXISTS mock_payment (
+  order_id bigint NOT NULL PRIMARY KEY,
+  state varchar(16) NOT NULL,
+  amount_fen bigint NOT NULL,
+  payer_openid varchar(128) NOT NULL,
+  paid_at datetime(6) DEFAULT NULL,
+  out_refund_no varchar(64) DEFAULT NULL,
+  CONSTRAINT fk_mock_payment_order FOREIGN KEY(order_id) REFERENCES orders(id),
+  CONSTRAINT ck_mock_payment_amount CHECK(amount_fen>0),
+  CONSTRAINT ck_mock_payment_state CHECK(state IN ('NOTPAY','SUCCESS','CLOSED','REFUND'))
+ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+END$$
+DELIMITER ;
+CALL _junzhou_mock_payment();
+DROP PROCEDURE _junzhou_mock_payment;
+DROP TRIGGER IF EXISTS orders_payment_channel_immutable;
+DROP TRIGGER IF EXISTS orders_payment_channel_validate;
+DELIMITER $$
+CREATE TRIGGER orders_payment_channel_immutable BEFORE UPDATE ON orders FOR EACH ROW
+BEGIN
+ IF NOT (NEW.payment_channel <=> OLD.payment_channel) THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Order payment channel is immutable';
+ END IF;
+END$$
+CREATE TRIGGER orders_payment_channel_validate BEFORE INSERT ON orders FOR EACH ROW
+BEGIN
+ IF NEW.payment_channel NOT IN ('WECHAT','MOCK') THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Unknown order payment channel';
+ END IF;
+END$$
+DELIMITER ;
+
+-- Stop order writers before applying. Existing DATETIME order_time values are local business time.
+-- Legacy pickup_credential is retained as an unused nullable column for historical migration compatibility.
+DROP PROCEDURE IF EXISTS _junzhou_daily_pickup;
+DELIMITER $$
+CREATE PROCEDURE _junzhou_daily_pickup()
+BEGIN
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    ROLLBACK;
+    DROP TEMPORARY TABLE IF EXISTS _pickup_number_backfill;
+    RESIGNAL;
+  END;
+  IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='orders' AND column_name='pickup_date') THEN
+    ALTER TABLE orders ADD pickup_date DATE NULL;
+  END IF;
+  CREATE TABLE IF NOT EXISTS store_pickup_sequence (
+    tenant_id BIGINT NOT NULL,
+    store_id BIGINT NOT NULL,
+    pickup_date DATE NOT NULL,
+    last_number BIGINT NOT NULL,
+    PRIMARY KEY (tenant_id, store_id, pickup_date),
+    CONSTRAINT ck_pickup_sequence_positive CHECK(last_number > 0)
+  ) ENGINE=InnoDB;
+
+  DROP TEMPORARY TABLE IF EXISTS _pickup_number_backfill;
+  CREATE TEMPORARY TABLE _pickup_number_backfill AS
+    SELECT o.id, COALESCE(DATE(o.order_time),'1970-01-01') AS pickup_date,
+      COALESCE(existing.last_number,0) + ROW_NUMBER() OVER (
+        PARTITION BY o.tenant_id,o.store_id,COALESCE(DATE(o.order_time),'1970-01-01')
+        ORDER BY o.order_time,o.id
+      ) AS pickup_number
+    FROM orders o
+    LEFT JOIN (
+      SELECT tenant_id,store_id,pickup_date,MAX(CAST(pickup_number AS UNSIGNED)) AS last_number
+      FROM orders WHERE fulfillment_type='PICKUP' AND pickup_date IS NOT NULL
+      GROUP BY tenant_id,store_id,pickup_date
+    ) existing ON existing.tenant_id=o.tenant_id AND existing.store_id=o.store_id
+      AND existing.pickup_date=COALESCE(DATE(o.order_time),'1970-01-01')
+    WHERE o.fulfillment_type='PICKUP' AND o.pickup_date IS NULL;
+
+  START TRANSACTION;
+  UPDATE orders o JOIN _pickup_number_backfill b ON b.id=o.id
+    SET o.pickup_number=CAST(b.pickup_number AS CHAR),o.pickup_date=b.pickup_date;
+  INSERT INTO store_pickup_sequence(tenant_id,store_id,pickup_date,last_number)
+    SELECT tenant_id,store_id,pickup_date,MAX(CAST(pickup_number AS UNSIGNED))
+    FROM orders WHERE fulfillment_type='PICKUP' AND pickup_date IS NOT NULL
+    GROUP BY tenant_id,store_id,pickup_date
+    ON DUPLICATE KEY UPDATE last_number=GREATEST(store_pickup_sequence.last_number,VALUES(last_number));
+  COMMIT;
+  DROP TEMPORARY TABLE _pickup_number_backfill;
+
+  IF NOT EXISTS(SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='orders' AND index_name='uk_order_pickup_number') THEN
+    CREATE UNIQUE INDEX uk_order_pickup_number ON orders(tenant_id,store_id,pickup_date,pickup_number);
+  END IF;
+END$$
+CALL _junzhou_daily_pickup()$$
+DROP PROCEDURE _junzhou_daily_pickup$$
+DELIMITER ;

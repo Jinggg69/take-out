@@ -69,7 +69,7 @@
 
 .brand-navbar {
   height: calc(280rpx + var(--status-bar-height));
-  background: linear-gradient(135deg, #75191E, #9E2026 65%, #B23A32);
+  background: linear-gradient(135deg, #75191E, #164B3B 65%, #B23A32);
   pointer-events: none;
   overflow: hidden;
   .person-box {
@@ -85,7 +85,7 @@
     box-sizing: border-box;
   }
   .test_image { width: 36rpx; height: 36rpx; flex-shrink: 0; }
-  .person-title { margin-left: 10rpx; font-size: 24rpx; white-space: nowrap; color: #FFF8EE; }
+  .person-title { margin-left: 10rpx; font-size: 24rpx; white-space: nowrap; color: #F5F8F4; }
   .brand-scenery { position: absolute; left: 0; right: 0; bottom: 0; height: 210rpx; }
   .brand-dam {
     position: absolute; right: 35rpx; bottom: 150rpx; width: 370rpx; height: 84rpx;

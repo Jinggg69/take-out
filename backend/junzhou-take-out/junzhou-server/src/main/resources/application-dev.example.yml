@@ -2,6 +2,7 @@
 # Values below are environment references, never real credentials.
 sky:
   payment:
+    channel: ${PAYMENT_CHANNEL:wechat}
     jobs-enabled: ${PAYMENT_JOBS_ENABLED:true}
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver

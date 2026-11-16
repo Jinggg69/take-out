@@ -11,8 +11,8 @@ public interface PickupService {
     /**
      * 原子核销当前门店待取订单并记录店员。
      * @param id 订单 ID
-     * @param credential 顾客提供的随机凭证
-     * @throws com.junzhou.exception.OrderBusinessException 凭证、支付或状态无效，或重复核销
+     * @param pickupNumber 顾客提供的数字取餐号
+     * @throws com.junzhou.exception.OrderBusinessException 取餐号、支付或状态无效，或重复核销
      */
-    void verify(Long id, String credential);
+    void verify(Long id, String pickupNumber);
 }

@@ -114,6 +114,9 @@ class OrderPaymentModuleTest {
                 GlobalExceptionHandler.class, JwtTokenUserInterceptor.class, JwtTokenAdminInterceptor.class,
                 PaymentTestConfiguration.class, WebSocketServer.class, com.junzhou.service.impl.AdminSessionServiceImpl.class, com.junzhou.service.impl.OrderPricingServiceImpl.class,
                 com.junzhou.service.impl.CartAccessServiceImpl.class, ShoppingCartServiceImpl.class);
+        for(String name:new String[]{"com.junzhou.payment.PaymentChannelSettings", "com.junzhou.payment.MockPaymentGateway", "com.junzhou.controller.user.MockPaymentController"}) {
+            try { context.register(Class.forName(name)); } catch(ClassNotFoundException ignored) { }
+        }
         context.refresh();
         mapServer = MockRestServiceServer.bindTo(context.getBean(RestTemplate.class)).build();
         mapServer.expect(ExpectedCount.between(0, Integer.MAX_VALUE),
@@ -181,7 +184,7 @@ class OrderPaymentModuleTest {
 
     @Test
     void orderSqlScopesReadsWritesChildrenRefundsAndStatistics() {
-        jdbc.execute("insert into tenant values(2,1)");
+        jdbc.execute("insert into tenant(id,status) values(2,1)");
         jdbc.execute("insert into store(id,tenant_id,status) values(2,1,1),(3,2,1)");
         jdbc.execute("insert into orders(id,number,status,user_id,address_book_id,order_time,pay_method,pay_status,amount,tenant_id,store_id) values "
                 + "(20,'store-a2',1,42,101,current_timestamp,1,0,25,1,2),(30,'tenant-b',1,42,101,current_timestamp,1,0,25,2,3),"
@@ -226,7 +229,7 @@ class OrderPaymentModuleTest {
     }
 
     @Test void verifiedCallbackWorksAfterAnotherTenantIsAdded() throws Exception {
-        jdbc.execute("insert into tenant values(2,1)");
+        jdbc.execute("insert into tenant(id,status) values(2,1)");
         jdbc.execute("insert into store(id,tenant_id,status) values(2,2,1)");
         mvc.perform(signedNotification("/notify/paySuccess",paymentResource("order-10","wx-10"),"TRANSACTION.SUCCESS"))
                 .andExpect(status().isOk());
@@ -258,7 +261,7 @@ class OrderPaymentModuleTest {
         WeChatProperties other=new WeChatProperties(); other.setMchid("merchant-other"); other.setAppid("test-app");
         SignedWechatNotifications signer=new SignedWechatNotifications(other,notificationKeys);
         context.getBean(WeChatProperties.class).getAccounts().put("other",other);
-        jdbc.execute("insert into tenant values(2,1)"); jdbc.execute("insert into store(id,tenant_id,status) values(2,2,1)");
+        jdbc.execute("insert into tenant(id,status) values(2,1)"); jdbc.execute("insert into store(id,tenant_id,status) values(2,2,1)");
         jdbc.execute("insert into payment_account values('other',2,2,'merchant-other','test-app')");
         JSONObject resource=paymentResource("order-10","wx-10"); resource.put("mchid","merchant-other");
         SignedWechatNotifications.Signed signed=signer.wrap(resource,"TRANSACTION.SUCCESS");
@@ -277,7 +280,7 @@ class OrderPaymentModuleTest {
         WeChatProperties shared=new WeChatProperties();
         org.springframework.beans.BeanUtils.copyProperties(original,shared,"accounts");
         original.getAccounts().put("store-two",shared);
-        jdbc.execute("insert into tenant values(2,1)"); jdbc.execute("insert into store(id,tenant_id,status) values(2,2,1)");
+        jdbc.execute("insert into tenant(id,status) values(2,1)"); jdbc.execute("insert into store(id,tenant_id,status) values(2,2,1)");
         jdbc.execute("insert into payment_account values('store-two',2,2,'test-merchant','test-app')");
         jdbc.execute("update orders set tenant_id=2,store_id=2,payment_account_id='store-two' where id=10");
         mvc.perform(signedNotification("/notify/refundSuccess",refundResource("SUCCESS"),"REFUND.SUCCESS"))
@@ -370,24 +373,24 @@ class OrderPaymentModuleTest {
     }
 
     @Test
-    void pickupCredentialIsPrivateAndVerificationIsSingleUse() throws Exception {
+    void pickupNumberStartsAtOneAndVerificationIsSingleUse() throws Exception {
         String body="{\"fulfillmentType\":\"PICKUP\",\"contactName\":\"张三\",\"contactPhone\":\"13800000000\",\"payMethod\":1,\"amount\":27}";
         mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(jsonPath("$.code").value(1));
         Long id=jdbc.queryForObject("select id from orders where id<>10",Long.class);
         jdbc.update("update orders set status=3,pay_status=1,fulfillment_status='PREPARING' where id=?",id);
         String user=mvc.perform(get("/user/order/orderDetail/"+id).header("authentication",token())).andReturn().getResponse().getContentAsString();
-        String credential=JSON.parseObject(user).getJSONObject("data").getString("pickupToken");
+        String credential=JSON.parseObject(user).getJSONObject("data").getString("pickupNumber");
         assertNotNull(credential);
-        assertTrue(credential.matches("[0-9a-f]{32}"));
+        assertEquals("1",credential);
         mvc.perform(get("/admin/order/details/"+id).header("token",adminToken()))
             .andExpect(jsonPath("$.data.pickupToken").doesNotExist()).andExpect(jsonPath("$.data.pickupCredential").doesNotExist());
-        adminPut("/admin/order/pickup/verify/"+id,"{\"credential\":\""+credential+"\"}",0);
+        adminPut("/admin/order/pickup/verify/"+id,"{\"pickupNumber\":\""+credential+"\"}",0);
         adminPut("/admin/order/pickup/ready/"+id,"{}",1);
-        adminPut("/admin/order/pickup/verify/"+id,"{\"credential\":\"wrong\"}",0);
-        adminPut("/admin/order/pickup/verify/"+id,"{\"credential\":\""+credential+"\"}",1);
+        adminPut("/admin/order/pickup/verify/"+id,"{\"pickupNumber\":\"wrong\"}",0);
+        adminPut("/admin/order/pickup/verify/"+id,"{\"pickupNumber\":\""+credential+"\"}",1);
         java.sql.Timestamp verified=jdbc.queryForObject("select pickup_verified_at from orders where id=?",java.sql.Timestamp.class,id);
-        adminPut("/admin/order/pickup/verify/"+id,"{\"credential\":\""+credential+"\"}",0);
+        adminPut("/admin/order/pickup/verify/"+id,"{\"pickupNumber\":\""+credential+"\"}",0);
         assertEquals(verified,jdbc.queryForObject("select pickup_verified_at from orders where id=?",java.sql.Timestamp.class,id));
         assertEquals(5,statusOf(id));
     }
@@ -395,22 +398,22 @@ class OrderPaymentModuleTest {
     @ParameterizedTest
     @ValueSource(strings={"status=1,pay_status=0", "status=6,pay_status=1", "pay_status=2", "pay_status=3", "pay_status=4", "refund_status='REQUESTED'", "fulfillment_type='DELIVERY'", "store_id=2", "tenant_id=2"})
     void invalidPickupCannotBeVerified(String change) throws Exception {
-        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_credential='0123456789abcdef0123456789abcdef' where id=10");
+        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_number='1' where id=10");
         jdbc.update("update orders set "+change+" where id=10");
-        adminPut("/admin/order/pickup/verify/10","{\"credential\":\"0123456789abcdef0123456789abcdef\"}",0);
+        adminPut("/admin/order/pickup/verify/10","{\"pickupNumber\":\"1\"}",0);
         assertNull(jdbc.queryForObject("select pickup_verified_at from orders where id=10",java.sql.Timestamp.class));
     }
 
     @Test
     void concurrentPickupVerificationChangesExactlyOneRow() throws Exception {
-        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_credential='0123456789abcdef0123456789abcdef' where id=10");
+        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_number='1' where id=10");
         ExecutorService pool=Executors.newFixedThreadPool(6);
         CountDownLatch start=new CountDownLatch(1);
         java.util.List<Future<Boolean>> results=new java.util.ArrayList<>();
         try {
             for(int i=0;i<6;i++) results.add(pool.submit(()->{
                 RequestScope.set(new RequestScope(1L,null,1L,1L,Collections.singleton(1L)));
-                try { start.await(); context.getBean(com.junzhou.service.PickupService.class).verify(10L,"0123456789abcdef0123456789abcdef");return true; }
+                try { start.await(); context.getBean(com.junzhou.service.PickupService.class).verify(10L,"1");return true; }
                 catch(com.junzhou.exception.OrderBusinessException ex){return false;}
                 finally{RequestScope.clear();}
             }));
@@ -422,8 +425,8 @@ class OrderPaymentModuleTest {
     }
 
     @Test
-    void pickupFiltersAndCredentialVisibilityRespectOwnership() throws Exception {
-        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_credential='0123456789abcdef0123456789abcdef' where id=10");
+    void pickupFiltersRespectOwnership() throws Exception {
+        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_number='1' where id=10");
         mvc.perform(get("/admin/order/conditionSearch").header("token",adminToken()).param("page","1").param("pageSize","10").param("fulfillmentType","PICKUP").param("fulfillmentStatus","PREPARING"))
             .andExpect(jsonPath("$.data.total").value(0));
         mvc.perform(get("/admin/order/conditionSearch").header("token",adminToken()).param("page","1").param("pageSize","10").param("fulfillmentType","PICKUP").param("fulfillmentStatus","READY"))
@@ -441,8 +444,78 @@ class OrderPaymentModuleTest {
         mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(jsonPath("$.code").value(1));
         assertEquals("PICKUP",jdbc.queryForObject("select fulfillment_type from orders where id<>10",String.class));
+        assertEquals("1",jdbc.queryForObject("select pickup_number from orders where id<>10",String.class));
+        assertEquals(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")),jdbc.queryForObject("select pickup_date from orders where id<>10",java.sql.Date.class).toLocalDate());
         mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(jsonPath("$.code").value(1));
+        assertEquals(1L,jdbc.queryForObject("select last_number from store_pickup_sequence",Long.class));
+    }
+
+    @Test
+    void pickupVerificationUsesSelectedOrderAcrossDays() throws Exception {
+        jdbc.update("update orders set fulfillment_type='PICKUP',fulfillment_status='READY',status=3,pay_status=1,pickup_number='1',order_time='2026-11-15 23:59:00' where id=10");
+        adminPut("/admin/order/pickup/verify/10","{\"pickupNumber\":\"2\"}",0);
+        adminPut("/admin/order/pickup/verify/10","{\"pickupNumber\":\"1\"}",1);
+        assertEquals(5,statusOf(10));
+    }
+
+    private Long allocatePickupNumber(java.time.LocalDate date) {
+        return new TransactionTemplate(context.getBean(PlatformTransactionManager.class)).execute(status -> {
+            OrderMapper mapper = context.getBean(OrderMapper.class);
+            assertTrue(mapper.reservePickupNumber(date) > 0);
+            return mapper.currentPickupNumber(date);
+        });
+    }
+
+    @Test
+    void pickupNumbersRestartForEachStoreAndBusinessDate() {
+        java.time.LocalDate day = java.time.LocalDate.of(2026,11,16);
+        RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
+        assertEquals(1L,allocatePickupNumber(day));
+        assertEquals(2L,allocatePickupNumber(day));
+        assertEquals(1L,allocatePickupNumber(day.plusDays(1)));
+        assertEquals(3L,allocatePickupNumber(day));
+        jdbc.update("insert into store(id,tenant_id,status) values(2,1,1)");
+        RequestScope.set(new RequestScope(null,42L,1L,2L,Collections.emptySet()));
+        assertEquals(1L,allocatePickupNumber(day));
+        jdbc.update("insert into tenant(id,status) values(2,1)");
+        jdbc.update("insert into store(id,tenant_id,status) values(3,2,1)");
+        RequestScope.set(new RequestScope(null,42L,2L,3L,Collections.emptySet()));
+        assertEquals(1L,allocatePickupNumber(day));
+        RequestScope.set(new RequestScope(null,42L,1L,3L,Collections.emptySet()));
+        assertEquals(0,context.getBean(OrderMapper.class).reservePickupNumber(day));
+    }
+
+    @Test
+    void rolledBackSubmissionDoesNotConsumePickupNumber() {
+        java.time.LocalDate day = java.time.LocalDate.of(2026,11,16);
+        RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
+        new TransactionTemplate(context.getBean(PlatformTransactionManager.class)).execute(status -> {
+            assertEquals(1L,allocatePickupNumber(day));
+            status.setRollbackOnly();
+            return null;
+        });
+        assertEquals(1L,allocatePickupNumber(day));
+    }
+
+    @Test
+    void simultaneousPickupNumbersAreUniqueAndSequential() throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(6);
+        CountDownLatch start = new CountDownLatch(1);
+        java.util.List<Future<Long>> results = new java.util.ArrayList<>();
+        try {
+            for (int i=0;i<6;i++) results.add(pool.submit(() -> {
+                RequestScope.set(new RequestScope(null,42L,1L,1L,Collections.emptySet()));
+                try {
+                    start.await();
+                    return allocatePickupNumber(java.time.LocalDate.of(2026,11,16));
+                } finally { RequestScope.clear(); }
+            }));
+            start.countDown();
+            java.util.Set<Long> actual = new java.util.TreeSet<>();
+            for (Future<Long> result : results) actual.add(result.get(15,TimeUnit.SECONDS));
+            assertEquals(new java.util.TreeSet<>(java.util.Arrays.asList(1L,2L,3L,4L,5L,6L)),actual);
+        } finally { pool.shutdownNow(); }
     }
 
     @Test
@@ -560,6 +633,19 @@ class OrderPaymentModuleTest {
             .andExpect(jsonPath("$.code").value(1));
         assertEquals("A7",jdbc.queryForObject("select table_snapshot from orders where id<>10",String.class));
         assertNull(jdbc.queryForObject("select address_book_id from orders where id<>10",Long.class));
+    }
+
+    @Test void newOrdersFreezeMerchantIdentityAlongsideStoreSnapshot() throws Exception {
+        jdbc.update("update tenant set name='入驻商家甲' where id=1");
+        String body="{\"addressBookId\":101,\"payMethod\":1,\"amount\":33,\"clientRequestId\":\"snapshot-merchant\"}";
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(jsonPath("$.code").value(1));
+        JSONObject snapshot=JSON.parseObject(jdbc.queryForObject("select store_snapshot from orders where client_request_id='snapshot-merchant'",String.class));
+        assertEquals("1",snapshot.getString("merchantId"));
+        assertEquals("入驻商家甲",snapshot.getString("merchantName"));
+        assertNotNull(snapshot.getString("name"));
+        jdbc.update("update tenant set name='改名之后' where id=1");
+        assertEquals("入驻商家甲",JSON.parseObject(jdbc.queryForObject("select store_snapshot from orders where client_request_id='snapshot-merchant'",String.class)).getString("merchantName"));
     }
 
     @Test
@@ -1490,6 +1576,88 @@ class OrderPaymentModuleTest {
     }
 
 
+    private void mockOrder() {
+        context.getEnvironment().setActiveProfiles("test");
+        org.springframework.test.context.support.TestPropertySourceUtils.addInlinedPropertiesToEnvironment(context,"sky.payment.channel=mock");
+        jdbc.execute("alter table orders add if not exists payment_channel varchar(16) default 'WECHAT' not null");
+        jdbc.update("update orders set payment_channel='MOCK' where id=10");
+    }
+    private org.springframework.test.web.servlet.ResultActions mockOutcome(String outcome) throws Exception {
+        return mvc.perform(post("/user/order/10/payment/mock").header("authentication",token()).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"outcome\":\""+outcome+"\"}"));
+    }
+    @Test void mockNewOrderPersistsChannelWithoutMerchantCredentials() throws Exception {
+        mockOrder(); context.getBean(WeChatProperties.class).setMchid(null);
+        mvc.perform(post("/user/order/submit").header("authentication",token()).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"addressBookId\":101,\"payMethod\":1,\"amount\":33,\"clientRequestId\":\"mock-new-order\"}"))
+            .andExpect(jsonPath("$.code").value(1));
+        assertEquals("MOCK",jdbc.queryForObject("select payment_channel from orders where client_request_id='mock-new-order'",String.class));
+    }
+    @Test void mockModeCannotPrepayHistoricalWechatOrders() throws Exception {
+        mockOrder(); jdbc.update("update orders set payment_channel='WECHAT' where id=10");
+        mvc.perform(put("/user/order/payment").header("authentication",token()).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"orderNumber\":\"order-10\",\"payMethod\":1}"))
+            .andExpect(jsonPath("$.code").value(0));
+        assertEquals(0,paymentState(10));
+    }
+    @Test void mockChannelStateSurvivesGatewayRecreationAndLatePaymentRefunds() throws Exception {
+        mockOrder(); mockOutcome("LOST_NOTIFY").andExpect(jsonPath("$.data.payStatus").value(0));
+        com.junzhou.payment.MockPaymentGateway rebuilt=new com.junzhou.payment.MockPaymentGateway(
+            context.getBean(com.junzhou.payment.PaymentChannelSettings.class),context.getBean(OrderMapper.class),context.getBean(UserMapper.class),context.getBean(DataSource.class));
+        RequestScope.set(new RequestScope(null,42L,1L,1L,java.util.Collections.emptySet()));
+        assertEquals("SUCCESS",rebuilt.query(10L).getString("trade_state"));
+        RequestScope.clear();
+        mvc.perform(put("/user/order/cancel/10").header("authentication",token())).andExpect(jsonPath("$.code").value(1));
+        systemBean(PaymentRecoveryService.class).reconcileOrder(10L);
+        assertEquals(6,statusOf(10)); assertEquals(3,paymentState(10));
+        systemBean(PaymentRecoveryService.class).processDue();
+        assertEquals("SUCCESS",refundState(10)); assertEquals(2,paymentState(10));
+    }
+
+    @Test void mockPrepayNeedsNoMerchantSecretsAndUsesNoWechatNetwork() throws Exception {
+        mockOrder(); context.getBean(WeChatProperties.class).setMchid(null);
+        mvc.perform(put("/user/order/payment").header("authentication",token()).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"orderNumber\":\"order-10\",\"payMethod\":1}"))
+            .andExpect(jsonPath("$.code").value(1)).andExpect(jsonPath("$.data.channel").value("MOCK"));
+        assertEquals(0,provider().paymentQueries);
+    }
+    @Test void mockSuccessIsIdempotentAndUsesNormalPaymentLifecycle() throws Exception {
+        mockOrder();
+        mockOutcome("SUCCESS").andExpect(jsonPath("$.code").value(1)).andExpect(jsonPath("$.data.payStatus").value(1));
+        mockOutcome("SUCCESS").andExpect(jsonPath("$.data.payStatus").value(1));
+        assertEquals(2,statusOf(10));
+        assertEquals(1,jdbc.queryForObject("select count(*) from mock_payment",Integer.class));
+        assertTrue(jdbc.queryForObject("select wechat_transaction_id from orders where id=10",String.class).startsWith("MOCK_"));
+    }
+    @ParameterizedTest @ValueSource(strings={"FAILED","CANCELLED"})
+    void mockFailureAndCashierCancelKeepOrderUnpaidAndCanRetry(String outcome) throws Exception {
+        mockOrder(); mockOutcome(outcome).andExpect(jsonPath("$.data.payStatus").value(0));
+        assertEquals(1,statusOf(10));
+        mockOutcome("SUCCESS").andExpect(jsonPath("$.data.payStatus").value(1));
+    }
+    @Test void mockLostNotificationIsRecoveredByExistingActiveQuery() throws Exception {
+        mockOrder(); mockOutcome("LOST_NOTIFY").andExpect(jsonPath("$.data.payStatus").value(0));
+        mvc.perform(post("/user/order/10/payment/confirm").header("authentication",token()))
+            .andExpect(jsonPath("$.data.payStatus").value(1));
+        assertEquals(0,provider().paymentQueries);
+    }
+    @Test void mockRefundReusesDurableRefundWorker() throws Exception {
+        mockOrder(); mockOutcome("SUCCESS").andExpect(jsonPath("$.data.payStatus").value(1));
+        mvc.perform(put("/user/order/cancel/10").header("authentication",token())).andExpect(jsonPath("$.code").value(1));
+        systemBean(PaymentRecoveryService.class).processDue();
+        assertEquals("SUCCESS",refundState(10)); assertEquals(2,paymentState(10)); assertEquals(0,provider().refundCalls);
+    }
+    @Test void mockEndpointCannotChangeRealOrdersOrOtherUsers() throws Exception {
+        mockOutcome("SUCCESS").andExpect(status().isForbidden());
+        mockOrder(); jdbc.update("update orders set user_id=84 where id=10");
+        mockOutcome("SUCCESS").andExpect(status().isForbidden()); assertEquals(0,paymentState(10));
+    }
+    @Test void mockEndpointRejectsProductionAndUnknownOutcomes() throws Exception {
+        mockOrder(); mockOutcome("WHATEVER").andExpect(jsonPath("$.code").value(0));
+        context.getEnvironment().setActiveProfiles("prod");
+        mockOutcome("SUCCESS").andExpect(status().isForbidden()); assertEquals(0,paymentState(10));
+    }
+
     @Test void pendingPaymentWithLostNotificationIsConfirmedBeforeTimeout() {
         provider().queriedPayment=paymentResource("order-10","wx-10");
         systemBean(PaymentRecoveryService.class).reconcileOrder(10L);
@@ -1563,7 +1731,7 @@ class OrderPaymentModuleTest {
         if(!factory.getConfiguration().hasMapper(OrderMaintenanceMapper.class)) factory.getConfiguration().addMapper(OrderMaintenanceMapper.class);
         OrderMaintenanceMapper mapper=new SqlSessionTemplate(factory).getMapper(OrderMaintenanceMapper.class);
         for(long id=11;id<=15;id++) addOrder(id,42,1,0);
-        jdbc.execute("insert into tenant values(2,1)");
+        jdbc.execute("insert into tenant(id,status) values(2,1)");
         jdbc.execute("insert into store(id,tenant_id,status) values(3,2,1)");
         jdbc.update("update orders set pay_status=1 where id=11");
         jdbc.update("update orders set payment_check_time=? where id=12",LocalDateTime.now());

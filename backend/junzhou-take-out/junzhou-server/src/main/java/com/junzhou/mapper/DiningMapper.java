@@ -13,7 +13,7 @@ public interface DiningMapper {
     @Select(GUARD+"select * from store_dining_table where id=#{id} and "+SCOPE+" for update"+"</script>")
     DiningTable lock(@Param("tenant") Long tenant,@Param("store") Long store,@Param("id") Long id);
     // Capability lookup: server resolves ownership from the opaque token, never from supplied IDs.
-    @Select("select d.*,s.name store_name from store_dining_table d join store s on s.id=d.store_id and s.tenant_id=d.tenant_id join tenant t on t.id=s.tenant_id where d.qr_token=#{token} and d.enabled=1 and s.status=1 and t.status=1")
+    @Select("select d.*,s.name store_name,t.name merchant_name from store_dining_table d join store s on s.id=d.store_id and s.tenant_id=d.tenant_id join tenant t on t.id=s.tenant_id where d.qr_token=#{token} and d.enabled=1 and s.status=1 and t.status=1")
     DiningTable resolve(String token);
     @Insert(GUARD+"insert into store_dining_table(tenant_id,store_id,name,enabled,qr_token) values(#{scopeTenant},#{scopeStore},#{name},#{enabled},#{qrToken})"+"</script>")
     @Options(useGeneratedKeys=true,keyProperty="id") void create(DiningTable table);

@@ -2,7 +2,7 @@
 <template>
   <view class="box order_list_cont" v-if="Object.keys(orderDetailsData).length">
     <view class="order_list">
-      <view class="word_text"><view class="brand-order-heading"><image class="brand-order-logo" src="../../../static/brand/junzhou-logo.png" mode="aspectFit"></image><text>均州鱼庄</text></view><text class="word_style">{{ storeName }}</text></view>
+      <view class="word_text"><view class="brand-order-heading"><text>{{ orderDetailsData.merchantName || '商家' }}</text></view><text class="word_style">{{ storeName }}</text></view>
       <view class="order-type">
         <view class="type_item" v-for="(obj, index) in orderDataes" :key="index">
           <view class="dish_img">
@@ -21,12 +21,12 @@
             </view>
             <view class="dish_active">
               <text>￥</text>
-              {{ obj.amount.toFixed(2) }}
+              {{ moneyText(obj.amount) }}
             </view>
           </view>
         </view>
         <view class="iconUp">
-          <view @click="showDisplay = !showDisplay" v-if="orderDetailsData.orderDetailList.length > 2">
+          <view @click="$emit('toggle')" v-if="orderDetailsData.orderDetailList.length > 2">
             <text>{{ !showDisplay ? "展开更多" : "点击收起" }}</text>
             <image class="icon_img" :class="showDisplay ? 'icon_imgDown' : ''" src="../../../static/toRight.png" mode="">
             </image>
@@ -36,18 +36,18 @@
           <view class="orderInfo">
             <text class="text">打包费</text>
             <text class="may">￥</text>
-            {{ packFee.toFixed(2) }}
+            {{ moneyText(packFee) }}
           </view>
           <view class="orderInfo">
             <text class="text">配送费</text>
             <text class="may">￥</text>
-            {{ deliveryFee }}
+            {{ moneyText(deliveryFee) }}
           </view>
           <view class="totalMoney">
             合计
             <text class="text">
               <text>￥</text>
-              {{ totalAmount.toFixed(2) }}
+              {{ moneyText(totalAmount) }}
             </text>
           </view>
         </view>
@@ -56,15 +56,25 @@
   </view>
 </template>
 <script>
-import { orderSnapshotMoney, orderSnapshotStoreName } from "../../../utils/order-snapshot";
-import { DELIVERY_FEE } from "../../../utils/order-pricing";
+import { orderSnapshotStoreName } from "../../../utils/order-snapshot";
 export default {
   computed: {
     storeName() { return orderSnapshotStoreName(this.orderDetailsData); },
-    packFee() { return orderSnapshotMoney(this.orderDetailsData, "packFee", this.orderDetailsData.packAmount); },
-    totalAmount() { return orderSnapshotMoney(this.orderDetailsData, "amount", this.orderDetailsData.amount); },
+    packFee() { return this.snapshotMoney("packFee", this.orderDetailsData.packFee ?? this.orderDetailsData.packAmount); },
+    totalAmount() { return this.snapshotMoney("amount", this.orderDetailsData.amount); },
     deliveryFee() {
-      return orderSnapshotMoney(this.orderDetailsData, "deliveryFee", this.orderDetailsData.deliveryFee == null ? DELIVERY_FEE : this.orderDetailsData.deliveryFee);
+      return this.snapshotMoney("deliveryFee", this.orderDetailsData.deliveryFee);
+    },
+  },
+  methods: {
+    moneyText(value) {
+      return value == null || value === '' || !Number.isFinite(Number(value)) || Number(value) < 0 ? '—' : Number(value).toFixed(2);
+    },
+    snapshotMoney(key, fallback) {
+      let snapshot = {};
+      try { snapshot = JSON.parse(this.orderDetailsData.pricingSnapshot || '{}') || {}; } catch (error) {}
+      const value = snapshot[key] ?? fallback;
+      return this.moneyText(value) === '—' ? null : Number(value);
     },
   },
   // 获取父级传的数据

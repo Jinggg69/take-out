@@ -92,6 +92,7 @@ export const payOrder = (params) =>
 export const userLogin = (params) => {
 	return request({
 		url: '/user/user/login',
+        scope: 'public',
 		method: 'POST',
 		params
 	})
@@ -221,6 +222,7 @@ export const submitOrderSubmit = (params) => {
 export const queryAddressBookList = (params) => {
 	return request({
 		url: '/user/addressBook/list',
+        scope: 'identity',
 		method: 'GET',
 		params
 	})
@@ -230,6 +232,7 @@ export const queryAddressBookList = (params) => {
 export const putAddressBookDefault = (params) => {
 	return request({
 		url: '/user/addressBook/default',
+        scope: 'identity',
 		method: 'PUT',
 		params
 	})
@@ -240,6 +243,7 @@ export const putAddressBookDefault = (params) => {
 export const addAddressBook = (params) => {
 	return request({
 		url: '/user/addressBook',
+        scope: 'identity',
 		method: 'POST',
 		params
 	})
@@ -249,6 +253,7 @@ export const addAddressBook = (params) => {
 export const editAddressBook = (params) => {
 	return request({
 		url: '/user/addressBook',
+        scope: 'identity',
 		method: 'PUT',
 		params
 	})
@@ -258,6 +263,7 @@ export const editAddressBook = (params) => {
 export const delAddressBook = (id) => {
 	return request({
 		url: `/user/addressBook/?id=${id}`,
+        scope: 'identity',
 		method: 'DELETE',
 		params: { id }
 	})
@@ -267,6 +273,7 @@ export const delAddressBook = (id) => {
 export const queryAddressBookById = (params) => {
 	return request({
 		url: `/user/addressBook/${params.id}`,
+        scope: 'identity',
 		method: 'GET',
 		params
 	})
@@ -286,6 +293,7 @@ export const oneOrderAgain = (params) => {
 export const getAddressBookDefault = () => {
 	return request({
 		url: '/user/addressBook/default',
+        scope: 'identity',
 		method: 'GET'
 	})
 }
@@ -352,6 +360,12 @@ export const confirmOrderPayment = id => request({
 	method: 'POST'
 })
 
+export const submitMockPayment = (id, outcome) => request({
+	url: `/user/order/${id}/payment/mock`,
+	method: 'POST',
+	params: { outcome }
+})
+
 export const repetitionOrder = (params) =>
 	request({
 		url: `/user/order/repetition/${params}`,
@@ -380,5 +394,15 @@ export const queryOrdersCheckStatus = (params) =>
 // 同租户可选门店
 export const getStores = () => request({ url: '/user/stores', method: 'GET' })
 
-export const resolveDining = token => request({ url: '/user/dining/resolve', method: 'POST', params: { token } })
+export const resolveDining = token => request({ url: '/user/dining/resolve', scope: 'identity', method: 'POST', params: { token } })
 export const joinDining = token => request({ url: '/user/dining/join', method: 'POST', params: { token } })
+
+// Platform discovery and user-owned resources do not depend on ordering context.
+export const getMerchants = params => request({ url: '/user/merchants', params, scope: 'public' })
+export const getMerchant = id => request({ url: `/user/merchants/${encodeURIComponent(id)}`, scope: 'public' })
+export const getMerchantStores = (id, params) => request({ url: `/user/merchants/${encodeURIComponent(id)}/stores`, params, scope: 'public' })
+export const getStoreContext = id => request({ url: `/user/stores/${encodeURIComponent(id)}/context`, scope: 'public' })
+export const getUserProfile = () => request({ url: '/user/me', scope: 'identity' })
+export const getMyOrders = params => request({ url: '/user/me/orders', params, scope: 'identity' })
+export const getMyOrderDetail = (id, params) => request({ url: `/user/me/orders/${encodeURIComponent(id)}`, params, scope: 'identity' })
+export const getOrderFilters = params => request({ url: '/user/me/order-filters', params, scope: 'identity' })

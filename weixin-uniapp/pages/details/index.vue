@@ -2,24 +2,21 @@
   <view>
     <!-- 导航 -->
     <uni-nav-bar @clickLeft="goBack" left-icon="back" leftIcon="arrowleft" title="订单详情" statusBar="true" fixed="true"
-      color="#ffffff" backgroundColor="#9E2026"></uni-nav-bar>
+      color="#ffffff" backgroundColor="#164B3B"></uni-nav-bar>
     <!-- end -->
     <view class="order_content orderDetail">
       <view class="order_content_box" scroll-y="true" scroll-top="0rpx">
         <!-- 支付状态 -->
         <status ref="status" :timeout="timeout" :orderDetailsData="orderDetailsData" :rocallTime="rocallTime"
           @statusWord="statusWord" @paymentTime="paymentTime" @handlePay="handlePay" @handleReminder="handleReminder"
-          @handleRefund="handleRefund"></status>
+          @handleRefund="handleRefund" @handleCancel="handleCancel" @oneMoreOrder="oneMoreOrder"></status>
         <!-- end -->
         <view v-if="orderDetailsData.fulfillmentType === 'PICKUP'" class="box boxPad">
-          <view>到店自取 · {{ orderDetailsData.fulfillmentStatus === 'READY' ? '待取餐，请到店出示凭证' : orderDetailsData.fulfillmentStatus === 'PREPARING' ? '制作中，请等待商家备餐' : orderDetailsData.fulfillmentStatus === 'COMPLETED' ? '已取餐' : orderDetailsData.fulfillmentStatus === 'CANCELLED' ? '已取消' : '等待支付或商家接单' }}</view>
+          <view>到店自取 · {{ orderDetailsData.fulfillmentStatus === 'READY' ? '待取餐，请到店出示取餐号' : orderDetailsData.fulfillmentStatus === 'PREPARING' ? '制作中，请等待商家备餐' : orderDetailsData.fulfillmentStatus === 'COMPLETED' ? '已取餐' : orderDetailsData.fulfillmentStatus === 'CANCELLED' ? '已取消' : '等待支付或商家接单' }}</view>
           <view>取餐门店：{{ pickupStore.name || '—' }}</view>
           <view>门店地址：{{ pickupStore.address || '请联系商家确认' }}</view>
           <view>取餐号：{{ orderDetailsData.pickupNumber || '—' }}</view>
           <view>联系人：{{ orderDetailsData.contactName }} {{ orderDetailsData.contactPhone }}</view>
-          <view v-if="orderDetailsData.pickupToken">核销凭证（请仅向店员出示）</view>
-          <text v-if="orderDetailsData.pickupToken" selectable>{{ orderDetailsData.pickupToken }}</text>
-          <button v-if="orderDetailsData.pickupToken" @click="copyPickupToken">复制核销凭证</button>
           <button @click="getBaseData(orderDetailsData.id)">刷新取餐状态</button>
         </view>
         <view v-if="orderDetailsData.fulfillmentType === 'DINE_IN'" class="box boxPad">
@@ -29,7 +26,7 @@
         </view>
         <!-- 订单详情 -->
         <order-detail :orderDataes="orderDataes" :orderDetailsData="orderDetailsData"
-          :showDisplay="showDisplay"></order-detail>
+          :showDisplay="showDisplay" @toggle="showDisplay = !showDisplay"></order-detail>
         <!-- end -->
         <!-- 联系商家 -->
         <view class="box contactMerchant">
@@ -79,11 +76,10 @@
     </view>
   </view>
 </template>
-<script src="../../utils/common.js"></script>
 <script src="./index.js"></script>
 <style src="./../common/Navbar/navbar.scss" lang="scss" scoped></style>
 <style src="../order/style.scss" lang="scss"></style>
 
 <style lang="scss" scoped>
-.orderDetail { background: #FFF8EE; }
+.orderDetail { background: #F5F8F4; }
 </style>

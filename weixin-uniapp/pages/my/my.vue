@@ -1,227 +1,39 @@
 <template>
-  <view>
-    <uni-nav-bar
-      @clickLeft="goBack"
-      left-icon="back"
-      leftIcon="arrowleft"
-      title="个人中心"
-      statusBar="true"
-      fixed="true"
-      color="#ffffff"
-      backgroundColor="#9E2026"
-    ></uni-nav-bar>
-
-    <view class="my-center">
-      <view class="brand-account">
-        <image class="brand-account-logo" src="../../static/brand/junzhou-logo.png" mode="aspectFit"></image>
-        <view><view class="brand-account-name">均州鱼庄</view><text class="brand-account-caption">我的账户与订单</text></view>
-      </view>
-      <!-- 头像展示部分 -->
-      <head
-        :psersonUrl="psersonUrl"
-        :nickName="nickName"
-        :gender="gender"
-        :phoneNumber="phoneNumber"
-        :getPhoneNum="getPhoneNum"
-      ></head>
-
-      <view class="container">
-        <!-- 地址和历史订单 -->
-        <order-info @goAddress="goAddress" @goOrder="goOrder"></order-info>
-        <!-- 最近订单 -->
-        <!-- 最近订单title -->
-        <view
-          class="recent"
-          v-if="recentOrdersList && recentOrdersList.length > 0"
-        >
-          <text class="order_line">最近订单</text>
-        </view>
-        <order-list
-          :scrollH="scrollH"
-          @lower="lower"
-          @goDetail="goDetail"
-          @oneOrderFun="oneOrderFun"
-          @getOvertime="getOvertime"
-          @statusWord="statusWord"
-          @numes="numes"
-          :loading="loading"
-          :loadingText="loadingText"
-          :recentOrdersList="recentOrdersList"
-        ></order-list>
-      </view>
+  <view class="app-page">
+    <view class="app-heading">我的</view>
+    <view class="app-panel app-row account-panel">
+      <image v-if="profile.avatarUrl" class="app-logo" :src="profile.avatarUrl" mode="aspectFill" />
+      <view class="app-grow"><view class="app-title">{{ app.token ? profile.nickname || profile.nickName || '微信用户' : '登录后管理账户' }}</view><view class="app-meta">{{ app.token ? '我的订单与常用地址' : '地址簿可在各商家共用' }}</view></view>
+      <button v-if="!app.token" class="app-button" :loading="loading" @click="login">登录</button>
     </view>
+    <view v-if="loading && app.token" class="app-muted" role="status">正在加载账户信息…</view>
+    <view v-if="error" class="app-panel"><view class="app-error">{{ error }}</view><button class="app-link" @click="app.token ? loadProfile() : login()">重试</button></view>
+    <view class="app-section-title">常用服务</view>
+    <view class="app-list">
+      <button class="app-list-row" @click="address"><view class="app-grow"><view>收货地址</view><view class="app-meta">管理收货人和配送地址</view></view><text class="app-status">管理</text></button>
+      <button class="app-list-row" @click="orders"><view class="app-grow"><view>我的订单</view><view class="app-meta">查看当前商家的订单</view></view><text class="app-status">查看</text></button>
+      <button class="app-list-row" @click="openMerchantPicker"><view class="app-grow"><view>选择商家与门店</view><view class="app-meta">{{ context.storeName || '尚未选择门店' }}</view></view><text class="app-status">选择</text></button>
+    </view>
+    <view class="app-section-title">当前门店</view>
+    <view v-if="app.selectedStoreId" class="app-panel"><view class="app-title">{{ context.storeName }}</view><view v-if="context.address" class="app-meta">{{ context.address }}</view><button v-if="context.contactPhone" class="app-link" @click="contact">联系门店 · {{ context.contactPhone }}</button><view v-else class="app-meta">门店暂未提供联系电话</view></view>
+    <AppState v-else title="还没有选择门店" message="选择门店后，可查看营业信息和联系方式。" action="选择商家" @retry="openMerchantPicker" />
   </view>
 </template>
-
-<script>
-import { getOrderPage, repetitionOrder, delShoppingCart } from "../api/api.js";
-import { mapMutations } from "vuex";
-import { statusWord, getOvertime } from "@/utils/index.js";
-
-import HeadInfo from "./components/headInfo.vue"; //头部
-import OrderInfo from "./components/orderInfo.vue"; //地址
-import OrderList from "./components/orderList.vue"; //最近订单
-export default {
-  data() {
-    return {
-      psersonUrl: "../../static/btn_waiter_sel.png",
-      nickName: "",
-      gender: "0",
-      phoneNumber: "18500557668",
-      recentOrdersList: [],
-      sumOrder: {
-        amount: 0,
-        number: 0,
-      },
-      status: "",
-      scrollH: 0,
-      pageInfo: {
-        page: 1,
-        pageSize: 10,
-        total: 0,
-      },
-      loadingText: "",
-      loading: false,
-    };
-  },
-  components: {
-    HeadInfo,
-    OrderInfo,
-    OrderList,
-  },
-  filters: {
-    getPhoneNum(str) {
-      return str.replace(/\-/g, "");
-    },
-  },
-  onLoad() {
-    this.psersonUrl =
-      this.$store.state.baseUserInfo &&
-      this.$store.state.baseUserInfo.avatarUrl;
-    this.nickName =
-      this.$store.state.baseUserInfo && this.$store.state.baseUserInfo.nickName;
-    this.gender =
-      this.$store.state.baseUserInfo && this.$store.state.baseUserInfo.gender;
-    this.phoneNumber =
-      this.$store.state.shopPhone && this.$store.state.shopPhone;
-    this.getList();
-  },
-  created() {},
-  onReady() {
-    uni.getSystemInfo({
-      success: (res) => {
-        this.scrollH = res.windowHeight - uni.upx2px(100);
-      },
-    });
-  },
-  methods: {
-    ...mapMutations(["setAddressBackUrl"]),
-    statusWord(obj) {
-      return statusWord(obj.status, obj.time);
-    },
-    getOvertime(time) {
-      return getOvertime(time);
-    },
-    // 获取列表数据
-    getList() {
-      const params = {
-        pageSize: 10,
-        page: this.pageInfo.page,
-      };
-      getOrderPage(params).then((res) => {
-        if (res.code === 1) {
-          this.recentOrdersList = this.recentOrdersList.concat(
-            res.data.records
-          );
-          this.pageInfo.total = res.data.total;
-          this.loadingText = "";
-          this.loading = false;
-        }
-      });
-    },
-    // 去地址页面
-    goAddress() {
-      this.setAddressBackUrl("/pages/my/my");
-      // TODO
-      uni.redirectTo({
-        url: "/pages/address/address?form=" + "my",
-      });
-    },
-    // 去历史订单页面
-    goOrder() {
-      // TODO
-      uni.navigateTo({
-        url: "/pages/historyOrder/historyOrder",
-      });
-    },
-    async oneOrderFun(id) {
-      let pages = getCurrentPages();
-      let routeIndex = pages.findIndex(
-        (item) => item.route === "pages/index/index"
-      );
-      // 先清空购物车
-      await delShoppingCart();
-      repetitionOrder(id).then((res) => {
-        if (res.code === 1) {
-          uni.navigateBack({
-            delta: routeIndex > -1 ? pages.length - routeIndex : 1,
-          });
-        }
-      });
-    },
-    quitClick() {},
-    // 去详情页面
-    goDetail(id) {
-      this.setAddressBackUrl("/pages/my/my");
-      uni.redirectTo({
-        url: "/pages/details/index?orderId=" + id,
-      });
-    },
-    dataAdd() {
-      const pages = Math.ceil(this.pageInfo.total / 10); //计算总页数
-      if (this.pageInfo.page === pages) {
-        this.loadingText = "没有更多了";
-        this.loading = true;
-      } else {
-        this.pageInfo.page++;
-        this.getList();
-      }
-    },
-
-    lower() {
-      this.loadingText = "数据加载中...";
-      this.loading = true;
-      this.dataAdd();
-    },
-    goBack() {
-      uni.redirectTo({
-        url: "/pages/index/index",
-      });
-    },
-  },
-};
+<script setup>
+import { computed, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { useAppStore } from '@/store/index.js'
+import { getUserProfile } from '@/pages/api/api.js'
+import { openMerchantPicker } from '@/services/context.js'
+import AppState from '@/components/app-state/index.vue'
+const app = useAppStore(), profile = ref({}), loading = ref(false), error = ref(''), context = computed(() => app.storeContext || {})
+async function loadProfile() { if (!app.token) { profile.value = {}; return } loading.value = true; error.value = ''; const token = app.token; try { const r = await getUserProfile(); if (token !== app.token) return; if (r.code !== 1) throw new Error(r.msg || '账户信息加载失败'); profile.value = r.data || {} } catch (e) { if (token === app.token) error.value = e.message || e.msg || '账户信息加载失败，请重试' } finally { loading.value = false } }
+async function login() { loading.value = true; error.value = ''; try { await app.ensureLogin(); await loadProfile() } catch (e) { error.value = e.message || e.msg || '登录未完成，请重试' } finally { loading.value = false } }
+async function address() { error.value = ''; try { await app.ensureLogin(); app.setAddressBackUrl('/pages/my/my'); uni.navigateTo({ url: '/pages/address/address?form=my' }) } catch (e) { error.value = e.message || e.msg || '登录未完成，请重试' } }
+function orders() { uni.switchTab({ url: '/pages/orders/index' }) }
+function contact() { uni.makePhoneCall({ phoneNumber: context.value.contactPhone }) }
+onShow(loadProfile)
 </script>
-<style lang="scss" scoped>
-.my-center {
-  background: #f6f6f6;
-  height: 100%;
-
-  .container {
-    margin-top: 20rpx;
-    height: calc(100% - 194rpx);
-  }
-}
-::v-deep .uni-navbar--border {
-  border-width: 0 !important;
-}
-</style>
-
-<style lang="scss" scoped>
-.my-center { background: #FFF8EE; min-height: 100%; padding-bottom: env(safe-area-inset-bottom); }
-.my-center .container { height: auto; }
-.recent { margin: 24rpx 24rpx 12rpx; font-size: 32rpx; font-weight: 600; color: #302824; border-left: 6rpx solid #C9A45C; padding-left: 16rpx; }
-.brand-account { display: flex; align-items: center; gap: 24rpx; padding: 28rpx 24rpx; background: #9E2026; border-bottom: 4rpx solid #C9A45C; }
-.brand-account-logo { width: 104rpx; height: 104rpx; flex-shrink: 0; border-radius: 16rpx; }
-.brand-account-name { color: #FFF8EE; font-size: 34rpx; font-weight: 600; }
-.brand-account-caption { color: #EADFD1; font-size: 24rpx; }
+<style lang="scss">@import '@/styles/app.scss';
+.account-panel { margin-top: 28rpx; min-height: 180rpx; }
 </style>

@@ -18,6 +18,23 @@ import java.util.DuplicateFormatFlagsException;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+    @ExceptionHandler(com.junzhou.exception.MiniappApiException.class)
+    public org.springframework.http.ResponseEntity<Result<String>> miniapp(com.junzhou.exception.MiniappApiException ex) {
+        return org.springframework.http.ResponseEntity.status(ex.getStatus()).body(Result.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler({org.springframework.web.bind.MissingServletRequestParameterException.class,
+        org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
+        org.springframework.http.converter.HttpMessageNotReadableException.class})
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<String> invalidRequest(Exception ex) { return Result.error("请求参数错误"); }
+
+    @ExceptionHandler(org.springframework.dao.DataAccessException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public Result<String> dependencyFailure(org.springframework.dao.DataAccessException ex) {
+        log.error("业务数据访问失败",ex);
+        return Result.error("服务暂不可用，请稍后重试");
+    }
 
     /** 拒绝无权访问，不暴露内部鉴权细节。 */
     @ExceptionHandler(SecurityException.class)

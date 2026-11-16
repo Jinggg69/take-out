@@ -48,19 +48,21 @@ public class DiningServiceImpl implements DiningService {
     }
     /** 仅随机桌码可解析归属，响应不包含当前桌次或其他顾客资料。 */
     @Override public DiningTable resolve(String token){
-        RequestScope.requireUserId();
+        RequestScope.requireAuthenticatedUserId();
         if(token==null || !token.matches("[0-9a-f]{32}"))throw invalid();
         DiningTable row=mapper.resolve(token);if(row==null)throw invalid();
         row.setCurrentSessionId(null);return row;
     }
     /** 加入桌次前核对请求门店；同桌顾客仍各自下单。 */
     @Override @Transactional public DiningTable join(String token){
+        RequestScope.requireUserId();
         DiningTable found=resolve(token);
         if(!tenant().equals(found.getTenantId()) || !store().equals(found.getStoreId()))throw invalid();
         DiningTable row=lock(found.getId());
         if(!Integer.valueOf(1).equals(row.getEnabled()) || !token.equals(row.getQrToken()))throw invalid();
         if(row.getCurrentSessionId()==null){row.setCurrentSessionId(random());mapper.open(row);mapper.update(row);}
-        mapper.join(row.getCurrentSessionId(),RequestScope.requireUserId());return row;
+        mapper.join(row.getCurrentSessionId(),RequestScope.requireUserId());
+        row.setStoreName(found.getStoreName()); row.setMerchantName(found.getMerchantName()); return row;
     }
     /** 与关闭、停用和轮换共用桌台行锁，保证验证与下单原子性。 */
     @Override public DiningTable validate(Long tableId,String session,String token){
