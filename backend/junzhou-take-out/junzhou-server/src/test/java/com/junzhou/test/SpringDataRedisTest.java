@@ -90,6 +90,33 @@ class SpringDataRedisTest {
     }
 
     @Test
+    void menuListsRoundTripWithProductionSerializationAndExpire() {
+        long tenant = UUID.randomUUID().getMostSignificantBits() & Long.MAX_VALUE;
+        String prefix = "junzhou:v3:tenant:" + tenant + ":menu:";
+        String key = prefix + "store:1001:publicDishes:category:7:version:initial";
+        testKeys.add(key); testKeys.add(prefix + "version");
+        RequestScope.set(RequestScope.forSystem(tenant, 1001L));
+        com.junzhou.service.StoreMenuService target = new com.junzhou.service.StoreMenuService();
+        com.junzhou.mapper.StoreMenuMapper mapper = org.mockito.Mockito.mock(com.junzhou.mapper.StoreMenuMapper.class);
+        com.junzhou.mapper.DishFlavorMapper flavors = org.mockito.Mockito.mock(com.junzhou.mapper.DishFlavorMapper.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(target, "mapper", mapper);
+        org.springframework.test.util.ReflectionTestUtils.setField(target, "flavorMapper", flavors);
+        org.mockito.Mockito.when(mapper.publicDishes(7L)).thenReturn(java.util.Collections.singletonList(
+                com.junzhou.entity.Dish.builder().id(9L).name("缓存菜品").price(new java.math.BigDecimal("12.50")).build()));
+        org.mockito.Mockito.when(flavors.getByDishId(9L)).thenReturn(java.util.Collections.singletonList(
+                com.junzhou.entity.DishFlavor.builder().id(1L).dishId(9L).name("辣度").value("微辣").build()));
+        org.springframework.aop.aspectj.annotation.AspectJProxyFactory factory = new org.springframework.aop.aspectj.annotation.AspectJProxyFactory(target);
+        factory.addAspect(new com.junzhou.cache.MenuCacheAspect(redisTemplate));
+        com.junzhou.service.StoreMenuService proxy = factory.getProxy();
+        assertEquals("缓存菜品", proxy.publicDishes(7L).get(0).getName());
+        assertEquals("微辣", proxy.publicDishes(7L).get(0).getFlavors().get(0).getValue());
+        org.mockito.Mockito.verify(mapper).publicDishes(7L);
+        assertEquals(new java.math.BigDecimal("12.50"), proxy.publicDishes(7L).get(0).getPrice());
+        Long ttl = redisTemplate.getExpire(key, TimeUnit.SECONDS);
+        assertNotNull(ttl); assertTrue(ttl > 0 && ttl <= 180);
+    }
+
+    @Test
     void testHash() {
         String key = newKey("hash");
 

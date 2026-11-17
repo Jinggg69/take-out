@@ -47,6 +47,8 @@ logging:
     org.apache.http.headers: 'OFF'
 
 sky:
+  menu-cache:
+    ttl-seconds: ${MENU_CACHE_TTL_SECONDS:180}
   payment:
     channel: ${PAYMENT_CHANNEL:wechat}
     jobs-enabled: ${PAYMENT_JOBS_ENABLED:true}
