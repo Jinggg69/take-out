@@ -109,7 +109,7 @@ class OrderPaymentModuleTest {
         BaseContext.removeCurrentId(); RequestScope.clear();
         context = new AnnotationConfigWebApplicationContext();
         context.setServletContext(new MockServletContext());
-        context.register(com.junzhou.test.support.LegacyMvcScopeConfiguration.class);
+        context.register(com.junzhou.test.support.LegacyMvcScopeConfiguration.class, com.junzhou.test.support.DisabledRateLimitConfiguration.class);
         context.register(WebMvcConfiguration.class, OrderController.class, OrderServiceImpl.class, com.junzhou.service.impl.PickupServiceImpl.class,
                 GlobalExceptionHandler.class, JwtTokenUserInterceptor.class, JwtTokenAdminInterceptor.class,
                 PaymentTestConfiguration.class, WebSocketServer.class, com.junzhou.service.impl.AdminSessionServiceImpl.class, com.junzhou.service.impl.OrderPricingServiceImpl.class,

@@ -113,3 +113,24 @@ test('a network failure does not strand the request in the duplicate registry', 
       axios.isAxiosError(error) && !axios.isCancel(error))
   }
 })
+
+test('429 and protection 503 retain Blob messages and retry metadata without logout or replay', async () => {
+  for (const [status, header, seconds] of [[429, '42', 42], [429, undefined, 1], [429, '-1', 1], [503, '3', 3]] as const) {
+    let logout = 0; let writes = 0; let calls = 0
+    const client = createHttpClient({ baseURL, onUnauthorized: () => { logout++ }, onMutationPendingChange: n => { writes += n } })
+    client.defaults.adapter = async config => {
+      calls++
+      const response = { config, status, statusText: 'Rejected', headers: new axios.AxiosHeaders(header ? { 'Retry-After': header } : {}), data: new Blob([JSON.stringify({ code: 0, msg: '请稍后操作' })], { type: 'application/json' }) }
+      throw new axios.AxiosError('transport error', 'ERR_BAD_RESPONSE', config, undefined, response)
+    }
+    for (let i = 0; i < 2; i++) {
+      await assert.rejects(client.post('/export', {}, { responseType: 'blob' }), (error: unknown) => {
+        const e = error as Error & { status: number; retryAfterSeconds: number; msg: string }
+        assert.equal(e.status, status); assert.equal(e.retryAfterSeconds, seconds); assert.equal(e.msg, '请稍后操作'); assert.equal(e.message, e.msg)
+        return true
+      })
+      assert.equal(writes, 0)
+    }
+    assert.equal(calls, 2); assert.equal(logout, 0)
+  }
+})

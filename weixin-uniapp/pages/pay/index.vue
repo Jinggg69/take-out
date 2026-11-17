@@ -90,7 +90,7 @@ export default {
       rocallTime: "",
       orderId: null,
       paymentStoreId: null,
-      paymentUserId: null, paymentAuthEpoch: null,
+      paymentUserId: null, paymentAuthEpoch: null, paymentGeneration: null,
       orderDataInfo: {},
       activeRadio: 0,
       payMethodList: ["微信支付"],
@@ -109,6 +109,7 @@ export default {
     this.paymentStoreId = this.$appStore.selectedStoreId;
     this.paymentUserId = this.$appStore.userId;
     this.paymentAuthEpoch = this.$appStore.authEpoch;
+    this.paymentGeneration = this.$appStore.storeGeneration;
     const matches = saved => saved && (saved.userId == null || String(saved.userId) === String(this.$appStore.userId)) && String(saved.orderId) === String(this.orderId) && String(saved.storeId) === String(this.$appStore.selectedStoreId);
     const pending = this.$appStore.paymentInFlight;
     const legacy = uni.getStorageSync && uni.getStorageSync('paymentRecovery:' + this.$appStore.userId);
@@ -135,7 +136,7 @@ export default {
     },
     orderData() { return this.$appStore.orderData }, shopInfo() { return this.$appStore.shopInfo },
     isCurrentPayment(run) {
-      return this.pageActive && run === this.paymentRun && (this.paymentUserId === null || (String(this.paymentUserId) === String(this.$appStore.userId) && this.paymentAuthEpoch === this.$appStore.authEpoch));
+      return this.pageActive && run === this.paymentRun && (this.paymentStoreId === null || String(this.paymentStoreId) === String(this.$appStore.selectedStoreId)) && (this.paymentGeneration === null || this.paymentGeneration === this.$appStore.storeGeneration) && (this.paymentUserId === null || (String(this.paymentUserId) === String(this.$appStore.userId) && this.paymentAuthEpoch === this.$appStore.authEpoch));
     },
     stopPaymentWork() {
       this.pageActive = false;
@@ -150,7 +151,7 @@ export default {
     async handleSave() {
       if (this.paying || !this.pageActive || this.paymentFinished) return;
       if (!this.$appStore.selectedStoreId || (this.paymentStoreId && String(this.paymentStoreId) !== String(this.$appStore.selectedStoreId))) { uni.showToast({ title: '请返回订单原门店支付', icon: 'none' }); return; }
-      if (this.paymentUserId === null) { this.paymentUserId = this.$appStore.userId; this.paymentAuthEpoch = this.$appStore.authEpoch; }
+      if (this.paymentUserId === null) { this.paymentUserId = this.$appStore.userId; this.paymentAuthEpoch = this.$appStore.authEpoch; this.paymentStoreId = this.$appStore.selectedStoreId; this.paymentGeneration = this.$appStore.storeGeneration; }
       this.paying = true;
       this.updatePaymentLock(true);
       const run = ++this.paymentRun;
@@ -200,7 +201,7 @@ export default {
     async chooseMock(outcome) {
       if (this.paying || !this.pageActive || !this.mockCashier) return;
       if (!this.$appStore.selectedStoreId || (this.paymentStoreId && String(this.paymentStoreId) !== String(this.$appStore.selectedStoreId))) { uni.showToast({ title: '请返回订单原门店支付', icon: 'none' }); return; }
-      if (this.paymentUserId === null) { this.paymentUserId = this.$appStore.userId; this.paymentAuthEpoch = this.$appStore.authEpoch; }
+      if (this.paymentUserId === null) { this.paymentUserId = this.$appStore.userId; this.paymentAuthEpoch = this.$appStore.authEpoch; this.paymentStoreId = this.$appStore.selectedStoreId; this.paymentGeneration = this.$appStore.storeGeneration; }
       this.paying = true;
       this.needsConfirmation = true;
       this.updatePaymentLock(true);
@@ -228,9 +229,24 @@ export default {
         }
       }
     },
+    async waitForConfirmation(ms, run) {
+      let unwatch;
+      await new Promise(resolve => {
+        const done = () => { clearTimeout(this.confirmTimer); this.confirmWait = null; resolve(); };
+        this.confirmWait = done;
+        this.confirmTimer = setTimeout(done, ms);
+        if (this.$watch) unwatch = this.$watch(() => [this.$appStore.selectedStoreId, this.$appStore.storeGeneration, this.$appStore.userId, this.$appStore.authEpoch], () => {
+          if (!this.isCurrentPayment(run)) this.stopPaymentWork();
+        }, { flush: 'sync' });
+      });
+      if (unwatch) unwatch();
+    },
     async confirmPaymentResult(run) {
       this.paymentMessage = "正在确认支付结果";
-      for (let attempt = 0; attempt < 6; attempt++) {
+      const deadline = Date.now() + 60000;
+      let budgetExpired = false;
+      for (let attempt = 0; attempt < 6;) {
+        if (Date.now() >= deadline) { budgetExpired = true; break; }
         if (!this.isCurrentPayment(run)) return;
         try {
           const res = await confirmOrderPayment(this.orderId);
@@ -256,23 +272,27 @@ export default {
           }
         } catch (error) {
           if (!this.isCurrentPayment(run)) return;
-          if (error.staleStore || error.statusCode === 401) {
+          if (error.staleStore || error.staleIdentity || error.statusCode === 401) {
             uni.showToast({ title: error.msg || "请重新登录后查询订单", icon: "none" });
             return;
           }
-          // A timeout leaves payment unconfirmed; the next query or worker may recover it.
+          if (error.statusCode === 429 || (error.statusCode === 503 && error.retryAfterSeconds != null)) {
+            const seconds = Number(error.retryAfterSeconds);
+            const delay = Math.max(2000, (Number.isFinite(seconds) && seconds > 0 ? seconds : 3) * 1000);
+            if (delay >= deadline - Date.now()) { budgetExpired = true; break; }
+            await this.waitForConfirmation(delay, run);
+            continue;
+          }
         }
-        if (attempt < 5) {
-          await new Promise(resolve => {
-            this.confirmWait = resolve;
-            this.confirmTimer = setTimeout(resolve, 2000);
-          });
-          this.confirmWait = null;
+        attempt++;
+        if (attempt < 6) {
+          if (2000 >= deadline - Date.now()) { budgetExpired = true; break; }
+          await this.waitForConfirmation(2000, run);
         }
       }
       if (!this.isCurrentPayment(run)) return;
       const cancelled = this.cashierError && /cancel/i.test(this.cashierError.errMsg || "");
-      uni.showToast({ title: cancelled ? "已取消支付，请查看订单状态" : "支付结果确认中，请稍后查询订单", icon: "none" });
+      uni.showToast({ title: budgetExpired ? "支付结果暂未确认，请稍后查看订单" : cancelled ? "已取消支付，请查看订单状态" : "支付结果确认中，请稍后查询订单", icon: "none" });
       this.needsConfirmation = true;
       this.paymentFinished = true;
       uni.redirectTo({ url: "/pages/details/index?orderId=" + this.orderId });

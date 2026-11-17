@@ -56,9 +56,9 @@
                   v-if="item.status === 1 && getOvertime(item.orderTime) > 0">
                   去支付
                 </button>
-                <button class="new_btn btn" type="default" @click="handleReminder('center', item.id)"
+                <button class="new_btn btn" type="default" :disabled="reminderRemaining(item.id) > 0 || reminderPending[item.id]" @click="handleReminder('center', item.id)"
                   v-if="item.status === 2">
-                  催单
+                  {{ reminderRemaining(item.id) ? reminderRemaining(item.id) + "秒后可催单" : "催单" }}
                 </button>
               </view>
             </view>
@@ -90,7 +90,9 @@ import {
 import Empty from "@/components/empty/empty";
 import { statusWord, getOvertime } from "@/utils/index.js";
 import { orderRefundLabel } from "@/utils/order-refund";
+import reminderCooldown from "../../utils/reminder-cooldown.js";
 export default {
+  mixins: [reminderCooldown],
   components: {
     Empty,
   },
@@ -276,14 +278,14 @@ export default {
     },
     // 催单
     handleReminder(type, id) {
-      reminderOrder(id).then((res) => {
+      return this.runReminder(id, () => reminderOrder(id).then((res) => {
         if (res.code === 1) {
           this.showConfirm = true;
           this.textTip = "您的催单信息已发出！";
           this.$refs.commonPopup.open(type);
           this.getList(this.status);
         }
-      });
+      }));
     },
     // 关闭弹层
     closePopup(type) {

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import axios from 'axios'
+import { errorMessage } from '@/utils/error-message'
 import { workspace } from '@/stores/workspace'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { ElButton, ElMessage, ElSelect, ElOption } from 'element-plus'
@@ -43,7 +45,7 @@ async function exportData() {
     try { anchor.href = url; anchor.download = '运营数据统计报表.xlsx'; document.body.appendChild(anchor); anchor.click() }
     finally { anchor.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 1000) }
     ElMessage.success('运营数据统计报表已导出')
-  } catch (error) { if (mounted && error !== 'cancel' && error !== 'close') ElMessage.error(error instanceof Error ? error.message : '数据导出失败，请重试') }
+  } catch (error) { if (mounted && !axios.isCancel(error) && error !== 'cancel' && error !== 'close') ElMessage.error(errorMessage(error, '数据导出失败，请重试')) }
   finally { exporting.value = false }
 }
 load()
@@ -190,4 +192,3 @@ h2 { font-size: var(--jz-font-section); margin: 0 0 var(--jz-space-4); }
 @media (max-width: 1199px) { .statistics-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 767px) { .statistics-section { padding: var(--jz-space-4); } .statistics-grid { gap: var(--jz-space-4); } }
 </style>
-

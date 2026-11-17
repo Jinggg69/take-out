@@ -28,7 +28,7 @@ export function createUserStore(api: AuthApi, storage: SessionStorage, platformA
       const name = payload.username.trim()
       username.value = name
       storage.setUsername(name)
-      const { data: result } = await api.login({ username: name, password: payload.password })
+      const { data: result } = await api.login({ username: name, password: payload.password, ...(payload.captcha !== undefined ? { captcha: payload.captcha } : {}) })
       if (current !== version) throw new Error('会话已切换，请重新登录')
       if (String(result.code) !== '1' || !result.data || !result.data.token) {
         throw new Error(result.msg || '登录失败，请稍后重试')

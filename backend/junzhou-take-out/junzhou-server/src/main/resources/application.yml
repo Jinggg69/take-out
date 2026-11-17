@@ -49,6 +49,31 @@ logging:
 sky:
   menu-cache:
     ttl-seconds: ${MENU_CACHE_TTL_SECONDS:180}
+  report-cache:
+    enabled: ${REPORT_CACHE_ENABLED:true}
+    namespace: ${REPORT_CACHE_NAMESPACE:dev}
+    workspace-ttl-seconds: ${REPORT_CACHE_WORKSPACE_TTL_SECONDS:15}
+    live-report-ttl-seconds: ${REPORT_CACHE_LIVE_TTL_SECONDS:15}
+    historical-ttl-seconds: ${REPORT_CACHE_HISTORICAL_TTL_SECONDS:120}
+    jitter-seconds: ${REPORT_CACHE_JITTER_SECONDS:2}
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    namespace: ${RATE_LIMIT_NAMESPACE:dev}
+    login-ip:
+      limit: ${RATE_LIMIT_LOGIN_IP_LIMIT:60}
+      window-millis: ${RATE_LIMIT_LOGIN_IP_WINDOW_MS:60000}
+    login-failure:
+      limit: ${RATE_LIMIT_LOGIN_FAILURE_LIMIT:5}
+      window-millis: ${RATE_LIMIT_LOGIN_FAILURE_WINDOW_MS:300000}
+    reminder:
+      limit: ${RATE_LIMIT_REMINDER_LIMIT:1}
+      window-millis: ${RATE_LIMIT_REMINDER_WINDOW_MS:60000}
+    payment-confirm:
+      limit: ${RATE_LIMIT_PAYMENT_CONFIRM_LIMIT:1}
+      window-millis: ${RATE_LIMIT_PAYMENT_CONFIRM_WINDOW_MS:2000}
+    report-export:
+      limit: ${RATE_LIMIT_REPORT_EXPORT_LIMIT:2}
+      window-millis: ${RATE_LIMIT_REPORT_EXPORT_WINDOW_MS:60000}
   payment:
     channel: ${PAYMENT_CHANNEL:wechat}
     jobs-enabled: ${PAYMENT_JOBS_ENABLED:true}

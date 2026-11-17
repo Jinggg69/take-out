@@ -16,8 +16,12 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class ReportStage6Test {
  @AfterEach void clear(){RequestScope.clear();}
+ /** Cache is explicitly disabled here; these assertions cover the pre-existing SQL and authorization contract. */
+ private static ReportServiceImpl newService(ReportMapper mapper,RbacService rbac){
+  return new ReportServiceImpl(mapper,rbac,com.junzhou.test.support.ReportTestSupport.disabledCache(),com.junzhou.test.support.ReportTestSupport.fixedToday());
+ }
  @Test void validatesRangeAndEveryStoreAction(){
-  RbacService rbac=mock(RbacService.class); ReportServiceImpl service=new ReportServiceImpl(mock(ReportMapper.class),rbac);
+  RbacService rbac=mock(RbacService.class); ReportServiceImpl service=newService(mock(ReportMapper.class),rbac);
   RequestScope.set(new RequestScope(1L,null,1L,1L,new HashSet<>(Arrays.asList(1L,2L))));
   when(rbac.permits(1L,1L,1L,PermissionAction.REPORT_READ)).thenReturn(true);
   assertThrows(SecurityException.class,()->service.filter("2026-11-01","2026-11-02",Arrays.asList(1L,2L),false));
@@ -29,14 +33,14 @@ class ReportStage6Test {
  }
  @Test void directExportRequiresBothActionsAndRevocationIsRechecked() throws Exception {
   ReportMapper mapper=mock(ReportMapper.class);RbacService rbac=mock(RbacService.class);
-  ReportServiceImpl service=new ReportServiceImpl(mapper,rbac);
+  ReportServiceImpl service=newService(mapper,rbac);
   RequestScope.set(new RequestScope(1L,null,1L,1L,Collections.singleton(1L)));
   when(rbac.permits(anyLong(),anyLong(),anyLong(),any())).thenReturn(true);
   ReportFilter f=service.filter("2026-11-01","2026-11-02",null,true);
   when(rbac.permits(1L,1L,1L,PermissionAction.REPORT_EXPORT)).thenReturn(false);
   assertThrows(SecurityException.class,()->service.export(f));verifyNoInteractions(mapper);
   doThrow(new SecurityException()).when(rbac).require(PermissionAction.REPORT_EXPORT);
-  org.springframework.test.web.servlet.MockMvc mvc=org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(new com.junzhou.controller.admin.ReportController(service)).addInterceptors(new com.junzhou.interceptor.RbacInterceptor(rbac)).build();
+  org.springframework.test.web.servlet.MockMvc mvc=org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(new com.junzhou.controller.admin.ReportController(service, com.junzhou.test.support.DisabledRateLimitConfiguration.guard())).addInterceptors(new com.junzhou.interceptor.RbacInterceptor(rbac)).build();
   mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/admin/report/export").param("begin","2026-11-01").param("end","2026-11-02")).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isForbidden());
   verifyNoInteractions(mapper);
  }
@@ -53,7 +57,7 @@ class ReportStage6Test {
    ReportMapper mapper=session.getMapper(ReportMapper.class);RbacService rbac=mock(RbacService.class);
    when(rbac.permits(anyLong(),anyLong(),anyLong(),any())).thenReturn(true);
    RequestScope.set(new RequestScope(1L,null,1L,1L,new HashSet<>(Arrays.asList(1L,2L))));
-   ReportServiceImpl service=new ReportServiceImpl(mapper,rbac);
+   ReportServiceImpl service=newService(mapper,rbac);
    ReportFilter f=service.filter("2026-11-01","2026-11-03",null,false);
    Map<String,Object> t=service.turnover(f);assertEquals("0.00,30.00,0.00",t.get("turnoverList"));assertEquals("0.00,0.00,10.00",t.get("refundList"));assertEquals("0.00,30.00,-10.00",t.get("netList"));
    Map<String,Object> o=service.orders(f);assertEquals("2,0,0",o.get("orderCountList"));assertEquals("0,2,0",o.get("paidOrderCountList"));assertEquals("0,1,0",o.get("validOrderCountList"));

@@ -7,7 +7,7 @@
     <view class="order_content orderDetail">
       <view class="order_content_box" scroll-y="true" scroll-top="0rpx">
         <!-- 支付状态 -->
-        <status ref="status" :timeout="timeout" :orderDetailsData="orderDetailsData" :rocallTime="rocallTime"
+        <status :reminder-seconds="reminderRemaining(orderDetailsData.id)" :reminder-pending="!!reminderPending[orderDetailsData.id]" ref="status" :timeout="timeout" :orderDetailsData="orderDetailsData" :rocallTime="rocallTime"
           @statusWord="statusWord" @paymentTime="paymentTime" @handlePay="handlePay" @handleReminder="handleReminder"
           @handleRefund="handleRefund" @handleCancel="handleCancel" @oneMoreOrder="oneMoreOrder"></status>
         <!-- end -->

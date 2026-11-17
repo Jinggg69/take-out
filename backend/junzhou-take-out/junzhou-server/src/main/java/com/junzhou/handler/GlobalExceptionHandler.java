@@ -18,6 +18,18 @@ import java.util.DuplicateFormatFlagsException;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+    @ExceptionHandler(com.junzhou.ratelimit.RateLimitExceededException.class)
+    public org.springframework.http.ResponseEntity<Result<String>> rateLimit(com.junzhou.ratelimit.RateLimitExceededException ex) {
+        long ms = ex.getRetryAfterMillis();
+        long seconds = Math.max(1L, ms / 1000L + (ms % 1000L == 0 ? 0 : 1));
+        return org.springframework.http.ResponseEntity.status(429).header("Retry-After", Long.toString(seconds))
+            .header("Cache-Control", "no-store").body(Result.error(ex.getMessage()));
+    }
+    @ExceptionHandler(com.junzhou.ratelimit.RateLimitUnavailableException.class)
+    public org.springframework.http.ResponseEntity<Result<String>> rateLimitUnavailable(com.junzhou.ratelimit.RateLimitUnavailableException ex) {
+        return org.springframework.http.ResponseEntity.status(503).header("Retry-After", "3")
+            .header("Cache-Control", "no-store").body(Result.error(com.junzhou.ratelimit.RateLimitUnavailableException.PUBLIC_MESSAGE));
+    }
     @ExceptionHandler(com.junzhou.exception.MiniappApiException.class)
     public org.springframework.http.ResponseEntity<Result<String>> miniapp(com.junzhou.exception.MiniappApiException ex) {
         return org.springframework.http.ResponseEntity.status(ex.getStatus()).body(Result.error(ex.getMessage()));

@@ -9,17 +9,23 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class StoreMenuService {
-    @Autowired private StoreMenuMapper mapper;
-    @Autowired private DishMapper dishMapper;
-    @Autowired private DishFlavorMapper flavorMapper;
-    @Autowired private SetmealMapper setmealMapper;
-    @Autowired private SetmealDishMapper setmealDishMapper;
+    @Autowired
+    private StoreMenuMapper mapper;
+    @Autowired
+    private DishMapper dishMapper;
+    @Autowired
+    private DishFlavorMapper flavorMapper;
+    @Autowired
+    private SetmealMapper setmealMapper;
+    @Autowired
+    private SetmealDishMapper setmealDishMapper;
 
     public List<StoreMenuItem> list(String type) {
         RequestScope.requireStoreId();
@@ -40,7 +46,8 @@ public class StoreMenuService {
         if (dish ? dishMapper.getById(item.getId()) == null : setmealMapper.getById(item.getId()) == null)
             throw new OrderBusinessException("商品不存在或不属于当前租户");
         // SQL repeats catalog ownership in the insert so an unowned id can never be written.
-        if (dish) mapper.saveDish(item); else mapper.saveSetmeal(item);
+        if (dish) mapper.saveDish(item);
+        else mapper.saveSetmeal(item);
     }
 
     public List<DishVO> publicDishes(Long categoryId) {
@@ -75,7 +82,9 @@ public class StoreMenuService {
         return result;
     }
 
-    private boolean flag(Integer value) { return Integer.valueOf(0).equals(value) || Integer.valueOf(1).equals(value); }
+    private boolean flag(Integer value) {
+        return Integer.valueOf(0).equals(value) || Integer.valueOf(1).equals(value);
+    }
 
     private boolean dishType(String type) {
         if ("dish".equals(type)) return true;

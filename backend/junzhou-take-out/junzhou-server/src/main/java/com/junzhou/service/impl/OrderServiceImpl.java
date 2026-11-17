@@ -57,6 +57,9 @@ import java.util.UUID;
  */
 @Service
 public class OrderServiceImpl implements OrderService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.junzhou.ratelimit.RateLimitGuard rateLimitGuard;
+
     @Autowired private com.junzhou.service.DiningService dining;
     @Autowired private com.junzhou.service.StoreSettingsService storeSettings;
     @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
@@ -378,6 +381,7 @@ public class OrderServiceImpl implements OrderService {
     public OrderVO confirmPayment(Long id) {
         Orders order = requireOrder(id, false);
         requireUserOrder(order);
+        rateLimitGuard.paymentConfirm(id);
         // Provider I/O stays outside the payment confirmation transaction.
         paymentRecovery.reconcileOrder(order.getId());
         return userOrderDetail(id);
@@ -649,10 +653,9 @@ public class OrderServiceImpl implements OrderService {
      */
     @Override
     public void reminder(Long id) {
-        Orders order = orderMapper.getById(id);
-        if (order == null) {
-            throw new OrderBusinessException(MessageConstant.ORDER_STATUS_ERROR);
-        }
+        Orders order = requireOrder(id, false);
+        requireUserOrder(order);
+        rateLimitGuard.reminder(id);
         Map<String, Object> map = new HashMap<>();
         map.put("type", 2); //1表示来电提醒，2表示客户催单
         map.put("orderId", id);

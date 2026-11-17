@@ -58,7 +58,10 @@ class WorkspaceMenuTest {
         session = factory.getObject().openSession();
         // Authorization is isolated here; database grouping and response mapping remain real.
         rbac = mock(RbacService.class);
-        ReportServiceImpl reports = new ReportServiceImpl(session.getMapper(ReportMapper.class), rbac);
+        // Totals must come from real SQL during these contract assertions, so the cache is explicitly disabled.
+        ReportServiceImpl reports = new ReportServiceImpl(session.getMapper(ReportMapper.class), rbac,
+                com.junzhou.test.support.ReportTestSupport.disabledCache(),
+                com.junzhou.test.support.ReportTestSupport.fixedToday());
         mvc = MockMvcBuilders.standaloneSetup(new WorkspaceController(reports))
                 .addInterceptors(new RbacInterceptor(rbac)).build();
         RequestScope.set(new RequestScope(1L, null, 1L, 10L, Collections.singleton(10L)));

@@ -5,7 +5,7 @@ const vm = require('node:vm')
 const test = require('node:test')
 const root = path.resolve(__dirname, '..')
 function component(file, dependencies = {}) {
-  const context = vm.createContext({ module: { exports: {} }, statusWord: status => ({ 1: '待付款', 6: '已取消' })[status], ...dependencies })
+  const context = vm.createContext({ module: { exports: {} }, reminderCooldown: {}, statusWord: status => ({ 1: '待付款', 6: '已取消' })[status], ...dependencies })
   const helper = path.join(root, 'utils/order-refund.js')
   if (fs.existsSync(helper)) vm.runInContext(fs.readFileSync(helper, 'utf8').replace(/export /g, ''), context)
   const script = fs.readFileSync(path.join(root, file), 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1]

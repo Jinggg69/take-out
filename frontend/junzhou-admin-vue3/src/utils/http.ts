@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { normalizeRequestFailure } from './request-failure.ts'
 import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 
 export interface HttpClientOptions {
@@ -72,9 +73,11 @@ export function createHttpClient(options: HttpClientOptions): AxiosInstance {
     if(stale(response.config))throw new axios.CanceledError('门店或会话已切换',response.config)
     if (response.data?.status === 401) options.onUnauthorized?.()
     return response
-  }, (error: unknown) => {
+  }, async (error: unknown) => {
     if (axios.isAxiosError(error)) {
       release(error.config)
+      if(stale(error.config))return Promise.reject(new axios.CanceledError('门店或会话已切换',error.config))
+      await normalizeRequestFailure(error)
       if(stale(error.config))return Promise.reject(new axios.CanceledError('门店或会话已切换',error.config))
       if (error.response?.status === 401) options.onUnauthorized?.()
       if (error.response?.status === 405) error.message = '请求错误'

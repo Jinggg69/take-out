@@ -29,8 +29,14 @@ export function request({ url = '', params = {}, method = 'GET', scope = 'store'
       if (expired) { reject(expired); return }
       const data = res.data
       if (res.statusCode >= 400) {
+        const headers = res.header || {}
+        const retryKey = Object.keys(headers).find(key => key.toLowerCase() === 'retry-after')
+        const raw = String(headers[retryKey] || '').trim()
+        const protectedResponse = res.statusCode === 429 || (res.statusCode === 503 && retryKey !== undefined)
+        const retryInfo = protectedResponse ? { retryAfterSeconds: /^\d+$/.test(raw) && Number.isSafeInteger(Number(raw)) && Number(raw) > 0 ? Number(raw) : 3 } : {}
+
         if (res.statusCode === 401 && scope !== 'public') app.clearAuth()
-        reject({ ...(data && typeof data === 'object' ? data : {}), statusCode: res.statusCode, msg: data?.msg || (res.statusCode === 401 ? '请重新登录' : '请求失败，请稍后重试') })
+        reject({ ...(data && typeof data === 'object' ? data : {}), statusCode: res.statusCode, ...retryInfo, msg: data?.msg || (protectedResponse ? (res.statusCode === 429 ? '操作太频繁，请稍后重试' : '操作保护服务暂不可用，请稍后重试') : res.statusCode === 401 ? '请重新登录' : '请求失败，请稍后重试') })
       } else if (data && (data.code === 1 || data.code === 200)) resolve(data)
       else reject({ ...(data && typeof data === 'object' ? data : {}), statusCode: res.statusCode, msg: data?.msg || '响应数据异常，请稍后重试' })
     },

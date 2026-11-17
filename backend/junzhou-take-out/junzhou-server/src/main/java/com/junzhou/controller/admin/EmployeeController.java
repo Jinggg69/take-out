@@ -34,6 +34,16 @@ public class EmployeeController {
     @Autowired
     private AdminSessionService adminSessionService;
 
+    @Autowired private com.junzhou.service.LoginCaptchaService captcha;
+    @Autowired private com.junzhou.ratelimit.LoginAttemptGuard loginAttemptGuard;
+
+    @GetMapping("/captcha")
+    @RequireActions({})
+    public Result<String> captcha(HttpServletRequest request, javax.servlet.http.HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-store");
+        return Result.success(captcha.create(request.getSession()));
+    }
+
     /**
      * 登录
      *
@@ -41,9 +51,13 @@ public class EmployeeController {
      * @return
      */
     @PostMapping("/login")
-    public Result<EmployeeLoginVO> login(@RequestBody EmployeeLoginDTO employeeLoginDTO) {
-        EmployeeLoginVO employeeLoginVO = platformAuth == null ? null : platformAuth.loginIfPlatform(employeeLoginDTO);
-        if (employeeLoginVO == null) employeeLoginVO = employeeService.loginWithSession(employeeLoginDTO);
+    public Result<EmployeeLoginVO> login(@RequestBody EmployeeLoginDTO employeeLoginDTO, HttpServletRequest request) {
+        EmployeeLoginVO employeeLoginVO = loginAttemptGuard.login(employeeLoginDTO, request, () -> {
+            captcha.verify(request.getSession(false), employeeLoginDTO.getCaptcha());
+            EmployeeLoginVO platform = platformAuth == null ? null :
+                com.junzhou.ratelimit.LoginAttemptGuard.platform(() -> platformAuth.loginIfPlatform(employeeLoginDTO));
+            return platform == null ? employeeService.loginWithSession(employeeLoginDTO) : platform;
+        });
         log.info("员工登录成功，employeeId={}", employeeLoginVO.getId());
         return Result.success(employeeLoginVO);
     }

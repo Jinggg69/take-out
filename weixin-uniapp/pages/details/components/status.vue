@@ -28,9 +28,9 @@
             v-if="!timeout && orderDetailsData.status === 1">
             立即支付
           </button>
-          <button class="new_btn btn" type="default" @click="handleReminder('center', orderDetailsData.id)"
+          <button class="new_btn btn" type="default" :disabled="reminderSeconds > 0 || reminderPending" @click="handleReminder('center', orderDetailsData.id)"
             v-if="orderDetailsData.status === 2">
-            催单
+            {{ reminderSeconds > 0 ? reminderSeconds + "秒后可催单" : "催单" }}
           </button>
           <button class="new_btn" type="default" @click="handleRefund('center')" v-if="orderDetailsData.status == 5">
             申请退款
@@ -57,6 +57,8 @@ import { orderRefundLabel } from "@/utils/order-refund";
 export default {
   // 获取父级传的数据
   props: {
+    reminderSeconds: { type: Number, default: 0 },
+    reminderPending: { type: Boolean, default: false },
     // 订单详情
     orderDetailsData: {
       type: Object,

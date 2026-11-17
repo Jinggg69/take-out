@@ -65,6 +65,9 @@ public class HttpClientTest {
                 .thenReturn(com.junzhou.vo.EmployeeLoginVO.builder().id(42L).userName("admin")
                         .name("测试管理员").token(issued).build());
         EmployeeController controller = new EmployeeController();
+        ReflectionTestUtils.setField(controller, "loginAttemptGuard", new com.junzhou.ratelimit.LoginAttemptGuard(
+            com.junzhou.test.support.DisabledRateLimitConfiguration.guard(), new com.junzhou.ratelimit.ClientIpResolver()));
+        ReflectionTestUtils.setField(controller, "captcha", mock(com.junzhou.service.LoginCaptchaService.class));
         ReflectionTestUtils.setField(controller, "employeeService", employees);
 
         MvcResult result = mvc(controller).perform(post("/admin/employee/login")

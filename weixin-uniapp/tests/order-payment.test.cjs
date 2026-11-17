@@ -4,15 +4,16 @@ const path = require('node:path')
 const vm = require('node:vm')
 const test = require('node:test')
 
-function setup({ confirm, prepay, cashierError, cashier, mockResult, storage = new Map() } = {}) {
+function setup({ confirm, prepay, cashierError, cashier, mockResult, delayHook, storage = new Map() } = {}) {
   const toasts = [], routes = [], requests = [], timers = new Map()
-  let timerId = 0, paymentCalls = 0, confirmations = 0
+  let timerId = 0, paymentCalls = 0, confirmations = 0, now = 0
+  class Clock extends Date { static now() { return now } }
   const script = fs.readFileSync(path.join(__dirname, '../pages/pay/index.vue'), 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1]
   const { store } = require('./core-harness.cjs').loadStore(storage)
   store.setSession({ token: 'test', userId: 'user-a' })
   store.selectContext({ merchantId: '1', storeId: '1' })
   const context = vm.createContext({
-    module: { exports: {} }, console,
+    module: { exports: {} }, console, Date: Clock,
     mapState: () => ({}),
     paymentOrder: async params => { requests.push(params); return prepay ? prepay() : { code: 1, data: { packageStr: 'prepay_id=test' } } },
     confirmOrderPayment: async id => { confirmations++; return confirm ? confirm(confirmations, id) : { code: 1, data: { status: 1, payStatus: 0 } } },
@@ -22,7 +23,7 @@ function setup({ confirm, prepay, cashierError, cashier, mockResult, storage = n
       const id = ++timerId
       timers.set(id, fn)
       // Polling delays run without wall-clock waits; countdown timers stay pending.
-      if (ms === 2000) queueMicrotask(() => { if (timers.delete(id)) fn() })
+      if (ms >= 2000 && ms <= 60000) queueMicrotask(() => { if (timers.delete(id)) { now += ms; if (delayHook) delayHook(ms); fn() } })
       return id
     },
     clearTimeout: id => timers.delete(id),
@@ -318,4 +319,35 @@ test('预支付请求期间杀进程，从真实Pinia恢复订单号金额且只
   assert.equal(restored.confirmations, 1)
   assert.equal(restored.page.$appStore.paymentInFlight, null)
   assert.equal(restored.page.$appStore.orderData.fulfillmentType, 'PICKUP')
+})
+
+test('429不消耗六次核查额度', async () => {
+ const h=setup({confirm:async n=>{if(n===1)throw {statusCode:429,retryAfterSeconds:2};return {code:1,data:{status:1,payStatus:0}}}})
+ await h.page.handleSave();assert.equal(h.confirmations,7)
+})
+test('保护503等待后可确认成功',async()=>{
+ const h=setup({confirm:async n=>{if(n===1)throw {statusCode:503,retryAfterSeconds:2};return {code:1,data:{status:2,payStatus:1}}}})
+ await h.page.handleSave();assert.equal(h.confirmations,2);assert.ok(h.routes[0].url.includes('/success/'))
+})
+test('超过剩余预算直接停止且只提示未确认',async()=>{
+ const h=setup({confirm:async()=>{throw {statusCode:429,retryAfterSeconds:61}}})
+ await h.page.handleSave();assert.equal(h.confirmations,1);assert.ok(h.toasts.some(x=>x.title==='支付结果暂未确认，请稍后查看订单'));assert.equal(h.page.needsConfirmation,true)
+})
+
+test('连续429达到60秒预算，不误报失败',async()=>{
+ const waits=[];const h=setup({delayHook:ms=>waits.push(ms),confirm:async()=>{throw {statusCode:429,retryAfterSeconds:10}}})
+ await h.page.handleSave();assert.equal(h.confirmations,6);assert.deepEqual(waits,[10000,10000,10000,10000,10000]);assert.ok(h.toasts.some(x=>x.title==='支付结果暂未确认，请稍后查看订单'));assert.ok(!h.toasts.some(x=>/失败/.test(x.title)))
+})
+for(const change of ['store','identity'])test(`限流等待中${change}变化终止核查`,async()=>{
+ let h;h=setup({delayHook:()=>{if(change==='identity')h.page.$appStore.setSession({token:'b',userId:'b'});else h.page.$appStore.selectedStoreId='2'},confirm:async()=>{throw {statusCode:429,retryAfterSeconds:2}}})
+ await h.page.handleSave();assert.equal(h.confirmations,1);assert.equal(h.routes.length,0)
+})
+test('限流等待中离页清理等待定时器',async()=>{
+ let h;h=setup({delayHook:()=>h.component.onHide.call(h.page),confirm:async()=>{throw {statusCode:429,retryAfterSeconds:2}}})
+ await h.page.handleSave();assert.equal(h.confirmations,1);assert.equal(h.timers.size,0)
+})
+
+test('正常核查最多六次且保持两秒间隔',async()=>{
+ const waits=[];const h=setup({delayHook:ms=>waits.push(ms)})
+ await h.page.handleSave();assert.equal(h.confirmations,6);assert.deepEqual(waits,[2000,2000,2000,2000,2000])
 })

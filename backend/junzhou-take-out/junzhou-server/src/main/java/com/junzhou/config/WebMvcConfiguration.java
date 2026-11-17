@@ -51,13 +51,13 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
         if (platformAuthInterceptor != null) registry.addInterceptor(platformAuthInterceptor).addPathPatterns("/platform/**");
         registry.addInterceptor(jwtTokenAdminInterceptor)
                 .addPathPatterns("/admin/**")
-                .excludePathPatterns("/admin/employee/login");
+                .excludePathPatterns("/admin/employee/login", "/admin/employee/captcha");
         registry.addInterceptor(jwtTokenUserInterceptor)
                 .addPathPatterns("/user/shoppingCart/**", "/user/order/**", "/user/addressBook/**", "/user/dining/**", "/user/me", "/user/me/**");
         registry.addInterceptor(requestScopeInterceptor)
                 .addPathPatterns("/admin/**", "/user/**")
-                .excludePathPatterns("/admin/employee/login", "/user/user/login");
-        registry.addInterceptor(rbacInterceptor).addPathPatterns("/admin/**").excludePathPatterns("/admin/employee/login");
+                .excludePathPatterns("/admin/employee/login", "/admin/employee/captcha", "/user/user/login");
+        registry.addInterceptor(rbacInterceptor).addPathPatterns("/admin/**").excludePathPatterns("/admin/employee/login", "/admin/employee/captcha");
     }
 
     /**

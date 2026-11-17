@@ -3,6 +3,7 @@ import type { ApiResult, LoginPayload, LoginUser, PasswordPayload, ShopStatus } 
 
 export function createAuthApi(client: AxiosInstance) {
   return {
+    captcha: () => client.get<ApiResult<string>>('/employee/captcha'),
     login: (data: LoginPayload) => client.post<ApiResult<LoginUser | null>>('/employee/login', data),
     logout: () => client.post<ApiResult<null>>('/employee/logout', undefined, { params: {} }),
     getStatus: () => client.get<ApiResult<ShopStatus>>('/shop/status'),

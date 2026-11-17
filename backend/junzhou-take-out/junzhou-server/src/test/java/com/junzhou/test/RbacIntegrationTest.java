@@ -84,7 +84,7 @@ class RbacIntegrationTest {
   for(String name:names)for(java.lang.reflect.Method m:Class.forName("com.junzhou.controller.admin."+name+"Controller").getDeclaredMethods()){
    if(!org.springframework.core.annotation.AnnotatedElementUtils.hasAnnotation(m,org.springframework.web.bind.annotation.RequestMapping.class) || m.getName().equals("login"))continue;
    RequireActions annotation=m.getAnnotation(RequireActions.class);assertNotNull(annotation,m.toString());
-   if(annotation.value().length==0)assertTrue((name.equals("Employee") && Arrays.asList("logout","editPassword").contains(m.getName())) || (name.equals("Rbac") && m.getName().equals("context")),m.toString());
+   if(annotation.value().length==0)assertTrue((name.equals("Employee") && Arrays.asList("logout","editPassword","captcha").contains(m.getName())) || (name.equals("Rbac") && m.getName().equals("context")),m.toString());
   }
  }
  @Test void currentStoreCannotBorrowAnotherRolesAssignment(){

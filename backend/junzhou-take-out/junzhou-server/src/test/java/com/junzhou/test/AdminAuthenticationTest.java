@@ -74,8 +74,9 @@ class AdminAuthenticationTest {
         BaseContext.removeCurrentId();
         context = new AnnotationConfigWebApplicationContext();
         context.setServletContext(new MockServletContext());
+        context.register(com.junzhou.test.support.DisabledRateLimitConfiguration.class, com.junzhou.ratelimit.LoginAttemptGuard.class, com.junzhou.ratelimit.ClientIpResolver.class);
         context.register(com.junzhou.test.support.LegacyMvcScopeConfiguration.class);
-        context.register(DatabaseConfiguration.class, WebMvcConfiguration.class, EmployeeController.class,
+        context.register(com.junzhou.service.LoginCaptchaService.class, DatabaseConfiguration.class, WebMvcConfiguration.class, EmployeeController.class,
                 JwtTokenAdminInterceptor.class, JwtTokenUserInterceptor.class, GlobalExceptionHandler.class, Probe.class);
         context.refresh();
         jdbc = new JdbcTemplate(context.getBean(DataSource.class));
@@ -195,8 +196,11 @@ class AdminAuthenticationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(1));
         rejected(first);
         rejected(second);
-        mvc.perform(post("/admin/employee/login").contentType("application/json")
-                .content("{\"username\":\"employee42\",\"password\":\"Old123\"}"))
+        org.springframework.mock.web.MockHttpSession captchaSession = new org.springframework.mock.web.MockHttpSession();
+        context.getBean(com.junzhou.service.LoginCaptchaService.class).create(captchaSession);
+        String captchaAnswer = (String) captchaSession.getAttribute("login.captcha");
+        mvc.perform(post("/admin/employee/login").session(captchaSession).contentType("application/json")
+                .content("{\"username\":\"employee42\",\"password\":\"Old123\",\"captcha\":\""+captchaAnswer+"\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0));
         accepted(login(42, "New456"), 42);
     }
@@ -377,8 +381,11 @@ class AdminAuthenticationTest {
     }
 
     private String login(long id, String password) throws Exception {
-        MvcResult result = mvc.perform(post("/admin/employee/login").contentType("application/json")
-                .content("{\"username\":\"employee" + id + "\",\"password\":\"" + password + "\"}"))
+        org.springframework.mock.web.MockHttpSession session = new org.springframework.mock.web.MockHttpSession();
+        context.getBean(com.junzhou.service.LoginCaptchaService.class).create(session);
+        String captcha = (String) session.getAttribute("login.captcha");
+        MvcResult result = mvc.perform(post("/admin/employee/login").session(session).contentType("application/json")
+                .content("{\"username\":\"employee" + id + "\",\"password\":\"" + password + "\",\"captcha\":\"" + captcha + "\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(1)).andReturn();
         assertNull(BaseContext.getCurrentId());
         return json.readTree(result.getResponse().getContentAsByteArray()).path("data").path("token").asText();

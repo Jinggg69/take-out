@@ -8,7 +8,7 @@ function setup({ history, available = true } = {}) {
   store.orderListData = [{ id: 99 }]
   const cart = store.orderListData
   const requests = [], selected = [], toasts = []
-  const context = vm.createContext({ module: { exports: {} }, Status: {}, OrderDetail: {}, DeliveryInfo: {}, OrderInfo: {},
+  const context = vm.createContext({ module: { exports: {} }, reminderCooldown: {}, Status: {}, OrderDetail: {}, DeliveryInfo: {}, OrderInfo: {},
     uni: { showToast: value => toasts.push(value) },
     selectStoreContext: async id => { selected.push(id); store.selectContext({ merchantId: '1', storeId: id }); },
     getOrderDetail: async id => { requests.push(['store', id]); return { code: 1, data: { id, status: 5, storeId: '1', orderDetailList: [{ id: 1 }] } } },

@@ -18,6 +18,7 @@ class PlatformAuthenticationTest {
  private JdbcTemplate db;
  @BeforeEach void setup() {
   ctx=new AnnotationConfigWebApplicationContext(); ctx.setServletContext(new MockServletContext());
+  ctx.register(com.junzhou.test.support.DisabledRateLimitConfiguration.class, com.junzhou.ratelimit.LoginAttemptGuard.class, com.junzhou.ratelimit.ClientIpResolver.class, com.junzhou.service.LoginCaptchaService.class);
   ctx.register(AdminAuthenticationTest.DatabaseConfiguration.class, com.junzhou.test.support.LegacyMvcScopeConfiguration.class,
     com.junzhou.config.WebMvcConfiguration.class,com.junzhou.controller.admin.EmployeeController.class,
     com.junzhou.interceptor.JwtTokenAdminInterceptor.class, com.junzhou.interceptor.JwtTokenUserInterceptor.class,
@@ -38,7 +39,7 @@ class PlatformAuthenticationTest {
  }
  @Test void wrongPlatformPasswordNeverFallsBackToEmployee() throws Exception {
   db.update("insert into employee(id,username,password,tenant_id,status) values(2,'platform_admin',?,1,1)",ctx.getBean(com.junzhou.service.PasswordHashService.class).encode("Employee123!"));
-  mvc.perform(post("/admin/employee/login").contentType("application/json").content("{\"username\":\"platform_admin\",\"password\":\"Employee123!\"}"))
+  mvc.perform(loginRequest("Employee123!"))
     .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0));
   assertEquals(0,db.queryForObject("select count(*) from platform_session",Integer.class));
  }
@@ -63,8 +64,15 @@ class PlatformAuthenticationTest {
   Class<?> context=Class.forName("com.junzhou.platform.PlatformContext");
   assertThrows(java.lang.reflect.InvocationTargetException.class,()->context.getMethod("requireAdminId").invoke(null));
  }
+ private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder loginRequest(String password) {
+  org.springframework.mock.web.MockHttpSession session = new org.springframework.mock.web.MockHttpSession();
+  ctx.getBean(com.junzhou.service.LoginCaptchaService.class).create(session);
+  String captcha = (String) session.getAttribute("login.captcha");
+  return post("/admin/employee/login").session(session).contentType("application/json")
+   .content("{\"username\":\"platform_admin\",\"password\":\""+password+"\",\"captcha\":\""+captcha+"\"}");
+ }
  private String login() throws Exception {
-  byte[] body=mvc.perform(post("/admin/employee/login").contentType("application/json").content("{\"username\":\"platform_admin\",\"password\":\"Old123456!\"}"))
+  byte[] body=mvc.perform(loginRequest("Old123456!"))
    .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(1)).andExpect(jsonPath("$.data.accountType").value("PLATFORM")).andReturn().getResponse().getContentAsByteArray();
   return new ObjectMapper().readTree(body).path("data").path("token").asText();
  }

@@ -1,3 +1,4 @@
+import reminderCooldown from '../../utils/reminder-cooldown.js'
 
 import {
 	getOrderDetail,
@@ -16,6 +17,7 @@ import DeliveryInfo from "./components/deliveryInfo.vue" //配送信息
 import OrderInfo from "./components/orderInfo.vue" //订单信息
 
 export default {
+    mixins: [reminderCooldown],
 	data() {
 		return {
 			showDisplay: false,
@@ -110,14 +112,14 @@ export default {
 		// 催单
 		async handleReminder(val) {
             if (!await this.prepareOrderStore()) return
-			reminderOrder(val.id).then(res => {
+			return this.runReminder(val.id, () => reminderOrder(val.id).then(res => {
 				if (res.code === 1) {
 					this.showConfirm = true
 					this.textTip = '您的催单信息已发出！'
 					this.$refs.commonPopup.open(val.type)
 					this.orderId = val.id
 				}
-			})
+			}))
 		},
 		// 取消订单接口
 		async cancel(type, obj) {

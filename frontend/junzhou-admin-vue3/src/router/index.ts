@@ -14,7 +14,7 @@ export const router = createRouter({
     {
       path: '/login', name: 'login',
       component: () => import('@/views/login/LoginView.vue'),
-      meta: { title: '登录 · 均州鱼庄管理系统', notNeedAuth: true },
+      meta: { title: '登录 · 均州餐饮点餐营销管理系统', notNeedAuth: true },
     },
     {
       path: '/', redirect: () => sessionCookies.getUserInfo().accountType === 'PLATFORM' ? '/platform/tenants' : '/dashboard',

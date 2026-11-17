@@ -18,4 +18,7 @@ public class EmployeeLoginDTO implements Serializable {
     @ToString.Exclude
     private String password;
 
+    @ToString.Exclude
+    private String captcha;
+
 }

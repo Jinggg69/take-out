@@ -4,7 +4,7 @@ export interface ApiResult<T> {
   msg?: string | null
 }
 
-export interface LoginPayload { username: string; password: string }
+export interface LoginPayload { username: string; password: string; captcha?: string }
 export type AccountType = 'PLATFORM' | 'EMPLOYEE'
 export interface LoginUser { token: string; name?: string; accountType?: AccountType | null; [key: string]: unknown }
 export type ShopStatus = 0 | 1

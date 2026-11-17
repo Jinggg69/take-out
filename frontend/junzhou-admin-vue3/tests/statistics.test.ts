@@ -132,3 +132,18 @@ test('clearing report selection discards pending responses and disables stale re
  const api={ getTurnover:async()=>{calls++;return new Promise<{data:{code:number;data:{dateList:string;turnoverList:string}}}>(r=>{finish=r})},getUsers:async()=>({data:{code:1,data:{dateList:'',totalUserList:'',newUserList:''}}}),getOrders:async()=>({data:{code:1,data:null}}),getTop10:async()=>({data:{code:1,data:{nameList:'',numberList:''}}}) }
  const view=createStatisticsState(api);const pending=view.load({begin:'2026-11-01',end:'2026-11-01'});view.clear();finish({data:{code:1,data:{dateList:'2026-11-01',turnoverList:'10'}}});await pending;await view.retry('turnover');assert.equal(view.state.turnover.data,null);assert.equal(view.state.turnover.loading,false);assert.equal(calls,1)
 })
+
+test('rate limited JSON Blob exports reject before workbook download with the server message', async () => {
+  const { errorMessage } = await import('../src/utils/error-message.ts')
+  for (const status of [429, 503]) {
+    let downloaded = false
+    const client = createHttpClient({ baseURL: '/api' })
+    client.defaults.adapter = async config => {
+      throw new AxiosError('transport error', 'ERR_BAD_RESPONSE', config, undefined, { config, status, statusText: 'Rejected', headers: new AxiosHeaders({ 'Retry-After': '3' }), data: new Blob(['{"code":0,"msg":"请稍后导出"}'], { type: 'application/json' }) })
+    }
+    const api = createStatisticsApi(client)
+    try { const response = await api.export(); await exportWorkbook(response.data); downloaded = true; assert.fail('must reject') }
+    catch (error) { assert.equal(errorMessage(error, '导出失败'), '请稍后导出') }
+    assert.equal(downloaded, false)
+  }
+})
