@@ -303,3 +303,13 @@ python scripts/test-dining-session-migration.py 与 python scripts/test-order-pi
 金额以分持久化，本金与赠送分开。下单冻结、成功支付消耗、未付取消释放；订单完成赠积分，全额退款退回原充值批次并撤销赠分。已花掉的赠分记为待扣积分，不阻断退款。充值批次仅在净使用为零且无冻结时允许整笔模拟退款；不提供任意提现。
 
 脚本使用 CREATE TABLE IF NOT EXISTS 和幂等默认数据初始化，保留已有会员及业务数据。执行前核对目标schema并按现有流程备份；DDL隐式提交，不能用 --force 忽略失败。回退应用时保留会员账本，不删除资产表。运行 `python scripts/test-membership-migration.py` 在独立随机MySQL库验证初始化、重复执行和原有数据不变。
+
+## 20261118_01_home_decoration.sql：小程序首页装修
+
+在已完成租户、门店和 RBAC 迁移的应用库执行。新增商户级装修配置，为现有商户管理员补齐 `decoration:manage` 权限。重复执行保留已有草稿和发布配置，新库初始化已包含该迁移。
+
+备份并确认目标库后，先执行增量脚本，再更新后端和管理端，最后构建并发布小程序。小程序进入门店首页时读取该商户的发布配置。旧版小程序使用原首页，未发布的商户也继续使用平台默认首页。
+
+## 20261118_02_points_management.sql：积分管理
+
+在会员积分迁移完成后执行。新增批量赠分和导出权限，补齐商户管理员的默认授权。会员积分账户和已有流水沿用原表。重复执行不会重复授予权限。可用 `python scripts/test-points-management-migration.py` 在独立本地 MySQL 库验证新库初始化和增量升级。

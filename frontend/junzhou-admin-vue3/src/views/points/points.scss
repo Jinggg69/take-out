@@ -1,0 +1,18 @@
+.points-page .points-filters { gap: 12px; }
+.points-filters .el-input { width: min(100%, 240px); }
+.points-filters .el-select { width: 156px; }
+.points-filters .el-date-editor { max-width: 100%; }
+.points-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.points-actions .el-button { margin-left: 0; }
+.points-note, .points-environment { color: var(--jz-text-secondary); font-size: var(--jz-font-control); }
+.points-environment { padding: 5px 10px; border: 1px solid var(--jz-border); border-radius: var(--jz-radius-control); white-space: nowrap; }
+.points-overview h2 { margin: 0 0 16px; font-size: var(--jz-font-section); }
+.points-overview .points-filters { padding-bottom: 0; }
+.points-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.points-metrics + h2 { margin-top: 24px; border-top: 1px solid var(--jz-border); padding-top: 24px; }
+.points-metrics dt { color: var(--jz-text-secondary); font-size: var(--jz-font-control); }
+.points-metrics dd { margin: 6px 0 0; font-size: var(--jz-font-title); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .points-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .points-filters .el-date-editor { width: 100%; }
+}

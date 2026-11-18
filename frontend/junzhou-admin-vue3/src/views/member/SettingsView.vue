@@ -3,7 +3,7 @@ import { ref, onMounted, watch } from 'vue'
 import { ElForm, ElFormItem, ElSwitch, ElButton, ElAlert, ElMessage } from 'element-plus'
 import { memberApi } from '@/api'
 import type { MemberBody } from '@/api/member'
-import { workspace } from '@/stores/workspace'
+import { pendingWrites, workspace } from '@/stores/workspace'
 import PageHeader from '@/components/PageHeader.vue'
 import DataState from '@/components/DataState.vue'
 import FormFields from './FormFields.vue'
@@ -11,20 +11,27 @@ import { settingsPayload } from './forms'
 import { unwrap, useMemberLoad } from './shared'
 import { errorMessage } from '@/utils/error-message'
 import './member.scss'
+defineProps<{ embedded?: boolean }>()
 const { value: draft, loading, error, load } = useMemberLoad<MemberBody>(() => ({}), async () => unwrap(await memberApi.settings()))
 const busy = ref(false), saveError = ref('')
 onMounted(load)
 watch(workspace.revision, () => { saveError.value = '' })
 async function save() {
   if (busy.value || !workspace.can('member:manage')) return
-  try { const body = settingsPayload(draft.value); busy.value = true; saveError.value = ''; unwrap(await memberApi.saveSettings(body)); ElMessage.success('会员规则已保存'); await load() }
+  try {
+    const body = settingsPayload(draft.value); busy.value = true; saveError.value = ''; pendingWrites.value++
+    try { unwrap(await memberApi.saveSettings(body)); ElMessage.success('会员规则已保存'); await load() }
+    finally { pendingWrites.value--; busy.value = false }
+  }
   catch (e) { saveError.value = errorMessage(e, '规则保存失败') }
-  finally { busy.value = false }
 }
 </script>
 <template>
   <div class="member-page">
-    <PageHeader title="会员设置" />
+    <PageHeader
+      v-if="!embedded"
+      title="会员设置"
+    />
     <section class="management-panel">
       <DataState
         v-if="loading"

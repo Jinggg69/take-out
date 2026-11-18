@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import { ElDialog, ElForm, ElFormItem, ElInput, ElButton, ElAlert } from 'element-plus'
 import { memberApi } from '@/api'
 import type { MemberRow } from '@/api/member'
-import { workspace } from '@/stores/workspace'
+import { pendingWrites, workspace } from '@/stores/workspace'
 import { adjustmentPayload } from './forms'
 import { unwrap } from './shared'
 import { errorMessage } from '@/utils/error-message'
@@ -20,10 +20,10 @@ async function save() {
     const body = adjustmentPayload(props.kind, value.value, reason.value, requestId)
     const current = JSON.stringify({ ...body, requestId: undefined })
     if (fingerprint && fingerprint !== current) throw new Error('此操作已尝试提交；请保持原数值与原因重试，或关闭后创建新操作。')
-    fingerprint = current; busy.value = true; error.value = ''
-    unwrap(await memberApi.adjust(props.member.id, props.kind, body)); open.value = false; emit('saved')
+    fingerprint = current; busy.value = true; error.value = ''; pendingWrites.value++
+    try { unwrap(await memberApi.adjust(props.member.id, props.kind, body)); open.value = false; emit('saved') }
+    finally { pendingWrites.value--; busy.value = false }
   } catch (e) { error.value = errorMessage(e, '调整失败，请重试') }
-  finally { busy.value = false }
 }
 </script>
 <template>

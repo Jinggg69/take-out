@@ -9,6 +9,7 @@ const paths = {
   employee: ['M8 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0 M4 21v-3a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v3'],
   menu: ['M4 6h16 M4 12h16 M4 18h16'],
   collapse: ['M5 4v16 M19 6l-6 6 6 6'],
+  decoration: ['M4 4h16v16H4z M4 9h16 M10 9v11'],
   chevron: ['m6 9 6 6 6-6'],
   shop: ['M4 10v11h16V10 M3 4h18l1 6a3 3 0 0 1-5 1a3 3 0 0 1-5 0a3 3 0 0 1-5 0a3 3 0 0 1-5-1z M9 21v-6h6v6'],
 } as const

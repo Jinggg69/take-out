@@ -27,10 +27,12 @@ export const router = createRouter({
             ? () => import('@/views/member/MemberListView.vue')
             : item.path === '/member/settings'
             ? () => import('@/views/member/SettingsView.vue')
-            : item.path === '/member/points'
-            ? () => import('@/views/member/LedgerView.vue')
             : item.path.startsWith('/member/')
             ? () => import('@/views/member/ResourceView.vue')
+            : item.path === '/points'
+            ? () => import('@/views/points/PointsView.vue')
+            : item.path === '/decoration'
+            ? () => import('@/views/decoration/DecorationView.vue')
             : item.path === '/dining'
             ? () => import('@/views/order/DiningView.vue')
             : item.path === '/store'
@@ -50,9 +52,10 @@ export const router = createRouter({
                     : item.path === '/dashboard'
                       ? () => import('@/views/dashboard/DashboardView.vue')
                       : () => import('@/views/statistics/StatisticsView.vue'),
-          props: item.path.startsWith('/member/') ? { resource: item.path.split('/')[2], kind: 'points' } : undefined,
+          props: item.path.startsWith('/member/') && item.path !== '/member/settings' ? { resource: item.path.split('/')[2] } : undefined,
           meta: { title: `${item.label} · 均州餐饮点餐营销管理系统`, pageTitle: item.label, activeMenu: item.path },
         })),
+        { path: 'member/points', name: 'member/points', redirect: { path: '/points', query: { tab: 'ledger' } } },
         {
           path: 'setmeal/add', name: 'setmeal-form',
           component: () => import('@/views/setmeal/SetmealFormView.vue'),

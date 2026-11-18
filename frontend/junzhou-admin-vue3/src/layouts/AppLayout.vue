@@ -13,7 +13,7 @@ let active=true
 async function load(){loading.value=true;error.value='';try{
  const {data}=await request.get('/rbac/context');if(!active)return
  if(String(data.code)!=='1')throw new Error(data.msg||'门店加载失败')
- workspace.load(data.data.stores, data.data.identity)
+ workspace.load(data.data.stores, data.data.identity, data.data.tenantPermissions)
 }catch(e){if(active)error.value=e instanceof Error?e.message:'门店加载失败'}finally{if(active)loading.value=false}}
 async function logout(){await user.logout();await router.replace('/login')}
 onMounted(load);onUnmounted(()=>{active=false;workspace.reset()})

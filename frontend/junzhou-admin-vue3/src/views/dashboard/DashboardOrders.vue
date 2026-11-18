@@ -489,13 +489,15 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
 </template>
 
 <style scoped>
-.dashboard-orders { padding: var(--jz-space-6); min-width: 0; }
-.dashboard-orders-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--jz-space-3); margin-bottom: var(--jz-space-4); }
+.dashboard-orders { padding: var(--jz-space-4) var(--jz-space-6); min-width: 0; }
+.dashboard-orders-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--jz-space-3); margin-bottom: var(--jz-space-2); }
 .dashboard-orders-heading h2 { margin: 0; font-size: var(--jz-font-section); font-weight: 600; }
-.order-tabs { display: flex; flex-wrap: wrap; gap: var(--jz-space-2); margin-bottom: var(--jz-space-4); }
-.order-tabs button { display: inline-flex; align-items: center; gap: var(--jz-space-2); min-height: var(--jz-control-height); padding: var(--jz-space-2) var(--jz-space-4); background: var(--jz-surface); border: 1px solid var(--jz-control-border); border-radius: var(--jz-radius-control); color: var(--jz-text-primary); font: inherit; font-size: var(--jz-font-control); cursor: pointer; }
-.order-tabs button[aria-pressed="true"] { background: var(--jz-brand-primary); border-color: var(--jz-brand-primary); color: var(--jz-surface); }
-.order-tab-count { padding: 0 var(--jz-space-1); border-radius: var(--jz-radius-control); background: var(--jz-page-background); color: var(--jz-brand-primary); font-variant-numeric: tabular-nums; }
+.order-tabs { display: flex; flex-wrap: wrap; gap: var(--jz-space-2); margin-bottom: var(--jz-space-3); border-bottom: 1px solid var(--jz-border); }
+.order-tabs button { display: inline-flex; align-items: center; gap: var(--jz-space-2); min-height: var(--jz-control-height); padding: var(--jz-space-2) var(--jz-space-3); background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--jz-text-secondary); font-size: var(--jz-font-control); cursor: pointer; }
+.order-tabs button:hover:not(:disabled) { color: var(--jz-brand-primary); background: var(--jz-page-background); }
+.order-tabs button[aria-pressed="true"] { border-bottom-color: var(--jz-brand-primary); color: var(--jz-brand-primary); font-weight: 600; }
+.order-tabs button:disabled { opacity: 0.65; cursor: not-allowed; }
+.order-tab-count { font-size: var(--jz-font-meta); font-variant-numeric: tabular-nums; }
 .order-statistics-error { padding-bottom: var(--jz-space-3); color: var(--jz-danger); font-size: var(--jz-font-control); }
 .order-date-filter { width: min(360px, 100%); }
 .order-date-filter :deep(.el-date-editor) { width: 100%; min-width: 0; }

@@ -354,3 +354,15 @@ node --test tests/*.test.cjs
 现有开发库升级执行 [会员增量迁移](database/migrations/20261117_02_membership.sql)，先备份并参照 [迁移说明](database/migrations/README.md) 核对前置表。新装 `database/junzhou.sql` 已含会员表及默认等级；订单支付基础配置仍遵循原迁移流程。初始等级门槛为 0/500/2000 元且都不打折；默认满 1 元赠 1 积分、100 积分抵 1 元、最多抵优惠后商品金额 10%，可由商户修改。
 
 验证：`scripts/backend.ps1` 运行后端测试；管理端运行 `npm run lint`、`npm run test:unit`、`npm run build`；小程序运行 `npm test`、`npm run build:h5`、`npm run build:mp-weixin`。`python scripts/test-membership-migration.py` 只在独立随机本地 MySQL 库验证迁移，结束后清理该测试库。
+
+## 小程序首页装修
+
+商户管理员在「页面装修」编辑首页轮播图、公告和活动入口，调整模块顺序及首页主题色。保存草稿可继续编辑，发布后才更新顾客首页。同一商户下各门店共享装修，门店的地址、费用、营业状态和点餐方式仍来自各自配置。恢复默认后，顾客重新看到平台默认首页，商户的草稿继续保留。
+
+已有数据库升级执行 [首页装修迁移](database/migrations/20261118_01_home_decoration.sql)，再更新后端、管理端和小程序。轮播图使用现有图片上传与 OSS 配置，部署时请确认微信小程序能访问对应 HTTPS 图片域名。运行 `python scripts/test-home-decoration-migration.py` 可在独立 MySQL 库检验迁移。
+
+## 积分管理
+
+「积分管理」提供商户积分概览、会员积分、流水与规则。赠分可跨页勾选最多 100 名启用会员；同一批次一起入账，赠分优先抵扣待扣积分。导出按流水页的查询条件生成 Excel，单次最多 31 天和 10,000 条。页面和导出分别遵循当前的模拟或真实积分环境。
+
+升级已有数据库前先备份，应用 [积分管理迁移](database/migrations/20261118_02_points_management.sql) 后部署后端和管理端。迁移为既有商户管理员增加批量赠分和流水导出权限。小程序会员中心沿用原有积分及流水接口。

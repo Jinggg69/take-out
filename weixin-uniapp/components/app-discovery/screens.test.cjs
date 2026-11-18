@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const { readFileSync } = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
+const { createHomeDecorationLoader, HOME_ACCENT } = require('../../services/home-decoration.js')
 const root = path.resolve(__dirname, '../..')
 const ref = value => ({ value })
 const plain = value => JSON.parse(JSON.stringify(value))
@@ -11,7 +12,7 @@ const pagination = readFileSync(path.join(__dirname, 'pagination.js'), 'utf8').r
 function screen(file, names, mocks = {}) {
   const hooks = {}, navigation = []
   const app = { selectedMerchantId: '7', selectedStoreId: '71', selectedMerchant: { merchantName: '当前商家' }, token: 'token', storeGeneration: 0, storeContext: {}, lastSelection: null, assertCanSelect() {}, ...mocks.app }
-  const context = { useMemberContext: () => ({ profile: ref(null) }), ref, computed: get => ({ get value() { return get() } }), useAppStore: () => app, onShow: fn => hooks.show = fn, onLoad: fn => hooks.load = fn, onReachBottom: fn => hooks.bottom = fn, uni: { switchTab: options => navigation.push(options), navigateTo: options => navigation.push(options) }, ...mocks }
+  const context = { useMemberContext: () => ({ profile: ref(null) }), ref, computed: get => ({ get value() { return get() } }), useAppStore: () => app, onShow: fn => hooks.show = fn, onHide: fn => hooks.hide = fn, watch: (_, fn) => hooks.change = fn, onLoad: fn => hooks.load = fn, onReachBottom: fn => hooks.bottom = fn, uni: { switchTab: options => navigation.push(options), navigateTo: options => navigation.push(options) }, ...mocks }
   context.app = app
   vm.createContext(context)
   const source = readFileSync(path.join(root, file), 'utf8').split('<script setup>')[1].split('</script>')[0].replace(/^import .*$/mg, '')
@@ -78,11 +79,35 @@ test('refund outcome labels follow server financial status', () => {
 })
 test('home fulfillment shortcuts pass real mode and stale categories never appear', async () => {
   const response = deferred(), modes = []
-  const page = screen('pages/index/index.vue', 'enter, loadCategories, categories', { goToMenu: async type => modes.push(type), getCategoryList: () => response.promise })
+  const page = screen('pages/index/index.vue', 'enter, loadCategories, categories', { createHomeDecorationLoader, HOME_ACCENT, getHomeDecoration: async () => ({}), goToMenu: async type => modes.push(type), getCategoryList: () => response.promise })
   await page.enter('PICKUP'); assert.deepEqual(modes, ['PICKUP'])
   const flight = page.loadCategories(); page.app.storeGeneration++
   response.resolve({ code: 1, data: [{ id: 'old', name: '旧店分类' }] }); await flight
   assert.equal(page.categories.value.length, 0)
+})
+test('home refreshes decoration for the selected store and opens only supported activity destinations', async () => {
+  const seen = [], modes = []
+  const modules = ['NOTICE', 'ACTIVITY', 'BANNER'].map(type => ({ type, enabled: false }))
+  const page = screen('pages/index/index.vue', 'loadDecoration, accent, openActivity', {
+    createHomeDecorationLoader, HOME_ACCENT, goToMenu: async type => modes.push(type), getCategoryList: async () => ({ code: 1, data: [] }),
+    getHomeDecoration: async id => {
+      seen.push(id)
+      return { data: { merchantId: '7', config: id === '71' ? { theme: 'TEAL', modules } : null } }
+    },
+  })
+  page.hooks.show()
+  await page.loadDecoration()
+  assert.deepEqual(seen, ['71'])
+  assert.equal(page.accent.value, HOME_ACCENT.TEAL)
+  page.app.selectedStoreId = '72'
+  page.app.storeGeneration++
+  page.hooks.change()
+  await page.loadDecoration()
+  assert.deepEqual(seen, ['71', '72'])
+  assert.equal(page.accent.value, HOME_ACCENT.DEFAULT)
+  for (const target of ['NONE', 'MENU', 'MEMBER', 'COUPONS', '/pages/order/index']) page.openActivity(target)
+  assert.deepEqual(modes, ['DELIVERY'])
+  assert.deepEqual(page.navigation.map(({ url }) => url), ['/pages/member/index', '/pages/member/coupons?center=1'])
 })
 test('my address works without selecting merchant or store', async () => {
   const calls = []

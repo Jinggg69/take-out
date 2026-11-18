@@ -17,6 +17,6 @@ public final class AuthorizationSnapshot {
  public boolean tenantWide(PermissionAction action){return tenantWide.contains(action);}
  public Set<Long> accessibleStores(){Set<Long> ids=new TreeSet<>();permitted.forEach((id,a)->{if(!a.isEmpty())ids.add(id);});return Collections.unmodifiableSet(ids);}
  public String storeName(Long id){return stores.get(id);}
- public static boolean tenantShared(PermissionAction action){String c=action.getCode();return c.startsWith("employee:")||((c.startsWith("member:")||c.startsWith("coupon:"))&&!c.endsWith(":read"))||((c.startsWith("dish:")||c.startsWith("category:")||c.startsWith("setmeal:"))&&!c.endsWith(":read"));}
+ public static boolean tenantShared(PermissionAction action){String c=action.getCode();return action==PermissionAction.DECORATION_MANAGE||c.startsWith("employee:")||((c.startsWith("member:")||c.startsWith("coupon:"))&&!c.endsWith(":read"))||((c.startsWith("dish:")||c.startsWith("category:")||c.startsWith("setmeal:"))&&!c.endsWith(":read"));}
  public boolean effective(Long store,PermissionAction action){return permits(store,action)&&(!tenantShared(action)||tenantWide(action));}
 }

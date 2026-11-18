@@ -9,7 +9,9 @@ async function change(id:string){
  try{await ElMessageBox.confirm('切换后将清空当前页面未保存的内容，并刷新列表和订单提醒。','切换门店',{confirmButtonText:'切换门店',cancelButtonText:'留在当前门店'})}catch{return}
  if(expected!==workspace.revision.value || pendingWrites.value>0)return
  const permissions=workspace.stores.value.find(s=>s.id===id)?.permissions??[]
- const target=['/order','/access','/dish','/setmeal','/category','/employee','/dashboard','/statistics'].find(path=>permissions.includes(pagePermissions[path.slice(1)]!))??'/dashboard'
+ const target=['/order','/access','/dish','/setmeal','/category','/employee','/dashboard','/statistics','/decoration','/points'].find(path=>
+  permissions.includes(pagePermissions[path.slice(1)]!)&&(path!=='/points'||workspace.tenantPermissions.value.includes('member:read'))
+ )??'/dashboard'
  const failure=await router.replace({path:target,query:{}})
  if(isNavigationFailure(failure,NavigationFailureType.aborted|NavigationFailureType.cancelled))return
  if(expected===workspace.revision.value && pendingWrites.value===0)workspace.select(id)

@@ -82,8 +82,10 @@ class RbacIntegrationTest {
   scope(2L,10L);assertThrows(SecurityException.class,()->rbac.configuration());
  }
  @Test void contextOnlyReturnsOwnAllowedStoresAndActions(){
+  assertEquals(Collections.singletonList("employee:manage"),rbac.context().get("tenantPermissions"));
   scope(2L,10L);
   java.util.Map<String,Object> context=rbac.context();
+  assertEquals(Collections.emptyList(),context.get("tenantPermissions"));
   @SuppressWarnings("unchecked") java.util.List<java.util.Map<String,Object>> stores=(java.util.List<java.util.Map<String,Object>>)context.get("stores");
   assertEquals(1,stores.size());assertEquals("10",stores.get(0).get("id"));
   @SuppressWarnings("unchecked") java.util.List<String> actions=(java.util.List<String>)stores.get(0).get("permissions");

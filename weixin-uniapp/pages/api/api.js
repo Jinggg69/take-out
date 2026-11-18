@@ -402,6 +402,7 @@ export const getMerchants = params => request({ url: '/user/merchants', params, 
 export const getMerchant = id => request({ url: `/user/merchants/${encodeURIComponent(id)}`, scope: 'public' })
 export const getMerchantStores = (id, params) => request({ url: `/user/merchants/${encodeURIComponent(id)}/stores`, params, scope: 'public' })
 export const getStoreContext = id => request({ url: `/user/stores/${encodeURIComponent(id)}/context`, scope: 'public' })
+export const getHomeDecoration = id => request({ url: `/user/stores/${encodeURIComponent(id)}/decoration`, scope: 'public' })
 export const getUserProfile = () => request({ url: '/user/me', scope: 'identity' })
 export const getMyOrders = params => request({ url: '/user/me/orders', params, scope: 'identity' })
 export const getMyOrderDetail = (id, params) => request({ url: `/user/me/orders/${encodeURIComponent(id)}`, params, scope: 'identity' })

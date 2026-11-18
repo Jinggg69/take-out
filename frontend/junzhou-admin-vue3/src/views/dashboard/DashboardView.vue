@@ -81,7 +81,7 @@ onBeforeUnmount(() => resources.forEach(resource => resource.dispose()))
       </DataState>
       <dl
         v-else
-        class="dashboard-metrics"
+        class="dashboard-metrics dashboard-business-metrics"
       >
         <div
           v-for="metric in metrics"
@@ -191,15 +191,18 @@ onBeforeUnmount(() => resources.forEach(resource => resource.dispose()))
 
 <style scoped>
 .dashboard-page { min-width: 0; }
-.dashboard-section { margin-bottom: var(--jz-space-4); padding: var(--jz-space-6); }
+.dashboard-section { margin-bottom: var(--jz-space-4); padding: var(--jz-space-4) var(--jz-space-6); }
 .dashboard-section-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--jz-space-3); }
 .dashboard-section-heading h2 { margin: 0; font-size: var(--jz-font-section); font-weight: 600; }
-.dashboard-section-heading small { display: inline-block; margin-left: var(--jz-space-2); color: var(--jz-text-secondary); font-size: var(--jz-font-control); font-weight: 400; }
+.dashboard-section-heading small { display: inline-block; margin-left: var(--jz-space-2); color: var(--jz-text-secondary); font-size: var(--jz-font-meta); font-weight: 400; font-variant-numeric: tabular-nums; }
 .dashboard-page a { color: var(--jz-brand-primary); text-underline-offset: 3px; }
 .dashboard-section-heading a, .dashboard-add a { font-size: var(--jz-font-control); }
-.dashboard-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--jz-space-4); margin: var(--jz-space-6) 0 0; }
-.dashboard-metrics dt { color: var(--jz-text-secondary); font-size: var(--jz-font-control); }
-.dashboard-metrics dd { margin: var(--jz-space-2) 0 0; font-size: var(--jz-font-title); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.dashboard-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--jz-space-3) var(--jz-space-4); margin: var(--jz-space-3) 0 0; padding-top: var(--jz-space-3); border-top: 1px solid var(--jz-border); }
+.dashboard-metrics dt { color: var(--jz-text-secondary); font-size: var(--jz-font-meta); }
+.dashboard-metrics dd { margin: var(--jz-space-1) 0 0; font-size: var(--jz-font-section); font-weight: 600; line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.dashboard-business-metrics > :nth-child(-n+3) dd { font-size: var(--jz-font-title); }
+.dashboard-order-metrics a { color: inherit; text-decoration-color: var(--jz-control-border); }
+.dashboard-order-metrics a:hover { color: var(--jz-brand-primary); text-decoration-color: currentColor; }
 .dashboard-sales-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--jz-space-4); }
 .dashboard-sales-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .dashboard-add { margin-top: var(--jz-space-4); text-align: right; }

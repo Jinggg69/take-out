@@ -58,7 +58,7 @@ function toggleGroup(item: SidebarItem) {
       aria-label="当前商户与身份"
     >
       <strong :title="workspace.identity.value.tenantName">{{ workspace.identity.value.tenantName || '商户信息未提供' }}</strong>
-      <span class="identity-roles">（{{ workspace.identity.value.roleNames.join('、') || '商户员工' }}）</span>
+      <span class="identity-roles">{{ workspace.identity.value.roleNames.join('、') || '商户员工' }}</span>
     </section>
     <nav aria-label="主导航">
       <template
@@ -127,22 +127,23 @@ function toggleGroup(item: SidebarItem) {
 
 <style scoped lang="scss">
 .sidebar { display: flex; flex-direction: column; width: 100%; min-height: 100%; color: var(--jz-nav-text); background: var(--jz-nav-background); }
-.sidebar-brand { display: flex; flex: none; align-items: center; gap: 7px; height: 50px; min-width: 0; padding: 0 12px; color: #e3e6ea; text-decoration: none; }
-.platform-mark { display: block; width: 18px; height: 18px; flex: none; color: #bbc2cb; }
-.brand-type { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; }
-.merchant-identity { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; margin: 0 10px 10px; padding: 9px 10px; min-height: 56px; box-sizing: border-box; border: 1px solid #665055; border-radius: 2px; background: #493438; color: #f0e8ea; text-align: center; }
-.merchant-identity strong { max-width: 100%; overflow-wrap: anywhere; color: #f0e8ea; font-size: 14px; line-height: 1.5; font-weight: 500; }
-.identity-roles { color: #cdc0c4; font-size: 12px; line-height: 1.5; font-weight: 400; }
-nav { display: grid; align-content: start; gap: var(--jz-space-2); padding: var(--jz-space-4) var(--jz-space-3); }
-.nav-link { display: flex; align-items: center; gap: var(--jz-space-3); min-height: 44px; padding: var(--jz-space-3) var(--jz-space-4); border: 1px solid transparent; border-radius: var(--jz-radius-control); color: inherit; font-size: var(--jz-font-control); text-decoration: none; white-space: nowrap; }
+.sidebar-brand { display: flex; flex: none; align-items: center; gap: var(--jz-space-2); min-height: var(--jz-toolbar-height); min-width: 0; padding: 0 var(--jz-space-3); color: var(--jz-nav-heading); text-decoration: none; }
+.platform-mark { display: block; width: 18px; height: 18px; flex: none; color: var(--jz-brand-gold); }
+.brand-type { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--jz-font-control); font-weight: 600; }
+.merchant-identity { display: grid; gap: var(--jz-space-1); margin: 0 var(--jz-space-3); padding: var(--jz-space-2) var(--jz-space-3); border: 1px solid var(--jz-nav-border); border-radius: var(--jz-radius-control); overflow-wrap: anywhere; }
+.merchant-identity strong { color: var(--jz-nav-heading); font-size: var(--jz-font-control); font-weight: 600; }
+.identity-roles { color: var(--jz-nav-text); font-size: var(--jz-font-meta); }
+nav { display: grid; align-content: start; gap: var(--jz-space-1); padding: var(--jz-space-4) var(--jz-space-3); }
+.nav-link { display: flex; align-items: center; gap: var(--jz-space-3); min-height: var(--jz-control-height-large); padding: var(--jz-space-2) var(--jz-space-3); border: 1px solid transparent; border-radius: var(--jz-radius-control); color: inherit; font-size: var(--jz-font-control); text-decoration: none; white-space: nowrap; }
 .group-trigger { width: 100%; background: none; cursor: pointer; font-family: inherit; text-align: left; }
 .group-arrow { margin-left: auto; width: 14px; height: 14px; transform: rotate(-90deg); }
 .group-arrow.is-open { transform: rotate(0); }
 .group-children { display: grid; gap: 4px; padding-top: 4px; }
-.child-link { padding-left: 32px; font-size: 13px; }
+.child-link { padding-left: var(--jz-space-8); font-size: var(--jz-font-meta); }
 .sidebar button:focus-visible { outline: 2px solid var(--jz-brand-gold); outline-offset: 1px; }
 .nav-link:hover { color: var(--jz-surface); background: var(--jz-nav-hover); }
-.nav-link.is-active { color: var(--jz-brand-gold); background: var(--jz-nav-selected); font-weight: 600; }
+.nav-link.is-active { color: var(--jz-nav-heading); background: var(--jz-nav-selected); font-weight: 600; }
+.nav-link.is-active > .app-icon:first-child { color: var(--jz-brand-gold); }
 .sidebar a:focus-visible { outline-color: var(--jz-brand-gold); outline-offset: 1px; }
 .is-collapsed .sidebar-brand { justify-content: center; padding: 0 8px; }
 .is-collapsed nav { padding-inline: var(--jz-space-2); }

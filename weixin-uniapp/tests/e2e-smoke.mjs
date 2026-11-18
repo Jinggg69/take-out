@@ -25,6 +25,14 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
 const origin = `http://127.0.0.1:${server.address().port}`
 const merchants = [{ merchantId: '1', merchantName: '测试商家甲', activeStoreCount: 2 }, { merchantId: '2', merchantName: '测试商家乙', activeStoreCount: 1 }]
 const contexts = Object.fromEntries([['11', '1', '甲一店'], ['12', '1', '甲二店'], ['21', '2', '乙门店']].map(([storeId, merchantId, storeName]) => [storeId, { storeId, merchantId, merchantName: merchants.find(x => x.merchantId === merchantId).merchantName, storeName, address: '测试地址，仅用于界面验证', open: true, opensAt: '09:00', closesAt: '22:00', minimumOrderAmount: '0.00', deliveryFee: '6.00', packFeePerItem: '1.00', configVersion: '1' }]))
+const publishedHome = {
+  theme: 'BURGUNDY',
+  modules: [
+    { type: 'NOTICE', enabled: true, text: '测试商家甲今日公告' },
+    { type: 'BANNER', enabled: true, items: [{ title: '加载失败的图片', imageUrl: 'https://decoration-fixtures.invalid/unavailable.jpg', target: 'NONE' }] },
+    { type: 'ACTIVITY', enabled: true, items: [{ title: '活动领券', target: 'COUPONS' }] },
+  ],
+}
 const cart = { '11': [], '12': [], '21': [] }
 const requests = [], unexpected = [], errors = []
 let paid = false, submitted = null
@@ -39,6 +47,7 @@ const context = await browser.newContext({ viewport: { width: 390, height: 844 }
 const page = await context.newPage()
 page.setDefaultTimeout(15000)
 page.on('pageerror', error => errors.push(error.message))
+await page.route('https://decoration-fixtures.invalid/**', route => route.abort())
 await page.route('**/user/**', async route => {
   const req = route.request(), u = new URL(req.url()), p = u.pathname, method = req.method(), headers = req.headers(), store = headers['x-store-id']
   if (method === 'OPTIONS') { await route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': '*', 'access-control-allow-headers': '*' } }); return }
@@ -64,6 +73,12 @@ await page.route('**/user/**', async route => {
   else if (/^\/user\/merchants\/\d+\/stores$/.test(p)) { const id = p.split('/')[3], records = Object.values(contexts).filter(x => x.merchantId === id); data = { total: records.length, records } }
   else if (/^\/user\/merchants\/\d+$/.test(p)) data = merchants.find(x => x.merchantId === p.split('/').at(-1))
   else if (/^\/user\/stores\/\d+\/context$/.test(p)) data = contexts[p.split('/')[3]]
+  else if (/^\/user\/stores\/\d+\/decoration$/.test(p)) {
+    assert.equal(store, undefined)
+    assert.equal(headers.authentication, undefined)
+    const { merchantId } = contexts[p.split('/')[3]]
+    data = { merchantId, config: merchantId === '1' ? publishedHome : null }
+  }
   else if (p === '/user/me') data = { userId: '42', nickname: '测试用户', avatarUrl: null }
   else if (p === '/user/me/order-filters') data = { merchantId: '1', merchantName: '测试商家甲', stores: [{ storeId: '11', storeName: '甲一店' }, { storeId: '12', storeName: '甲二店' }] }
   else if (p === '/user/me/orders') { assert.ok(u.searchParams.get('merchantId')); assert.equal(store, undefined); const records = u.searchParams.get('merchantId') === '1' ? [history()] : []; data = { total: records.length, records } }
@@ -108,7 +123,12 @@ try {
   assert.equal(requests.find(x => x.path === '/user/merchants').store, undefined)
   await page.evaluate(() => localStorage.setItem('appSession', JSON.stringify({ type: 'object', data: { token: 'ui-test-token', userId: '42', baseUserInfo: { nickname: '测试用户' } } })))
   await page.reload(); await clickText('测试商家甲'); await clickText('甲一店')
-  await page.getByText('选择用餐方式', { exact: true }).waitFor(); await screenshot('02-home')
+  await page.getByText('选择用餐方式', { exact: true }).waitFor()
+  await page.getByText('测试商家甲今日公告', { exact: true }).waitFor()
+  await page.getByText('加载失败的图片', { exact: true }).waitFor({ state: 'hidden' })
+  await clickText('活动领券'); await page.getByText('领券与积分兑换', { exact: true }).waitFor()
+  await page.goBack()
+  await screenshot('02-home')
   await clickText('到店自取'); await page.getByText('清蒸鲜鱼', { exact: true }).waitFor()
   await screenshot('03-menu')
   await page.locator('[aria-label="添加清蒸鲜鱼"]').click()
@@ -148,6 +168,7 @@ try {
   await tab('点单'); await page.getByText('清蒸鲜鱼', { exact: true }).waitFor()
   await page.locator('[aria-label="添加清蒸鲜鱼"]').click(); await page.getByText('共 1 份，费用以结算为准', { exact: true }).waitFor()
   await clickText('切换商家'); await clickText('测试商家乙'); await page.getByText('乙门店', { exact: true }).waitFor()
+  await page.getByText('测试商家甲今日公告', { exact: true }).waitFor({ state: 'hidden' })
   await clickText('到店自取'); await page.getByText('选好菜品，再去结算', { exact: true }).waitFor()
   assert.equal(cart['11'].length, 1); assert.equal(cart['21'].length, 0)
   await clickText('切换商家'); await clickText('测试商家甲'); await clickText('甲一店'); await clickText('到店自取')
