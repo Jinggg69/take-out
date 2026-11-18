@@ -9,7 +9,7 @@ function setup({ history, available = true } = {}) {
   const cart = store.orderListData
   const requests = [], selected = [], toasts = []
   const context = vm.createContext({ module: { exports: {} }, reminderCooldown: {}, Status: {}, OrderDetail: {}, DeliveryInfo: {}, OrderInfo: {},
-    uni: { showToast: value => toasts.push(value) },
+    uni: { showToast: value => toasts.push(value), redirectTo() {} },
     selectStoreContext: async id => { selected.push(id); store.selectContext({ merchantId: '1', storeId: id }); },
     getOrderDetail: async id => { requests.push(['store', id]); return { code: 1, data: { id, status: 5, storeId: '1', orderDetailList: [{ id: 1 }] } } },
     getMyOrderDetail: async (id, params) => { requests.push(['identity', id, params]); return { code: 1, data: { orderId: id, orderNumber: 'history-7', merchantId: '1', merchantName: '旧商家', storeId: '2', storeName: '原门店', storeAvailable: available, status: 5, amount: '18.30', packFee: '1.30', deliveryFee: '0.00', orderDetails: [{ name: '历史菜', number: 1, unitPrice: '17.00' }] } } },
@@ -65,4 +65,10 @@ test('历史详情缺失冻结金额显示未知，不能转换为零', () => {
   assert.equal(page.moneyText(null), '—')
   assert.equal(page.moneyText('0.00'), '0.00')
   assert.equal(page.moneyText('17.30'), '17.30')
+})
+
+test('从详情恢复支付保留已冻结的会员钱包和外部支付拆分', async () => {
+ const h=setup();h.page.prepareOrderStore=async()=>true
+ h.page.orderDetailsData={number:'n',amount:'100.00',externalPayAmount:'60.00',membership:{balanceAmount:'40.00',externalAmount:'60.00'},storeId:'1',fulfillmentType:'PICKUP'}
+ await h.page.handlePay('7');assert.equal(h.store.orderData.externalPayAmount,'60.00');assert.equal(h.store.orderData.membership.balanceAmount,'40.00')
 })

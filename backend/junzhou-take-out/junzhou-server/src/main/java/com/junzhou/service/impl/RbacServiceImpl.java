@@ -45,7 +45,10 @@ import java.util.*;
    row.put("permissions",actions);stores.add(row);
   }
   stringifyIds(stores);
-  Map<String,Object> result=new LinkedHashMap<>();result.put("stores",stores);return result;
+  Map<String,Object> result=new LinkedHashMap<>();result.put("stores",stores);
+  Map<String,Object> identity=new LinkedHashMap<>();
+  identity.put("tenantName",mapper.tenantName(t));identity.put("roleNames",mapper.employeeRoleNames(t,e));
+  result.put("identity",identity);return result;
  }
  private void stringifyIds(List<Map<String,Object>> rows){
   for(Map<String,Object> row:rows)for(Map.Entry<String,Object> entry:row.entrySet()){

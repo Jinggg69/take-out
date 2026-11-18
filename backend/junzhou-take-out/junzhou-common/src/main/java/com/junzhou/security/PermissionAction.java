@@ -39,6 +39,17 @@ public enum PermissionAction {
     SHOP_READ("shop:read"),
     SHOP_UPDATE("shop:update"),
     WORKSPACE_READ("workspace:read"),
+    MEMBER_READ("member:read"),
+    MEMBER_CREATE("member:create"),
+    MEMBER_UPDATE("member:update"),
+    MEMBER_STATUS("member:status"),
+    MEMBER_MANAGE("member:manage"),
+    MEMBER_POINT("member:point"),
+    MEMBER_BALANCE("member:balance"),
+    MEMBER_REFUND("member:refund"),
+    COUPON_READ("coupon:read"),
+    COUPON_MANAGE("coupon:manage"),
+    COUPON_ISSUE("coupon:issue"),
     FILE_UPLOAD("file:upload");
     private final String code;
     PermissionAction(String code) { this.code = code; }

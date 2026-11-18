@@ -13,6 +13,7 @@
           <view class="money"
             >￥<text>{{ orderDataInfo.orderAmount }}</text></view
           >
+          <view v-if="orderDataInfo.membership">余额支付 ¥{{ orderDataInfo.membership.balanceAmount }} · 外部支付 ¥{{ orderDataInfo.externalPayAmount ?? orderDataInfo.membership.externalAmount }}</view>
           <view>{{ shopInfo().shopName }}-{{ orderDataInfo.orderNumber }}</view>
         </view>
       </view>
@@ -165,6 +166,12 @@ export default {
           });
           if (!this.isCurrentPayment(run)) return;
           if (!res || res.code !== 1 || !res.data) throw { msg: (res && res.msg) || "暂时无法发起支付，请重试" };
+          if (res.data.channel === 'BALANCE') {
+            this.needsConfirmation = true;
+            this.updatePaymentLock(true);
+            await this.confirmPaymentResult(run);
+            return;
+          }
           if (res.data.channel === 'MOCK') {
             this.isMockPayment = true;
             this.mockCashier = true;

@@ -45,8 +45,10 @@ public class OrderController {
 
     @GetMapping("/quote")
     @ApiOperation("获取当前用户购物车的结算报价")
-    public Result<OrderQuoteVO> quote(@RequestParam(required = false) String fulfillmentType) {
-        return Result.success(orderService.quote(fulfillmentType));
+    public Result<OrderQuoteVO> quote(@RequestParam(required = false) String fulfillmentType,
+        @RequestParam(required = false) Long couponId, @RequestParam(defaultValue="0") long points,
+        @RequestParam(defaultValue="false") boolean useBalance) {
+        return Result.success(orderService.quote(fulfillmentType,couponId,points,useBalance));
     }
 
     /**

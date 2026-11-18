@@ -51,6 +51,12 @@ public class OrderController {
         return Result.success();
     }
 
+    @PostMapping("/{id}/refund")
+    @RequireActions(PermissionAction.ORDER_REFUND)
+    public Result<Void> refund(@PathVariable Long id,@RequestBody java.util.Map<String,String> body) {
+        orderService.refund(id,body.get("reason")); return Result.success();
+    }
+
     @PostMapping("/{id}/refund/retry")
     @ApiOperation("按原退款单号核验或重试已有退款")
     @RequireActions({PermissionAction.ORDER_REFUND})

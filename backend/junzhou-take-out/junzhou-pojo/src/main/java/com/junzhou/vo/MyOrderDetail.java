@@ -8,6 +8,8 @@ import java.util.List;
 @EqualsAndHashCode(callSuper = true)
 public class MyOrderDetail extends MyOrderSummary {
     private List<DetailItem> orderDetails;
+    private String externalPayAmount;
+    private java.util.Map<String,Object> membership;
     private String goodsAmount, packFee, deliveryFee;
     private String contactName, contactPhone, deliveryAddress, remark, pickupNumber, tableName;
     private String cancelReason, rejectionReason, estimatedDeliveryTime;

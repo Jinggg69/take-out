@@ -26,6 +26,7 @@ import java.time.ZoneId;
 @Service
 @Slf4j
 public class PaymentLifecycleServiceImpl implements PaymentLifecycleService {
+    @Autowired(required=false) private com.junzhou.membership.MembershipCheckoutService members;
     @Autowired private OrderMapper orders;
     @Autowired private UserMapper users;
     @Autowired private com.junzhou.service.PaymentAccountService paymentAccounts;
@@ -49,7 +50,7 @@ public class PaymentLifecycleServiceImpl implements PaymentLifecycleService {
         JSONObject amount=payment.getJSONObject("amount"),payer=payment.getJSONObject("payer");
         User user=users.getPaymentUserByOrderId(order.getId());
         long expected;
-        try { expected=order.getAmount().movePointRight(2).longValueExact(); }
+        try { expected=com.junzhou.payment.OrderPaymentAmounts.external(order).movePointRight(2).longValueExact(); }
         catch(RuntimeException ex) { throw new OrderBusinessException("订单金额异常"); }
         if(amount==null || !"CNY".equals(amount.getString("currency")) || PaymentAmounts.fen(amount.get("total"))!=expected
                 || payer==null || user==null || blank(user.getOpenid()) || !user.getOpenid().equals(payer.getString("openid"))) {
@@ -63,6 +64,7 @@ public class PaymentLifecycleServiceImpl implements PaymentLifecycleService {
         Orders update=Orders.builder().id(order.getId()).wechatTransactionId(transaction).wechatTradeState("SUCCESS")
                 .paymentCheckTime(LocalDateTime.now()).build();
         if(order.getCheckoutTime()==null) update.setCheckoutTime(paidAt);
+        if(newlyPaid && members!=null) members.paid(order);
         if(newlyPaid) { update.setStatus(Orders.TO_BE_CONFIRMED); update.setPayStatus(Orders.PAID); }
         orders.update(update);
         order.setWechatTransactionId(transaction);

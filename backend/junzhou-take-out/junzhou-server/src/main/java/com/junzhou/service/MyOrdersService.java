@@ -51,6 +51,9 @@ public class MyOrdersService {
         }
         result.setOrderDetails(items);
         JSONObject pricing=snapshot(row.getPricingSnapshot()), store=snapshot(row.getStoreSnapshot());
+        com.junzhou.entity.Orders paymentSnapshot=com.junzhou.entity.Orders.builder().amount(row.getAmount()).pricingSnapshot(pricing==null?null:pricing.toJSONString()).build();
+        result.setExternalPayAmount(money(com.junzhou.payment.OrderPaymentAmounts.external(paymentSnapshot)));
+        result.setMembership(pricing==null?null:pricing.getJSONObject("member"));
         result.setGoodsAmount(money(first(decimal(pricing,"goodsAmount"),goods)));
         BigDecimal historicalPackFee=row.getHistoricalPackAmount()==null?null:BigDecimal.valueOf(row.getHistoricalPackAmount());
         result.setPackFee(money(first(decimal(pricing,"packFee"),historicalPackFee)));

@@ -39,7 +39,7 @@ public class MockPaymentGateway {
         return new WeChatPayUtil() {
             @Override public JSONObject pay(String number,BigDecimal amount,String description,String openid) {
                 Orders order=gateway.requireOrder(id,false);
-                if(!order.getNumber().equals(number) || order.getAmount().compareTo(amount)!=0) throw new SecurityException("Mock order mismatch");
+                if(!order.getNumber().equals(number) || OrderPaymentAmounts.external(order).compareTo(amount)!=0) throw new SecurityException("Mock order mismatch");
                 return gateway.prepare(id);
             }
             @Override public JSONObject queryOrder(String number) { gateway.requireNumber(id,number); return gateway.query(id); }
@@ -77,7 +77,7 @@ public class MockPaymentGateway {
         User user=users.getPaymentUserByOrderId(order.getId());
         if(user==null || user.getOpenid()==null || user.getOpenid().trim().isEmpty()) throw new OrderBusinessException("请先登录后模拟支付");
         jdbc.update("insert into mock_payment(order_id,state,amount_fen,payer_openid) values(?,'NOTPAY',?,?)",
-                order.getId(),order.getAmount().movePointRight(2).longValueExact(),user.getOpenid());
+                order.getId(),OrderPaymentAmounts.external(order).movePointRight(2).longValueExact(),user.getOpenid());
     }
     /** Commit the simulated channel result before invoking the normal business callback. */
     @Transactional
@@ -129,7 +129,7 @@ public class MockPaymentGateway {
     @Transactional public JSONObject refundPayment(Long id,String refundNo,BigDecimal amount,BigDecimal total) {
         Orders order=requireOrder(id,true); Map<String,Object> row=record(id);
         if(row==null || !Arrays.asList("SUCCESS","REFUND").contains(row.get("state"))) throw new OrderBusinessException("模拟交易尚未付款");
-        if(!Orders.CANCELLED.equals(order.getStatus()) || order.getAmount().compareTo(amount)!=0 || amount.compareTo(total)!=0
+        if((!Orders.CANCELLED.equals(order.getStatus()) && !Orders.COMPLETED.equals(order.getStatus())) || OrderPaymentAmounts.external(order).compareTo(amount)!=0 || amount.compareTo(total)!=0
                 || !order.getNumber().equals(refundNo)) throw new OrderBusinessException("模拟退款金额或身份不匹配");
         jdbc.update("update mock_payment set state='REFUND',out_refund_no=? where order_id=?",refundNo,id);
         return refundResult(order,refundNo,row);

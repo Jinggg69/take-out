@@ -33,10 +33,20 @@ class RbacIntegrationTest {
   Properties props=new Properties();props.setProperty("*","PROPAGATION_REQUIRED");interceptor.setTransactionAttributes(props);
   ProxyFactory proxy=new ProxyFactory(target);proxy.setProxyTargetClass(true);proxy.addAdvice(interceptor);return (T)proxy.getProxy();
  }
+ @Test void merchantIdentityComesFromAuthenticatedTenantAndEmployee(){
+  scope(1L,10L);
+  Map<String,Object> identity=(Map<String,Object>)rbac.context().get("identity");
+  assertEquals("Merchant A",identity.get("tenantName"));
+  assertEquals(java.util.Collections.singletonList("admin"),identity.get("roleNames"));
+  scope(2L,10L);
+  identity=(Map<String,Object>)rbac.context().get("identity");
+  assertEquals("Merchant A",identity.get("tenantName"));
+  assertEquals(java.util.Collections.singletonList("clerk"),identity.get("roleNames"));
+ }
  @BeforeEach void setup(){
   JdbcDataSource ds=new JdbcDataSource();ds.setURL("jdbc:h2:mem:"+UUID.randomUUID()+";MODE=MySQL;DB_CLOSE_DELAY=-1");
   db=new JdbcTemplate(ds);tx=new DataSourceTransactionManager(ds);
-  db.execute("create table tenant(id bigint primary key,status int)");
+  db.execute("create table tenant(id bigint primary key,status int,name varchar(100))");
   db.execute("create table store(id bigint primary key,tenant_id bigint,status int,name varchar(100))");
   db.execute("create table employee(id bigint primary key,tenant_id bigint,status int,name varchar(100))");
   db.execute("create table rbac_role(tenant_id bigint,code varchar(64),name varchar(100))");
@@ -46,7 +56,7 @@ class RbacIntegrationTest {
   db.execute("create table employee_store(tenant_id bigint,employee_id bigint,store_id bigint)");
   db.execute("create table employee_role_store(tenant_id bigint,employee_id bigint,role_code varchar(64),store_id bigint)");
   db.execute("create table admin_session(session_id varchar(64),employee_id bigint,expires_at bigint)");
-  db.update("insert into tenant values(1,1),(2,1)");db.update("insert into store values(10,1,1,'A'),(11,1,1,'B'),(20,2,1,'C')");
+  db.update("insert into tenant values(1,1,'Merchant A'),(2,1,'Merchant B')");db.update("insert into store values(10,1,1,'A'),(11,1,1,'B'),(20,2,1,'C')");
   db.update("insert into employee values(1,1,1,'admin'),(2,1,1,'clerk'),(3,2,1,'foreign')");
   db.update("insert into rbac_role values(1,'MERCHANT_ADMIN','admin'),(1,'CLERK','clerk'),(2,'MERCHANT_ADMIN','foreign')");
   db.update("insert into employee_role values(1,1,'MERCHANT_ADMIN','TENANT_STORES'),(1,2,'CLERK','SPECIFIED_STORES')");
@@ -160,11 +170,11 @@ class RbacIntegrationTest {
   for(int i=0;i<stores;i++)db.update("insert into store values(?,1,1,?)",10+i,"Store"+i);
   request();scope(1L,10L);counter.count=0;
   assertEquals(stores,rbac.accessibleStores(1L,1L).size());assertEquals(4,counter.count);
-  rbac.require(PermissionAction.EMPLOYEE_MANAGE);rbac.context();assertEquals(4,counter.count);
+  rbac.require(PermissionAction.EMPLOYEE_MANAGE);rbac.context();assertEquals(6,counter.count);
   org.springframework.mock.web.MockHttpServletRequest next=request();counter.count=0;
   com.junzhou.service.impl.TenantScopeServiceImpl scopes=new com.junzhou.service.impl.TenantScopeServiceImpl(tenantMapper);
   ReflectionTestUtils.setField(scopes,"rbac",rbac);RequestScope.set(scopes.forEmployee(1L,10L));
-  rbac.require(PermissionAction.EMPLOYEE_MANAGE);rbac.context();assertEquals(5,counter.count);
+  rbac.require(PermissionAction.EMPLOYEE_MANAGE);rbac.context();assertEquals(7,counter.count);
   RbacRequestContext.clear(next);
  }
  @Test void requestRevocationAndIdentityIsolation(){

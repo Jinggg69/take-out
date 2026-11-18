@@ -132,7 +132,7 @@ class MyOrdersIsolationTest {
         assertEquals("3.00",d.get("deliveryFee").asText());assertEquals("6.15",d.at("/orderDetails/0/unitPrice").asText());
         assertEquals("2026-11-12 10:20:30",d.get("orderTime").asText());assertEquals("recovery-102",d.get("clientRequestId").asText());
         assertEquals("12.30",detail(1,101).get("goodsAmount").asText());
-        Set<String> expected=new HashSet<>(Arrays.asList("orderId","orderNumber","merchantId","merchantName","storeId","storeName","storeAvailable","orderTime","status","payStatus","refundStatus","fulfillmentType","fulfillmentStatus","amount","totalQuantity","items","clientRequestId","orderDetails","goodsAmount","packFee","deliveryFee","contactName","contactPhone","deliveryAddress","remark","pickupNumber","tableName","cancelReason","rejectionReason","estimatedDeliveryTime"));
+        Set<String> expected=new HashSet<>(Arrays.asList("orderId","orderNumber","merchantId","merchantName","storeId","storeName","storeAvailable","orderTime","status","payStatus","refundStatus","fulfillmentType","fulfillmentStatus","amount","totalQuantity","items","clientRequestId","orderDetails","externalPayAmount","membership","goodsAmount","packFee","deliveryFee","contactName","contactPhone","deliveryAddress","remark","pickupNumber","tableName","cancelReason","rejectionReason","estimatedDeliveryTime"));
         Set<String> actual=new HashSet<>();d.fieldNames().forEachRemaining(actual::add);assertEquals(expected,actual);
         Set<String> itemKeys=new HashSet<>();d.at("/items/0").fieldNames().forEachRemaining(itemKeys::add);assertEquals(new HashSet<>(Arrays.asList("name","image","number")),itemKeys);
     }

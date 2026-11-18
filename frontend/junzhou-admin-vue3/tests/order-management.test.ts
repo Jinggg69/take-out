@@ -20,8 +20,8 @@ test('order query uses full-day bounds and omits all-status and empty fields', (
   assert.deepEqual(buildOrderQuery({ page: 2, pageSize: 20, number: '', phone: '', dates: [], status: 0 }), { page: 2, pageSize: 20, number: undefined, phone: undefined, beginTime: undefined, endTime: undefined, status: undefined })
   assert.deepEqual(buildOrderQuery({ page: 1, pageSize: 10, number: '001', phone: '138', dates: ['2026-10-01', '2026-10-23'], status: 2 }), { page: 1, pageSize: 10, number: '001', phone: '138', beginTime: '2026-10-01 00:00:00', endTime: '2026-10-23 23:59:59', status: 2 })
 })
-test('order actions retain original status permissions including completed cancellation', () => {
-  assert.deepEqual([1, 2, 3, 4, 5, 6].map(status => orderActions(status)), [['cancel'], ['accept', 'reject'], ['delivery', 'cancel'], ['complete', 'cancel'], ['cancel'], []])
+test('order actions retain other status behavior and completed orders require explicit paid state', () => {
+  assert.deepEqual([1, 2, 3, 4, 5, 6].map(status => orderActions(status)), [['cancel'], ['accept', 'reject'], ['delivery', 'cancel'], ['complete', 'cancel'], [], []])
 })
 test('custom rejection and cancellation reasons are required, trimmed and limited to 20 characters', () => {
   assert.throws(() => orderReason('', '', '取消'), /请选择取消原因/)

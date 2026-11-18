@@ -1,0 +1,13 @@
+import { request } from '../utils/request.js'
+const call = (path, method = 'GET', params = {}) => request({ url: '/user/member' + path, method, params, scope: 'store' })
+export const memberMe = () => call('/me')
+export const joinMember = params => call('/join', 'POST', params)
+export const updateMember = params => call('/profile', 'PUT', params)
+export const memberRecords = (kind, params) => call('/' + kind, 'GET', params)
+export const couponCenter = params => call('/coupon-center', 'GET', params)
+export const claimCoupon = (id, requestId) => call('/coupons/' + encodeURIComponent(id) + '/claim', 'POST', { requestId })
+export const exchangeCoupon = (id, requestId) => call('/coupons/' + encodeURIComponent(id) + '/exchange', 'POST', { requestId })
+export const rechargePlans = () => call('/recharge-plans')
+export const createRecharge = (planId, requestId) => call('/recharges', 'POST', { planId, requestId })
+export const mockRecharge = (id, outcome) => call('/recharges/' + encodeURIComponent(id) + '/mock', 'POST', { outcome })
+export const refundRecharge = (id, requestId, reason) => call('/recharges/' + encodeURIComponent(id) + '/refund', 'POST', { requestId, reason })

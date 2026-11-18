@@ -21,6 +21,7 @@ public class OrderQuoteVO implements Serializable {
     private Long storeId;
     private Long configVersion;
     private String fulfillmentType;
+    private java.util.Map<String,Object> membership;
     public OrderQuoteVO(List<ShoppingCart> items, BigDecimal goodsAmount, Integer packAmount,
                         BigDecimal deliveryFee, BigDecimal amount, BigDecimal packFee, Long storeId, Long configVersion) {
         this.items=items; this.goodsAmount=goodsAmount; this.packAmount=packAmount; this.deliveryFee=deliveryFee;

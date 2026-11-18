@@ -14,6 +14,8 @@ import java.util.List;
 public class OrderVO extends Orders implements Serializable {
     //订单菜品信息
     private String orderDishes;
+    private java.math.BigDecimal externalPayAmount;
+    private java.util.Map<String,Object> membership;
 
     //订单详情
     private List<OrderDetail> orderDetailList;

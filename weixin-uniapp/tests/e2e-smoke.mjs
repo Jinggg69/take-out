@@ -28,6 +28,10 @@ const contexts = Object.fromEntries([['11', '1', '甲一店'], ['12', '1', '甲�
 const cart = { '11': [], '12': [], '21': [] }
 const requests = [], unexpected = [], errors = []
 let paid = false, submitted = null
+let memberJoined = false, memberBalance = 0
+const memberRecharges = [], memberCoupons = []
+const memberProfile = () => ({ joined: memberJoined, simulation: true, member: memberJoined ? { id: '901', memberNo: 'M901', name: '测试会员', phone: '13800000000', status: 1, levelName: '普通会员', points: 0, balance: memberBalance, principalBalance: memberBalance ? 100 : 0, giftBalance: memberBalance ? 10 : 0, version: 1 } : undefined })
+const couponFixture = { id: '951', name: '测试满减券', type: 'FIXED', value: 5, minSpend: 20, pointsCost: 0, startTime: '2026-01-01 00:00:00', endTime: '2027-01-01 00:00:00', storeIds: [], fulfillmentTypes: [] }
 const now = () => new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' ')
 const history = () => ({ orderId: '701', orderNumber: 'TEST701', merchantId: '1', merchantName: '测试商家甲', storeId: '11', storeName: '甲一店', storeAvailable: true, orderTime: now(), status: paid ? 2 : 1, payStatus: paid ? 1 : 0, fulfillmentType: 'PICKUP', fulfillmentStatus: paid ? 'AWAITING_ACCEPTANCE' : 'AWAITING_PAYMENT', amount: '89.00', totalQuantity: 1, items: [{ name: '清蒸鲜鱼', number: 1 }], orderDetails: [{ name: '清蒸鲜鱼', number: 1, unitPrice: '88.00' }], goodsAmount: '88.00', packFee: '1.00', deliveryFee: '0.00', contactName: '测试用户', contactPhone: '13800000000' })
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
@@ -41,7 +45,22 @@ await page.route('**/user/**', async route => {
   requests.push({ path: p, store, method, params: Object.fromEntries(u.searchParams) })
   const payload = req.postDataJSON?.() || {}
   let data, failure = null
-  if (p === '/user/merchants') { const list = merchants.filter(x => !u.searchParams.get('keyword') || x.merchantName.includes(u.searchParams.get('keyword'))); data = { total: list.length, records: list } }
+  if (p.startsWith('/user/member/')) {
+    assert.ok(store); assert.equal(headers.authentication, 'ui-test-token')
+    if (p === '/user/member/me') data = memberProfile()
+    else if (p === '/user/member/join') { memberJoined = true; data = memberProfile() }
+    else if (p === '/user/member/recharge-plans') data = [{ id: '941', name: '测试套餐', amount: 100, giftAmount: 10 }]
+    else if (p === '/user/member/recharges' && method === 'POST') { assert.ok(payload.requestId); data = { id: String(1000 + memberRecharges.length), number: 'RC' + memberRecharges.length, amount: 100, giftAmount: 10, status: 'PENDING', paymentChannel: 'MOCK', createTime: now() }; memberRecharges.unshift(data) }
+    else if (/recharges\/\d+\/mock$/.test(p)) { const r = memberRecharges.find(x => x.id === p.split('/')[4]); assert.ok(['SUCCESS', 'FAIL', 'CANCEL'].includes(payload.outcome)); r.status = payload.outcome; if (r.status === 'SUCCESS') memberBalance += 110; data = r }
+    else if (/recharges\/\d+\/refund$/.test(p)) { const r = memberRecharges.find(x => x.id === p.split('/')[4]); assert.ok(payload.requestId); r.status = 'REFUNDED'; memberBalance -= 110; data = r }
+    else if (p === '/user/member/recharges') data = { records: memberRecharges, total: memberRecharges.length }
+    else if (p === '/user/member/coupon-center') data = { records: [couponFixture], total: 1 }
+    else if (/coupons\/\d+\/claim$/.test(p)) { assert.ok(payload.requestId); memberCoupons.push({...couponFixture, id:'961', templateId:'951',status:'AVAILABLE'}); data = null }
+    else if (p === '/user/member/coupons') data = { records: memberCoupons, total: memberCoupons.length }
+    else if (p === '/user/member/points' || p === '/user/member/wallet' || p === '/user/member/orders') data = { records: [], total: 0 }
+    else { unexpected.push(method + ' ' + p); failure = '测试未声明会员接口' }
+  }
+  else if (p === '/user/merchants') { const list = merchants.filter(x => !u.searchParams.get('keyword') || x.merchantName.includes(u.searchParams.get('keyword'))); data = { total: list.length, records: list } }
   else if (/^\/user\/merchants\/\d+\/stores$/.test(p)) { const id = p.split('/')[3], records = Object.values(contexts).filter(x => x.merchantId === id); data = { total: records.length, records } }
   else if (/^\/user\/merchants\/\d+$/.test(p)) data = merchants.find(x => x.merchantId === p.split('/').at(-1))
   else if (/^\/user\/stores\/\d+\/context$/.test(p)) data = contexts[p.split('/')[3]]
@@ -114,7 +133,19 @@ try {
   await tab('我的'); await page.getByText('收货地址', { exact: true }).waitFor(); await screenshot('08-my')
   await clickText('收货地址'); await page.getByText('测试路1号', { exact: false }).first().waitFor(); await screenshot('09-addresses')
   assert.equal(requests.findLast(x => x.path === '/user/addressBook/list').store, undefined)
-  await page.goBack(); await tab('点单'); await page.getByText('清蒸鲜鱼', { exact: true }).waitFor()
+  await page.goBack()
+  await clickText('测试商家甲'); await page.getByText('确认开通会员', { exact: true }).waitFor(); await screenshot('member-01-join')
+  await clickText('确认开通会员'); await page.getByText('会员号 M901', { exact: true }).waitFor(); await screenshot('member-02-center')
+  await clickText('领券与积分兑换'); await page.getByText('测试满减券', { exact: true }).waitFor(); await clickText('领取'); await page.getByText('已放入优惠券包', { exact: true }).waitFor()
+  await clickText('我的券包'); await page.getByText('测试满减券', { exact: true }).waitFor(); await screenshot('member-03-coupons'); assert.equal(memberCoupons.length, 1)
+  await page.goBack(); await clickText('储值充值与记录'); await page.getByText('测试套餐', { exact: true }).waitFor()
+  await clickText('模拟充值'); await page.getByText('模拟成功', { exact: true }).waitFor(); assert.equal(memberBalance, 0)
+  await clickText('模拟失败'); await page.getByText('失败', { exact: true }).waitFor(); assert.equal(memberBalance, 0)
+  await clickText('模拟充值'); await page.getByText('模拟成功', { exact: true }).waitFor(); await clickText('取消'); await page.getByText('已取消', { exact: true }).waitFor(); assert.equal(memberBalance, 0)
+  await clickText('模拟充值'); await page.getByText('模拟成功', { exact: true }).waitFor(); await clickText('模拟成功'); await page.getByText('已成功', { exact: true }).waitFor(); assert.equal(memberBalance, 110); await screenshot('member-04-recharge')
+  await clickText('申请整笔退款'); await page.getByText('确认整笔退款', { exact: true }).waitFor(); await clickText('确定'); await page.getByText('已退款', { exact: true }).waitFor(); assert.equal(memberBalance, 0); await screenshot('member-05-refund')
+  await page.goBack(); await clickText('积分明细'); await page.getByText('暂无积分明细', { exact: true }).waitFor(); await screenshot('member-06-ledger'); await page.goBack(); await page.goBack()
+  await tab('点单'); await page.getByText('清蒸鲜鱼', { exact: true }).waitFor()
   await page.locator('[aria-label="添加清蒸鲜鱼"]').click(); await page.getByText('共 1 份，费用以结算为准', { exact: true }).waitFor()
   await clickText('切换商家'); await clickText('测试商家乙'); await page.getByText('乙门店', { exact: true }).waitFor()
   await clickText('到店自取'); await page.getByText('选好菜品，再去结算', { exact: true }).waitFor()

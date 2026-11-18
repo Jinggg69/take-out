@@ -3,6 +3,9 @@ import com.junzhou.security.RbacAssignment;
 import org.apache.ibatis.annotations.*;
 import java.util.List;
 @Mapper public interface RbacMapper {
+ @Select("select name from tenant where id=#{t}") String tenantName(Long t);
+ @Select("select r.name from employee_role er join rbac_role r on r.tenant_id=er.tenant_id and r.code=er.role_code where er.tenant_id=#{t} and er.employee_id=#{e} order by r.code")
+ List<String> employeeRoleNames(@Param("t") Long t,@Param("e") Long e);
  @Select("select id as store_id,name from store where tenant_id=#{t} and status=1")
  @Results({@Result(column="store_id",property="storeId"),@Result(column="name",property="name")})
  List<com.junzhou.security.RbacGrantRow> activeStoresWithNames(Long t);

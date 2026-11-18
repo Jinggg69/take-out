@@ -23,6 +23,7 @@ import java.util.UUID;
 /** Short database transactions only. No provider HTTP call is made while these locks are held. */
 @Service
 public class RefundTransactionServiceImpl implements RefundTransactionService {
+    @Autowired(required=false) private com.junzhou.membership.MembershipCheckoutService members;
     @Autowired private OrderMapper orderMapper;
     @Autowired private RefundRequestMapper refunds;
     @Autowired private com.junzhou.service.PaymentAccountService paymentAccounts;
@@ -31,6 +32,11 @@ public class RefundTransactionServiceImpl implements RefundTransactionService {
     @Transactional(propagation=Propagation.MANDATORY)
     @Override
     public void request(Orders order) {
+        if(com.junzhou.payment.OrderPaymentAmounts.external(order).signum()==0) {
+            if(members!=null) members.refund(order);
+            orderMapper.update(Orders.builder().id(order.getId()).refundStatus(RefundRequest.SUCCESS).payStatus(Orders.REFUND).build());
+            return;
+        }
         RefundRequest refund=refunds.getByOrderIdForUpdate(order.getId());
         if(refund==null) {
             refund=newRequest(order,order.getNumber(),Orders.REFUND.equals(order.getPayStatus()));
@@ -144,11 +150,11 @@ public class RefundTransactionServiceImpl implements RefundTransactionService {
             throw new OrderBusinessException("退款订单信息异常，请联系商家核验");
         }
         long amount;
-        try { amount=order.getAmount().movePointRight(2).longValueExact(); }
+        try { amount=com.junzhou.payment.OrderPaymentAmounts.external(order).movePointRight(2).longValueExact(); }
         catch(ArithmeticException ex) { throw new OrderBusinessException("退款金额异常"); }
         RefundRequest refund=new RefundRequest();
         refund.setOutRefundNo(number); refund.setOrderId(order.getId()); refund.setOutTradeNo(order.getNumber());
-        refund.setTransactionId(order.getWechatTransactionId()); refund.setAmountFen(amount);
+        refund.setTransactionId(order.getWechatTransactionId()); refund.setAmountFen(amount); refund.setOrderAmount(order.getAmount());
         refund.setStatus(queryOnly ? RefundRequest.VERIFYING : RefundRequest.REQUESTED); refund.setQueryOnly(queryOnly);
         refund.setAttempts(0); refund.setCreatedAt(LocalDateTime.now()); refund.setUpdatedAt(refund.getCreatedAt());
         refund.setNextAttemptAt(refund.getCreatedAt());
@@ -159,7 +165,10 @@ public class RefundTransactionServiceImpl implements RefundTransactionService {
     private void updateFinancialState(Orders order,RefundRequest refund) {
         Orders update=Orders.builder().id(order.getId()).refundStatus(refund.getStatus())
                 .wechatTransactionId(order.getWechatTransactionId()).build();
-        if(RefundRequest.SUCCESS.equals(refund.getStatus())) update.setPayStatus(Orders.REFUND);
+        if(RefundRequest.SUCCESS.equals(refund.getStatus())) {
+            if(members!=null) members.refund(order);
+            update.setPayStatus(Orders.REFUND);
+        }
         else if(RefundRequest.CLOSED.equals(refund.getStatus()) || RefundRequest.ABNORMAL.equals(refund.getStatus())) update.setPayStatus(Orders.REFUND_FAILED);
         else update.setPayStatus(Orders.REFUND_PROCESSING);
         // An external full refund stops any still-unfulfilled order, while retaining completed delivery history.

@@ -1,0 +1,8 @@
+# Geographic lookup data is stored as JavaScript, but is not application code.
+weixin-uniapp/pages/common/city.data.js linguist-detectable=false
+weixin-uniapp/pages/common/simple-address/city-data/*.js linguist-detectable=false
+
+# Bundled third-party components and libraries.
+weixin-uniapp/uni_modules/** linguist-vendored
+weixin-uniapp/utils/lib/dayjs.min.js linguist-vendored
+frontend/junzhou-admin-vue3/src/vendor/** linguist-vendored

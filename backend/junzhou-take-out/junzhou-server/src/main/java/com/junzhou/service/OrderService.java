@@ -18,8 +18,10 @@ import com.junzhou.vo.OrderQuoteVO;
  */
 public interface OrderService {
     /** Read-only quotation for the authenticated user's cart. */
+    void refund(Long id,String reason);
     OrderQuoteVO quote();
     OrderQuoteVO quote(String fulfillmentType);
+    default OrderQuoteVO quote(String type,Long couponId,long points,boolean useBalance) { return quote(type); }
 
     /**
      * 用户下单

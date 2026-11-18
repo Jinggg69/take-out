@@ -41,7 +41,7 @@ public final class OrderSubmissionIdentity {
     }
     public static String fingerprint(OrdersSubmitDTO input) {
         BigDecimal amount=input.getAmount();
-        if(amount==null || amount.signum()<=0 || amount.compareTo(new BigDecimal("99999999.99"))>0
+        if(amount==null || amount.signum()<0 || amount.compareTo(new BigDecimal("99999999.99"))>0
                 || amount.stripTrailingZeros().scale()>2) throw new OrderBusinessException("请确认有效的订单金额后重新提交");
         if(input.getClientRequestId()==null) return null;
         if(!input.getClientRequestId().matches("[A-Za-z0-9_-]{1,64}")) throw new OrderBusinessException("提交请求标识无效");
@@ -52,6 +52,9 @@ public final class OrderSubmissionIdentity {
             String text=value==null ? null : value.toString();
             canonical.append(text==null ? -1 : text.length()).append(':');
             if(text!=null) canonical.append(text);
+        }
+        if(input.getCouponId()!=null || (input.getPoints()!=null && input.getPoints()!=0) || Boolean.TRUE.equals(input.getUseBalance())) {
+            canonical.append(":member:").append(input.getCouponId()).append(':').append(input.getPoints()==null?0:input.getPoints()).append(':').append(Boolean.TRUE.equals(input.getUseBalance()));
         }
         try {
             byte[] digest=MessageDigest.getInstance("SHA-256").digest(canonical.toString().getBytes(StandardCharsets.UTF_8));

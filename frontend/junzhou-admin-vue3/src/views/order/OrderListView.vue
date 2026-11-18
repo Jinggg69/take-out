@@ -9,14 +9,11 @@ import DataState from '@/components/DataState.vue'
 import FormFeedback from '@/components/FormFeedback.vue'
 import { orderApi as api } from '@/api'
 import type { OrderAction, OrderId, OrderRecord, OrderStatistics } from '@/api/order'
-import { actionLabels, cancellationReasons, orderActions, orderBill, orderMoney, orderReason, orderRefundLabel, orderStatusLabel, orderTabs, rejectionReasons, shouldOpenNextOrder } from '@/utils/order'
+import { actionLabels, cancellationReasons, permittedOrderActions, orderBill, orderPaymentBreakdown, orderMoney, orderReason, orderRefundLabel, orderStatusLabel, orderTabs, rejectionReasons, refundReasons, shouldOpenNextOrder } from '@/utils/order'
 import { errorMessage } from '@/utils/error-message'
 import { createOrderList } from './list-state'
 
-const visibleOrderActions=(row:OrderRecord)=>orderActions(row.status,row).filter(action=>{
- const code=({accept:'accept',reject:'reject',cancel:'cancel',delivery:'deliver',complete:'complete',ready:'pickup:ready',verify:'pickup:verify',dineComplete:'dine:complete'} as const)[action]
- return workspace.can('order:'+code) && (!['reject','cancel'].includes(action)||workspace.can('order:refund'))
-})
+const visibleOrderActions = (row: OrderRecord) => permittedOrderActions(row, workspace.can)
 const list = createOrderList(api)
 const { state } = list
 const route = useRoute(); const router = useRouter()
@@ -24,15 +21,16 @@ const statistics = ref<OrderStatistics | null>(null)
 const statisticsError = ref('')
 const detailVisible = ref(false); const detail = ref<OrderRecord | null>(null)
 const detailBill = computed(() => detail.value ? orderBill(detail.value) : null)
+const detailPayments = computed(() => detail.value ? orderPaymentBreakdown(detail.value) : null)
 const detailLoading = ref(false); const detailError = ref(''); const detailId = ref<OrderId>('')
 const autoNext = ref(true); const busy = ref(false)
 const actionError = ref(''); const actionFeedback = ref<InstanceType<typeof FormFeedback>>(); const listFeedback = ref<InstanceType<typeof FormFeedback>>()
-const reasonVisible = ref(false); const reasonKind = ref<'reject' | 'cancel'>('reject')
+const reasonVisible = ref(false); const reasonKind = ref<'reject' | 'cancel' | 'refund'>('reject')
 const reasonRow = ref<OrderRecord | null>(null); const reasonFromDetail = ref(false)
 const selectedReason = ref(''); const customReason = ref(''); const reasonError = ref('')
 const reasonFeedback = ref<InstanceType<typeof FormFeedback>>()
-const reasonTitle = computed(() => reasonKind.value === 'cancel' ? '取消' : '拒绝')
-const reasons = computed(() => reasonKind.value === 'cancel' ? cancellationReasons : rejectionReasons)
+const reasonTitle = computed(() => reasonKind.value === 'refund' ? '退款' : reasonKind.value === 'cancel' ? '取消' : '拒绝')
+const reasons = computed(() => reasonKind.value === 'refund' ? refundReasons : reasonKind.value === 'cancel' ? cancellationReasons : rejectionReasons)
 let alive = true; let detailSerial = 0; let statisticsSerial = 0
 
 function count(status: number) {
@@ -71,13 +69,13 @@ async function openDetail(id: OrderId) {
   } catch (error) { if (alive && serial === detailSerial) detailError.value = errorMessage(error, '订单详情读取失败，请重试') }
   finally { if (alive && serial === detailSerial) detailLoading.value = false }
 }
-function openReason(row: OrderRecord, kind: 'reject' | 'cancel', fromDetail: boolean) {
+function openReason(row: OrderRecord, kind: 'reject' | 'cancel' | 'refund', fromDetail: boolean) {
   reasonKind.value = kind; reasonRow.value = row; reasonFromDetail.value = fromDetail
   selectedReason.value = ''; customReason.value = ''; reasonError.value = ''; reasonVisible.value = true
 }
 async function perform(row: OrderRecord, action: OrderAction, fromDetail = false, reason?: string) {
   if (busy.value || !visibleOrderActions(row).includes(action)) return
-  if ((action === 'reject' || action === 'cancel') && reason === undefined) { openReason(row, action, fromDetail); return }
+  if ((action === 'reject' || action === 'cancel' || action === 'refund') && reason === undefined) { openReason(row, action, fromDetail); return }
   let pickupNumber = ''
   if (action === 'verify') {
     try {
@@ -88,10 +86,10 @@ async function perform(row: OrderRecord, action: OrderAction, fromDetail = false
   }
   busy.value = true; actionError.value = ''; reasonError.value = ''
   try {
-    const { data } = await (action === 'reject' ? api.reject({ id: row.id, rejectionReason: reason! }) : action === 'cancel' ? api.cancel({ id: row.id, cancelReason: reason! }) : action === 'verify' ? api.verify(row.id, pickupNumber) : api[action](row.id))
+    const { data } = await (action === 'refund' ? api.refund(row.id, reason!) : action === 'reject' ? api.reject({ id: row.id, rejectionReason: reason! }) : action === 'cancel' ? api.cancel({ id: row.id, cancelReason: reason! }) : action === 'verify' ? api.verify(row.id, pickupNumber) : api[action](row.id))
     if (!alive) return
     if (String(data.code) !== '1') throw new Error(data.msg || `${actionLabels[action]}失败，请重试`)
-    ElMessage.success('操作成功'); reasonVisible.value = false
+    ElMessage.success(action === 'refund' ? '退款申请已提交，请查看退款状态' : '操作成功'); reasonVisible.value = false
     if (fromDetail) { detailVisible.value = false; detailSerial++ }
     await refresh()
     if (!alive) return
@@ -417,7 +415,7 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
                   v-for="action in visibleOrderActions(row)"
                   :key="action"
                   link
-                  :type="['cancel', 'reject'].includes(action) ? 'danger' : 'primary'"
+                  :type="['cancel', 'reject', 'refund'].includes(action) ? 'danger' : 'primary'"
                   :disabled="busy"
                   :aria-label="`${actionLabels[action]}订单${row.number}`"
                   @click="perform(row, action)"
@@ -552,8 +550,19 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
           <dt>菜品小计</dt><dd>￥{{ orderMoney(detailBill?.goodsAmount) }}</dd>
           <dt>派送费</dt><dd>￥{{ orderMoney(detailBill?.deliveryFee) }}</dd>
           <dt>打包费</dt><dd>￥{{ orderMoney(detailBill?.packFee) }}</dd>
+          <template v-if="detail.membership || detailPayments?.discountAmount">
+            <dt>等级优惠</dt><dd>−￥{{ orderMoney(detailPayments?.levelDiscount) }}</dd>
+            <dt>优惠券抵扣</dt><dd>−￥{{ orderMoney(detailPayments?.couponDiscount) }}</dd>
+            <dt>积分抵扣</dt><dd>{{ detailPayments?.pointsUsed }} 积分 / −￥{{ orderMoney(detailPayments?.pointsDiscount) }}</dd>
+          </template>
           <dt>合计</dt><dd><strong>￥{{ orderMoney(detailBill?.amount) }}</strong></dd>
-          <dt>支付渠道</dt><dd>{{ detail.payMethod === 1 ? '微信支付' : '支付宝支付' }}</dd>
+          <dt>外部支付</dt><dd>￥{{ orderMoney(detailPayments?.externalAmount) }}</dd>
+          <dt>余额支付</dt><dd>￥{{ orderMoney(detailPayments?.balanceAmount) }}</dd>
+          <template v-if="detail.membership || detailPayments?.balanceAmount">
+            <dt>其中本金</dt><dd>￥{{ orderMoney(detailPayments?.principalAmount) }}</dd>
+            <dt>其中赠送额</dt><dd>￥{{ orderMoney(detailPayments?.giftAmount) }}</dd>
+          </template>
+          <dt>支付渠道</dt><dd>{{ detailPayments?.externalAmount === 0 ? '余额 / 零元结算' : detail.paymentChannel === 'MOCK' ? '模拟支付' : detail.payMethod === 1 ? '微信支付' : '支付宝支付' }}</dd>
           <dt>支付时间</dt><dd>{{ detail.checkoutTime || '—' }}</dd>
         </dl>
       </template>
@@ -577,7 +586,7 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
               <ElButton
                 v-for="action in visibleOrderActions(detail).filter(action => Number(detail?.status) === 1 || action !== 'cancel')"
                 :key="action"
-                :type="['cancel', 'reject'].includes(action) ? 'danger' : 'primary'"
+                :type="['cancel', 'reject', 'refund'].includes(action) ? 'danger' : 'primary'"
                 :disabled="busy"
                 :loading="busy"
                 @click="perform(detail, action, true)"
@@ -605,6 +614,12 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
       />
       <p class="order-reason-number">
         订单号：{{ reasonRow?.number }}
+      </p>
+      <p
+        v-if="reasonKind === 'refund'"
+        class="order-reason-number"
+      >
+        申请全额原路退款 ￥{{ orderMoney(reasonRow?.amount) }}。按原订单分摊退回外部实付及余额，积分与优惠券按原规则处理；赠送余额不退为现金。保留订单已完成的履约历史。
       </p>
       <ElForm
         label-position="top"
@@ -658,7 +673,7 @@ onBeforeUnmount(() => { alive = false; detailSerial++; statisticsSerial++; list.
           :loading="busy"
           @click="confirmReason"
         >
-          确定
+          {{ reasonKind === 'refund' ? '确认全额退款' : '确定' }}
         </ElButton>
       </template>
     </ElDialog>

@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 
 @Service
 public class PickupServiceImpl implements PickupService {
+    @org.springframework.beans.factory.annotation.Autowired(required=false) private com.junzhou.membership.MembershipCheckoutService members;
     private final OrderMapper orders;
     public PickupServiceImpl(OrderMapper orders) { this.orders=orders; }
     /** 校验店员身份后执行受门店和状态限制的条件更新。 */
@@ -26,5 +27,6 @@ public class PickupServiceImpl implements PickupService {
         if (id==null || id<=0 || pickupNumber==null || !pickupNumber.matches("[1-9][0-9]{0,18}")
                 || orders.pickupVerify(id,pickupNumber,RequestScope.current().getEmployeeId(),LocalDateTime.now())!=1)
             throw new OrderBusinessException("核销失败，请核对取餐号、门店及订单支付状态");
+        if(members!=null) members.complete(orders.getByIdForUpdate(id));
     }
 }

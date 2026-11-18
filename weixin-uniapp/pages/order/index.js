@@ -28,6 +28,7 @@ export default {
 	data() {
 		return {
 			platform: 'ios',
+            membershipQuote: null, couponId: '', points: 0, useBalance: false,
             fulfillmentType: 'DELIVERY', contactName: '', contactPhone: '',
 			orderDishPrice: 0,
 			orderPriceError: '',
@@ -98,6 +99,10 @@ export default {
 		}
 	},
 	computed: {
+        pointsStep() { const step = Number(this.membershipQuote?.pointsPerYuan); return Number.isSafeInteger(step) && step > 0 ? step : 1 },
+        pointsMaximum() { const max = Number(this.membershipQuote?.maxDeductiblePoints ?? this.membershipQuote?.availablePoints ?? 0); return Number.isSafeInteger(max) && max >= 0 ? max : 0 },
+        memberCouponOptions() { return [{ id: '', name: '不使用优惠券' }, ...(this.membershipQuote?.coupons || [])] },
+        memberCouponIndex() { return Math.max(0, this.memberCouponOptions.findIndex(c => String(c.id) === String(this.couponId))) },
         diningSummary() {
             const dining = this.$appStore.diningContext
             const payload = this.pendingSubmission
@@ -228,6 +233,7 @@ export default {
 			if (this.checkoutScope === scope) return false
 			this.checkoutScope = scope
 			this.quoteReady = false; this.quotePromise = null; this.quoteVersion = null
+            this.membershipQuote = null; this.couponId = ''; this.points = 0; this.useBalance = false
 			this.pendingSubmission = null; this.submissionComplete = false; this.isHandlePy = false
 			this.quotedDeliveryFee = 0; this.packFee = 0; this.packAmount = 0; this.orderDishPrice = 0; this.orderDishNumber = 0
             if (this.fulfillmentType === 'DINE_IN' && !this.$appStore.diningContext) this.fulfillmentType = 'DELIVERY'
@@ -244,6 +250,21 @@ export default {
 			return this.pendingSubmission ? Promise.resolve(false) : this.refreshQuote()
 		},
 		// Quote failures must never leave an earlier price eligible for submission.
+        membershipChoices() { return { couponId: this.couponId || undefined, points: Number(this.points) || 0, useBalance: !!this.useBalance } },
+        money(value) { return value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toFixed(2) },
+        async changeMemberChoice(kind, event) {
+            if (this.isHandlePy || this.pendingSubmission || this.quotePromise) return
+            if (kind === 'coupon') this.couponId = String(this.memberCouponOptions[Number(event.detail.value)].id)
+            if (kind === 'points') {
+                const points = Number(event.detail.value || 0)
+                if (!Number.isSafeInteger(points) || points < 0) { this.quoteReady = false; this.orderPriceError = '请输入非负整数积分'; return }
+                if (points > this.pointsMaximum || points % this.pointsStep !== 0) { this.quoteReady = false; this.orderPriceError = '本单最多可用' + this.pointsMaximum + '积分，请按' + this.pointsStep + '积分的整数倍填写'; return }
+                this.points = points
+            }
+            if (kind === 'balance') this.useBalance = event.detail.value
+            this.quoteReady = false
+            await this.refreshQuote()
+        },
         async changeFulfillment(type) {
             if (this.isHandlePy || this.pendingSubmission || this.quotePromise || this.submissionComplete || type === this.fulfillmentType) return
             if (type === 'DINE_IN' && !this.$appStore.diningContext) {
@@ -263,7 +284,7 @@ export default {
 			this.orderPriceError = '正在获取最新价格'
 			this.quotePromise = (async () => {
 				try {
-					const result = await getOrderQuote({ fulfillmentType: this.fulfillmentType })
+					const result = await getOrderQuote({ fulfillmentType: this.fulfillmentType, ...this.membershipChoices() })
 					if (scope !== this.currentScope()) return false
 					const quote = result && result.data
 					if (!result || ![1, 200].includes(Number(result.code)) || !quote || !Array.isArray(quote.items) || !quote.items.length) {
@@ -278,15 +299,19 @@ export default {
 						goodsCents += Math.round(price * 100) * quantity
 						count += quantity
 					}
-					const pack = Number(quote.packAmount), packFee = Number(quote.packFee), fee = Number(quote.deliveryFee), total = Number(quote.amount)
+					const member = quote.membership
+                    const discount = Number(member?.discountAmount || 0)
+                    if (!Number.isFinite(discount) || discount < 0 || (member && ['couponDiscount', 'levelDiscount', 'pointsDiscount', 'balanceAmount', 'principalAmount', 'giftAmount', 'externalAmount'].some(k => !Number.isFinite(Number(member[k])) || Number(member[k]) < 0))
+                        || (member && (Math.abs(Number(member.balanceAmount) + Number(member.externalAmount) - Number(quote.amount)) > 0.000001 || Math.abs(Number(member.principalAmount) + Number(member.giftAmount) - Number(member.balanceAmount)) > 0.000001))) throw { msg: '会员报价金额异常，请刷新价格' }
+                    const pack = Number(quote.packAmount), packFee = Number(quote.packFee), fee = Number(quote.deliveryFee), total = Number(quote.amount)
 					if (String(quote.storeId) !== String(this.$appStore.selectedStoreId) || quote.configVersion == null
 						|| quote.packFee == null || !Number.isFinite(Number(quote.goodsAmount))
 						|| !Number.isFinite(packFee) || packFee < 0 || Math.abs(packFee * 100 - Math.round(packFee * 100)) > 0.000001
 						|| !Number.isInteger(pack) || pack !== count || !Number.isFinite(fee) || fee < 0
 						|| Math.abs(fee * 100 - Math.round(fee * 100)) > 0.000001
-						|| !Number.isFinite(total) || total <= 0 || total > 99999999.99
+						|| !Number.isFinite(total) || total < 0 || total > 99999999.99
 						|| Math.abs(goodsCents - Number(quote.goodsAmount) * 100) > 0.000001
-						|| Math.abs(total * 100 - goodsCents - packFee * 100 - fee * 100) > 0.000001) {
+						|| Math.abs(total * 100 + discount * 100 - goodsCents - packFee * 100 - fee * 100) > 0.000001) {
 						throw { msg: '报价金额异常，请刷新价格' }
 					}
 					this.$appStore.initdishListMut(quote.items)
@@ -294,7 +319,8 @@ export default {
 					this.computOrderInfo()
 					this.packAmount = pack
 					this.packFee = packFee
-					this.quoteVersion = quote.configVersion
+					this.membershipQuote = member || null
+                    this.quoteVersion = quote.configVersion
 					this.orderDishPrice = total
 					this.quoteReady = true
 					return true
@@ -451,6 +477,7 @@ export default {
 				const params = this.pendingSubmission || {
 					clientRequestId: createClientRequestId(),
 					payMethod: 1,
+                    ...this.membershipChoices(),
 					fulfillmentType: this.fulfillmentType,
                     tableId: this.fulfillmentType === 'DINE_IN' ? this.$appStore.diningContext && this.$appStore.diningContext.id : undefined,
                     diningSessionId: this.fulfillmentType === 'DINE_IN' ? this.$appStore.diningContext && this.$appStore.diningContext.currentSessionId : undefined,

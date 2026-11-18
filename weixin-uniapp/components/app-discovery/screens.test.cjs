@@ -11,7 +11,7 @@ const pagination = readFileSync(path.join(__dirname, 'pagination.js'), 'utf8').r
 function screen(file, names, mocks = {}) {
   const hooks = {}, navigation = []
   const app = { selectedMerchantId: '7', selectedStoreId: '71', selectedMerchant: { merchantName: '当前商家' }, token: 'token', storeGeneration: 0, storeContext: {}, lastSelection: null, assertCanSelect() {}, ...mocks.app }
-  const context = { ref, computed: get => ({ get value() { return get() } }), useAppStore: () => app, onShow: fn => hooks.show = fn, onLoad: fn => hooks.load = fn, onReachBottom: fn => hooks.bottom = fn, uni: { switchTab: options => navigation.push(options), navigateTo: options => navigation.push(options) }, ...mocks }
+  const context = { useMemberContext: () => ({ profile: ref(null) }), ref, computed: get => ({ get value() { return get() } }), useAppStore: () => app, onShow: fn => hooks.show = fn, onLoad: fn => hooks.load = fn, onReachBottom: fn => hooks.bottom = fn, uni: { switchTab: options => navigation.push(options), navigateTo: options => navigation.push(options) }, ...mocks }
   context.app = app
   vm.createContext(context)
   const source = readFileSync(path.join(root, file), 'utf8').split('<script setup>')[1].split('</script>')[0].replace(/^import .*$/mg, '')

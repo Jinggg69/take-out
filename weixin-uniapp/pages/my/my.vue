@@ -8,6 +8,8 @@
     </view>
     <view v-if="loading && app.token" class="app-muted" role="status">正在加载账户信息…</view>
     <view v-if="error" class="app-panel"><view class="app-error">{{ error }}</view><button class="app-link" @click="app.token ? loadProfile() : login()">重试</button></view>
+    <view class="app-section-title">当前商户会员</view>
+    <button class="app-list-row" @click="member"><view class="app-grow"><view>{{ app.selectedMerchant?.merchantName || '选择商户，查看会员权益' }}</view><view v-if="membership?.joined" class="app-meta">{{ membership.member.levelName || '普通会员' }} · {{ membership.member.memberNo }}<view>余额 ¥{{ yuan(membership.member.balance) }} · 积分 {{ membership.member.points ?? '—' }} · 可用券 {{ couponCount ?? '—' }} 张</view></view><view v-else class="app-meta">{{ app.selectedStoreId ? '会员中心 · 积分、余额与优惠券' : '各商户会员资产分别管理' }}</view></view><text class="app-status">进入</text></button>
     <view class="app-section-title">常用服务</view>
     <view class="app-list">
       <button class="app-list-row" @click="address"><view class="app-grow"><view>收货地址</view><view class="app-meta">管理收货人和配送地址</view></view><text class="app-status">管理</text></button>
@@ -21,12 +23,15 @@
 </template>
 <script setup>
 import { computed, ref } from 'vue'
+import { useMemberContext, yuan } from '@/services/member-state.js'
 import { onShow } from '@dcloudio/uni-app'
 import { useAppStore } from '@/store/index.js'
 import { getUserProfile } from '@/pages/api/api.js'
 import { openMerchantPicker } from '@/services/context.js'
 import AppState from '@/components/app-state/index.vue'
 const app = useAppStore(), profile = ref({}), loading = ref(false), error = ref(''), context = computed(() => app.storeContext || {})
+const { profile: membership, couponCount } = useMemberContext(() => {}, true)
+function member() { uni.navigateTo({ url: '/pages/member/index' }) }
 async function loadProfile() { if (!app.token) { profile.value = {}; return } loading.value = true; error.value = ''; const token = app.token; try { const r = await getUserProfile(); if (token !== app.token) return; if (r.code !== 1) throw new Error(r.msg || '账户信息加载失败'); profile.value = r.data || {} } catch (e) { if (token === app.token) error.value = e.message || e.msg || '账户信息加载失败，请重试' } finally { loading.value = false } }
 async function login() { loading.value = true; error.value = ''; try { await app.ensureLogin(); await loadProfile() } catch (e) { error.value = e.message || e.msg || '登录未完成，请重试' } finally { loading.value = false } }
 async function address() { error.value = ''; try { await app.ensureLogin(); app.setAddressBackUrl('/pages/my/my'); uni.navigateTo({ url: '/pages/address/address?form=my' }) } catch (e) { error.value = e.message || e.msg || '登录未完成，请重试' } }

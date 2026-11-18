@@ -23,7 +23,15 @@ export const router = createRouter({
       children: [
         ...primaryNavigation.map(item => ({
           path: item.path.slice(1), name: item.path.slice(1),
-          component: item.path === '/dining'
+          component: item.path === '/member/list'
+            ? () => import('@/views/member/MemberListView.vue')
+            : item.path === '/member/settings'
+            ? () => import('@/views/member/SettingsView.vue')
+            : item.path === '/member/points'
+            ? () => import('@/views/member/LedgerView.vue')
+            : item.path.startsWith('/member/')
+            ? () => import('@/views/member/ResourceView.vue')
+            : item.path === '/dining'
             ? () => import('@/views/order/DiningView.vue')
             : item.path === '/store'
             ? () => import('@/views/store/StoreView.vue')
@@ -42,22 +50,23 @@ export const router = createRouter({
                     : item.path === '/dashboard'
                       ? () => import('@/views/dashboard/DashboardView.vue')
                       : () => import('@/views/statistics/StatisticsView.vue'),
-          meta: { title: `${item.label} · 均州鱼庄管理系统`, pageTitle: item.label, activeMenu: item.path },
+          props: item.path.startsWith('/member/') ? { resource: item.path.split('/')[2], kind: 'points' } : undefined,
+          meta: { title: `${item.label} · 均州餐饮点餐营销管理系统`, pageTitle: item.label, activeMenu: item.path },
         })),
         {
           path: 'setmeal/add', name: 'setmeal-form',
           component: () => import('@/views/setmeal/SetmealFormView.vue'),
-          meta: { title: '新建套餐 · 均州鱼庄管理系统', pageTitle: '新建套餐', activeMenu: '/setmeal' },
+          meta: { title: '新建套餐 · 均州餐饮点餐营销管理系统', pageTitle: '新建套餐', activeMenu: '/setmeal' },
         },
         {
           path: 'dish/add', name: 'dish-form',
           component: () => import('@/views/dish/DishFormView.vue'),
-          meta: { title: '新建菜品 · 均州鱼庄管理系统', pageTitle: '新建菜品', activeMenu: '/dish' },
+          meta: { title: '新建菜品 · 均州餐饮点餐营销管理系统', pageTitle: '新建菜品', activeMenu: '/dish' },
         },
         {
           path: 'employee/add', name: 'employee-form',
           component: () => import('@/views/employee/EmployeeFormView.vue'),
-          meta: { title: '添加员工 · 均州鱼庄管理系统', pageTitle: '添加员工', activeMenu: '/employee' },
+          meta: { title: '添加员工 · 均州餐饮点餐营销管理系统', pageTitle: '添加员工', activeMenu: '/employee' },
         },
       ],
     },
@@ -69,14 +78,14 @@ export const router = createRouter({
         path: resource, name: `platform-${resource}`,
         component: () => import('@/views/platform/PlatformManagement.vue'),
         props: { resource },
-        meta: { title: `${resource === 'tenants' ? '商户管理' : '门店管理'} · 平台管理`, accountType: 'PLATFORM' as const },
+        meta: { title: `${resource === 'tenants' ? '商户管理' : '门店管理'} · 均州餐饮点餐营销管理系统`, accountType: 'PLATFORM' as const },
       })),
     },
     {
       path: '/404',
       name: 'not-found',
       component: () => import('@/views/error/NotFoundView.vue'),
-      meta: { title: '页面不存在 · 均州鱼庄管理系统', notNeedAuth: true },
+      meta: { title: '页面不存在 · 均州餐饮点餐营销管理系统', notNeedAuth: true },
     },
     { path: '/:pathMatch(.*)*', redirect: '/404' },
   ],
@@ -87,15 +96,15 @@ router.beforeEach(to => {
   routePending.value = true
   if (to.name === 'employee-form') {
     to.meta.pageTitle = to.query.id ? '修改员工信息' : '添加员工'
-    to.meta.title = `${to.meta.pageTitle} · 均州鱼庄管理系统`
+    to.meta.title = `${to.meta.pageTitle} · 均州餐饮点餐营销管理系统`
   }
   if (to.name === 'dish-form') {
     to.meta.pageTitle = to.query.id ? '修改菜品' : '新建菜品'
-    to.meta.title = `${to.meta.pageTitle} · 均州鱼庄管理系统`
+    to.meta.title = `${to.meta.pageTitle} · 均州餐饮点餐营销管理系统`
   }
   if (to.name === 'setmeal-form') {
     to.meta.pageTitle = to.query.id ? '修改套餐' : '新建套餐'
-    to.meta.title = `${to.meta.pageTitle} · 均州鱼庄管理系统`
+    to.meta.title = `${to.meta.pageTitle} · 均州餐饮点餐营销管理系统`
   }
   return authGuard(to)
 })

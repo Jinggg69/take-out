@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 @Component @Slf4j
 public class OrderTask {
+    @Autowired(required=false) private com.junzhou.service.MemberOrderMaintenance memberMaintenance;
     private final OrderMaintenanceMapper orderMaintenanceMapper;
     private final Clock clock;
     @Autowired public OrderTask(OrderMaintenanceMapper mapper) { this(mapper,Clock.systemDefaultZone()); }
@@ -29,7 +30,8 @@ public class OrderTask {
                 for (Orders order:batch) {
                     after=order.getId();
                     try { BackgroundJobScope.forOrder(order, () -> {
-                        if(timeout) orderMaintenanceMapper.cancelOrderBefore(order.getId(),cutoff,now);
+                        if(memberMaintenance!=null) memberMaintenance.process(order.getId(),timeout,cutoff,now);
+                        else if(timeout) orderMaintenanceMapper.cancelOrderBefore(order.getId(),cutoff,now);
                         else orderMaintenanceMapper.completeOrderBefore(order.getId(),cutoff,now);
                     }); } catch(RuntimeException ex) { log.warn("订单维护失败，orderId={}",order.getId()); }
                 }

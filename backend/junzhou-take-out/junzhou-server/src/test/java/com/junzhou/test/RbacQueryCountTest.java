@@ -22,7 +22,7 @@ class RbacQueryCountTest {
         clearInvocations(mapper);
         Map<String,Object> result = new RbacServiceImpl(mapper).context();
         assertEquals(Collections.emptyList(), result.get("stores"));
-        assertTrue(mockingDetails(mapper).getInvocations().size() <= 4,
-                "Authorization query count must not grow with stores and actions");
+        assertTrue(mockingDetails(mapper).getInvocations().size() <= 6,
+                "Four authorization queries plus two identity projections must not grow with stores and actions");
     }
 }

@@ -460,3 +460,32 @@ test('成功下单保留自取履约类型供成功页展示', async () => {
   await page.payOrderHandle()
   assert.equal(store.orderData.fulfillmentType, 'PICKUP')
 })
+test('会员权益选择同时进入报价与提交，金额允许优惠后为零', async () => {
+ const {page,quoteRequests,requests} = createCheckout(undefined, () => Promise.resolve({code:1,data:{items:[{number:1,amount:119}],goodsAmount:119,packAmount:1,packFee:1,storeId:1,configVersion:0,deliveryFee:6,amount:116,membership:{joined:true,discountAmount:10,couponDiscount:9,levelDiscount:0,pointsUsed:100,pointsDiscount:1,balanceAmount:16,principalAmount:16,giftAmount:0,externalAmount:100,coupons:[]}}}))
+ page.couponId='9007199254740993';page.points=100;page.useBalance=true
+ await page.refreshQuote(); assert.equal(page.quoteReady,true);assert.equal(page.orderDishPrice,116)
+ assert.equal(quoteRequests[0].couponId,'9007199254740993');assert.equal(quoteRequests[0].points,100);assert.equal(quoteRequests[0].useBalance,true)
+ await page.payOrderHandle();assert.equal(requests[0].couponId,'9007199254740993');assert.equal(requests[0].points,100);assert.equal(requests[0].useBalance,true)
+})
+test('切换门店立即清空已选会员资产和权益', () => {
+ const {page,store}=createCheckout();page.checkoutScope=page.currentScope();page.membershipQuote={joined:true,availableBalance:100};page.couponId='9';page.points=100;page.useBalance=true
+ store.storeGeneration++;page.ensureCurrentScope();assert.equal(page.membershipQuote,null);assert.equal(page.couponId,'');assert.equal(page.points,0);assert.equal(page.useBalance,false)
+})
+test('会员全额优惠可报价零元，余额不会被误当订单总额', async () => {
+ const {page}=createCheckout(undefined,()=>Promise.resolve({code:1,data:{items:[{number:1,amount:119}],goodsAmount:119,packAmount:1,packFee:0,storeId:1,configVersion:0,deliveryFee:0,amount:0,membership:{joined:true,discountAmount:119,couponDiscount:119,levelDiscount:0,pointsUsed:0,pointsDiscount:0,balanceAmount:0,principalAmount:0,giftAmount:0,externalAmount:0,coupons:[]}}}))
+ await page.refreshQuote();assert.equal(page.quoteReady,true);assert.equal(page.orderDishPrice,0)
+})
+test('会员钱包分摊与优惠后总额不一致时拒绝报价', async () => {
+ const {page}=createCheckout(undefined,()=>Promise.resolve({code:1,data:{items:[{number:1,amount:119}],goodsAmount:119,packAmount:1,packFee:1,storeId:1,configVersion:0,deliveryFee:6,amount:116,membership:{joined:true,discountAmount:10,couponDiscount:10,levelDiscount:0,pointsUsed:0,pointsDiscount:0,balanceAmount:50,principalAmount:50,giftAmount:0,externalAmount:100,coupons:[]}}}))
+ await page.refreshQuote();assert.equal(page.quoteReady,false);assert.match(page.orderPriceError,/会员报价金额异常/)
+})
+test('积分输入提前阻止非完整兑换单位或超本单上限，不请求报价', async () => {
+ const {page,quoteRequests}=createCheckout();page.membershipQuote={joined:true,availablePoints:250,maxDeductiblePoints:200,pointsPerYuan:100}
+ await page.changeMemberChoice('points',{detail:{value:'150'}});assert.equal(quoteRequests.length,0);assert.equal(page.quoteReady,false);assert.match(page.orderPriceError,/200.*100/)
+ await page.changeMemberChoice('points',{detail:{value:'300'}});assert.equal(quoteRequests.length,0);assert.match(page.orderPriceError,/最多可用200/)
+ await page.changeMemberChoice('points',{detail:{value:'200'}});assert.equal(quoteRequests.length,1);assert.equal(quoteRequests[0].points,200)
+})
+test('禁叠加时后端返回零积分上限，客户端不能继续选择积分', async () => {
+ const {page,quoteRequests}=createCheckout();page.membershipQuote={joined:true,availablePoints:500,maxDeductiblePoints:0,pointsPerYuan:100}
+ await page.changeMemberChoice('points',{detail:{value:'100'}});assert.equal(quoteRequests.length,0);assert.equal(page.pointsMaximum,0)
+})

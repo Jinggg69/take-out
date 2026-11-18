@@ -8,7 +8,7 @@ import { platformRequest } from '@/utils/platform-request'
 import { sessionCookies } from '@/utils/cookies'
 import { errorMessage } from '@/utils/error-message'
 import PasswordDialog from './components/PasswordDialog.vue'
-import logoUrl from '@/assets/brand/junzhou-logo.png'
+
 
 const user = useUserStore(), router = useRouter()
 const loading = ref(true), error = ref(''), verified = ref(false), password = ref(false), leaving = ref(false)
@@ -43,14 +43,15 @@ onUnmounted(() => { active = false })
         class="platform-brand"
         to="/platform/tenants"
       >
-        <img
-          :src="logoUrl"
-          alt=""
-          width="40"
-          height="40"
-        />
-        <span><strong>平台管理</strong><small>商户与门店</small></span>
+        <span
+          class="platform-mark"
+          aria-hidden="true"
+        >均</span>
+        <span><strong>均州餐饮</strong><small>点餐营销管理系统</small></span>
       </RouterLink>
+      <p class="platform-identity">
+        平台运营管理
+      </p>
       <nav aria-label="平台导航">
         <RouterLink to="/platform/tenants">
           商户管理
@@ -105,11 +106,13 @@ onUnmounted(() => { active = false })
 </template>
 
 <style scoped lang="scss">
+.platform-mark { display: grid; place-items: center; width: 40px; height: 40px; background: #982d34; color: #fff; border-radius: 8px; font-size: 24px; flex: none; }
+.platform-identity { margin: 0 24px 16px; color: var(--jz-nav-text); }
 .platform-layout { display: grid; grid-template-columns: 224px minmax(0, 1fr); min-height: 100dvh; }
 .platform-sidebar { background: var(--jz-nav-background); color: var(--jz-nav-text); }
 .platform-brand { display: flex; align-items: center; gap: 12px; min-height: 88px; padding: 16px 24px; color: var(--jz-brand-gold); text-decoration: none; }
 .platform-brand img { object-fit: contain; }
-.platform-brand span { display: grid; gap: 4px; }
+.platform-brand > span:not(.platform-mark) { display: grid; gap: 4px; }
 .platform-brand strong { font-size: var(--jz-font-section); }
 .platform-brand small { color: var(--jz-nav-text); }
 nav { display: grid; gap: 8px; padding: 16px 12px; }
@@ -124,7 +127,7 @@ nav a.router-link-active { color: var(--jz-brand-gold); background: var(--jz-nav
 @media (max-width: 767px) {
   .platform-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .platform-brand { min-height: 64px; padding: 12px 16px; }
-  .platform-brand span { display: flex; align-items: baseline; gap: 12px; }
+  .platform-brand > span:not(.platform-mark) { display: flex; align-items: baseline; gap: 12px; }
   nav { display: flex; padding: 0 12px 12px; }
   .platform-toolbar { padding: 12px 16px; gap: 8px; }
   .platform-content { padding: 16px; }

@@ -57,6 +57,9 @@ import java.util.UUID;
  */
 @Service
 public class OrderServiceImpl implements OrderService {
+    @Autowired(required=false) private com.junzhou.membership.MembershipCheckoutService members;
+    @Autowired(required=false) private com.junzhou.service.WalletOrderPaymentService walletPayments;
+
     @org.springframework.beans.factory.annotation.Autowired
     private com.junzhou.ratelimit.RateLimitGuard rateLimitGuard;
 
@@ -88,9 +91,17 @@ public class OrderServiceImpl implements OrderService {
     private WebSocketServer webSocketServer;
 
     @Override
-    public OrderQuoteVO quote() { return orderPricingService.quote(); }
+    public OrderQuoteVO quote() { return quote(null,null,0,false); }
     @Override
-    public OrderQuoteVO quote(String type) { return orderPricingService.quote(type); }
+    public OrderQuoteVO quote(String type) { return quote(type,null,0,false); }
+    @Override public OrderQuoteVO quote(String type,Long couponId,long points,boolean useBalance) {
+        OrderQuoteVO quote=orderPricingService.quote(type);
+        if(members!=null) {
+            com.junzhou.membership.MembershipCheckoutService.Quote member=members.quote(quote.getGoodsAmount(),quote.getPackFee().add(quote.getDeliveryFee()),quote.getFulfillmentType(),couponId,points,useBalance);
+            quote.setAmount(member.getAmount()); quote.setMembership(member.asMap());
+        } else if(couponId!=null || points!=0 || useBalance) throw new OrderBusinessException("会员功能暂不可用");
+        return quote;
+    }
 
     /**
      * 用户下单
@@ -159,7 +170,8 @@ public class OrderServiceImpl implements OrderService {
         String actual=existing.getCartFingerprint()==null ? fingerprint : OrderSubmissionIdentity.fingerprint(input,cartKey);
         if (!actual.equals(existing.getSubmitFingerprint())) throw new OrderBusinessException("该请求标识已用于不同订单内容");
         return OrderSubmitVO.builder().id(existing.getId()).orderTime(existing.getOrderTime())
-                .orderNumber(existing.getNumber()).orderAmount(existing.getAmount()).build();
+                .orderNumber(existing.getNumber()).orderAmount(existing.getAmount())
+                .externalPayAmount(com.junzhou.payment.OrderPaymentAmounts.external(existing)).membership(memberSnapshot(existing)).build();
     }
 
     private OrderSubmitVO submitValidated(OrdersSubmitDTO ordersSubmitDTO, String fingerprint,
@@ -183,6 +195,12 @@ public class OrderServiceImpl implements OrderService {
             if (tableName==null) throw new OrderBusinessException("桌台不存在、已停用或不属于当前门店");
         }
         OrderQuoteVO quote = orderPricingService.quote(type);
+        com.junzhou.membership.MembershipCheckoutService.Quote memberQuote=null;
+        if(members!=null) {
+            memberQuote=members.quote(quote.getGoodsAmount(),quote.getPackFee().add(quote.getDeliveryFee()),type,
+                ordersSubmitDTO.getCouponId(),ordersSubmitDTO.getPoints()==null?0:ordersSubmitDTO.getPoints(),Boolean.TRUE.equals(ordersSubmitDTO.getUseBalance()));
+            quote.setAmount(memberQuote.getAmount()); quote.setMembership(memberQuote.asMap());
+        } else if(ordersSubmitDTO.getCouponId()!=null || (ordersSubmitDTO.getPoints()!=null&&ordersSubmitDTO.getPoints()!=0) || Boolean.TRUE.equals(ordersSubmitDTO.getUseBalance())) throw new OrderBusinessException("会员功能暂不可用");
         if (ordersSubmitDTO.getAmount().compareTo(quote.getAmount()) != 0) {
             throw new OrderBusinessException("商品价格或数量已变化，请重新确认订单金额");
         }
@@ -225,6 +243,7 @@ public class OrderServiceImpl implements OrderService {
         storeSnapshot.put("merchantName",merchantName);
         order.setStoreSnapshot(storeSnapshot.toJSONString());
         JSONObject priceSnapshot = new JSONObject();
+        if(memberQuote!=null) priceSnapshot.put("member",memberQuote.asMap());
         priceSnapshot.put("goodsAmount",quote.getGoodsAmount());
         priceSnapshot.put("packFee",quote.getPackFee());
         priceSnapshot.put("deliveryFee",quote.getDeliveryFee());
@@ -245,11 +264,14 @@ public class OrderServiceImpl implements OrderService {
             order.setConsignee(addressBook.getConsignee());
         }
         order.setUserId(userId);
+        order.setTenantId(com.junzhou.context.RequestScope.requireTenantId());
+        order.setStoreId(com.junzhou.context.RequestScope.requireStoreId());
 
         order.setPaymentAccountId(paymentAccounts.currentAccountId());
         order.setPaymentChannel(paymentAccounts.channelForNewOrders());
         orderMapper.insert(order);
         if(order.getId()==null) throw new OrderBusinessException("订单支付账户或归属已变化，请重试");
+        if(memberQuote!=null) members.reserve(order,memberQuote);
         //向订单明细表插入多条数据
         List<OrderDetail> orderDetailList = new ArrayList<>();
         for (ShoppingCart cart : quote.getItems()) {
@@ -270,6 +292,7 @@ public class OrderServiceImpl implements OrderService {
                 .orderTime(order.getOrderTime())
                 .orderNumber(order.getNumber())
                 .orderAmount(order.getAmount())
+                .externalPayAmount(com.junzhou.payment.OrderPaymentAmounts.external(order)).membership(memberSnapshot(order))
                 .build();
         return orderSubmitVO;
     }
@@ -291,12 +314,17 @@ public class OrderServiceImpl implements OrderService {
         }
         if("MOCK".equals(paymentAccounts.channelForNewOrders()) && !"MOCK".equals(order.getPaymentChannel()))
             throw new OrderBusinessException("这是原微信渠道订单，请创建新的模拟订单");
+        if(com.junzhou.payment.OrderPaymentAmounts.external(order).signum()==0) {
+            if(walletPayments==null) throw new OrderBusinessException("余额结算暂不可用");
+            walletPayments.pay(order.getId());
+            OrderPaymentVO paid=new OrderPaymentVO(); paid.setChannel("BALANCE"); paid.setOrderId(order.getId()); return paid;
+        }
         User user = userMapper.getById(userId);
 
         JSONObject jsonObject = paymentAccounts.provider(order).pay(
                 ordersPaymentDTO.getOrderNumber(),
-                order.getAmount(),
-                "均州鱼庄外卖订单",
+                com.junzhou.payment.OrderPaymentAmounts.external(order),
+                "均州餐饮点餐订单",
                 user.getOpenid()
         );
 
@@ -402,9 +430,17 @@ public class OrderServiceImpl implements OrderService {
      * @param order 订单信息
      * @return 订单展示对象
      */
+    private Map<String,Object> memberSnapshot(Orders order) {
+        if(order.getPricingSnapshot()==null) return null;
+        JSONObject root=JSON.parseObject(order.getPricingSnapshot());
+        return root==null?null:root.getJSONObject("member");
+    }
+
     private OrderVO toOrderVO(Orders order) {
         OrderVO vo = new OrderVO();
         BeanUtils.copyProperties(order, vo);
+        vo.setExternalPayAmount(com.junzhou.payment.OrderPaymentAmounts.external(order));
+        vo.setMembership(memberSnapshot(order));
         List<OrderDetail> details = orderDetailMapper.getByOrderId(order.getId());
         vo.setOrderDetailList(details);
         //拼接订单菜品信息，例如：鱼香肉丝*2;米饭*1
@@ -533,6 +569,15 @@ public class OrderServiceImpl implements OrderService {
         orderMapper.update(update);
         order.setStatus(Orders.CANCELLED);
         if(!Orders.UN_PAID.equals(order.getPayStatus())) refundTransactions.request(order);
+        else if(members!=null) members.release(order);
+    }
+
+    @Override @Transactional
+    public void refund(Long id,String reason) {
+        requireReason(reason);
+        Orders order=requireOrder(id,true);
+        if(Orders.UN_PAID.equals(order.getPayStatus())) throw new OrderBusinessException("未付款订单不能退款");
+        refundTransactions.request(order);
     }
 
     private boolean isRefundPending(Orders order) {
@@ -577,6 +622,7 @@ public class OrderServiceImpl implements OrderService {
         if (!Orders.PAID.equals(order.getPayStatus())) throw new OrderBusinessException(MessageConstant.ORDER_STATUS_ERROR);
         orderMapper.update(Orders.builder().id(id).status(Orders.COMPLETED)
                 .deliveryTime(LocalDateTime.now()).build());
+        if(members!=null) members.complete(order);
     }
 
     /**

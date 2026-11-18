@@ -1,0 +1,13 @@
+.member-page .management-filter { flex-wrap: wrap; gap: 16px; }
+.member-page .management-filter > .el-input { max-width: 280px; }
+.member-page .management-filter > .el-select { width: 160px; }
+.member-page .management-filter > .el-date-editor { max-width: 370px; }
+.member-hint { display: block; color: var(--jz-text-secondary); width: 100%; line-height: 1.6; margin-top: 6px; }
+.member-notice { color: var(--jz-text-secondary); margin: 0 0 20px; line-height: 1.7; }
+.member-form .el-select, .member-form .el-date-editor { width: 100%; }
+.member-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.member-actions .el-button { margin-left: 0; }
+.member-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; margin-bottom: 24px; }
+.member-detail-grid dt { color: var(--jz-text-secondary); font-size: 13px; }
+.member-detail-grid dd { margin: 5px 0 0; overflow-wrap: anywhere; }
+@media(max-width: 767px) { .member-page .page-header { flex-wrap: wrap; } .member-page .management-filter > .el-input, .member-page .management-filter > .el-select { width: 100%; max-width: none; } .member-detail-grid { grid-template-columns: 1fr; } }

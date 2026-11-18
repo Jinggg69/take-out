@@ -40,4 +40,8 @@ public class OrdersSubmitDTO implements Serializable {
     @lombok.ToString.Exclude
     private String diningToken;
 
+    // Membership choices are re-priced by the server; monetary values are never trusted.
+    private Long couponId;
+    private Long points;
+    private Boolean useBalance;
 }

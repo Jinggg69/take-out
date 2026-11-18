@@ -12,7 +12,8 @@ import { actionLabels, cancellationReasons, orderActions, orderMoney, orderReaso
 import { errorMessage } from '@/utils/error-message'
 import { createOrderList } from '../order/list-state'
 
-const visibleOrderActions=(row:OrderRecord)=>orderActions(row.status,row).filter(action=>{
+type DashboardOrderAction = Exclude<OrderAction, 'refund'>
+const visibleOrderActions=(row:OrderRecord)=>orderActions(row.status,row).filter((action): action is DashboardOrderAction => action !== 'refund').filter(action=>{
  const code=({accept:'accept',reject:'reject',cancel:'cancel',delivery:'deliver',complete:'complete',ready:'pickup:ready',verify:'pickup:verify',dineComplete:'dine:complete'} as const)[action]
  return workspace.can('order:'+code) && (!['reject','cancel'].includes(action)||workspace.can('order:refund'))
 })
@@ -74,7 +75,7 @@ function openReason(row: OrderRecord, kind: 'reject' | 'cancel', fromDetail: boo
   reasonKind.value = kind; reasonRow.value = row; reasonFromDetail.value = fromDetail
   selectedReason.value = ''; customReason.value = ''; reasonError.value = ''; reasonVisible.value = true
 }
-async function perform(row: OrderRecord, action: OrderAction, fromDetail = false, reason?: string) {
+async function perform(row: OrderRecord, action: DashboardOrderAction, fromDetail = false, reason?: string) {
   if (busy.value || !visibleOrderActions(row).includes(action)) return
   if ((action === 'reject' || action === 'cancel') && reason === undefined) { openReason(row, action, fromDetail); return }
   let pickupNumber = ''

@@ -18,6 +18,7 @@ import java.util.*;
 @Service
 @Transactional(rollbackFor=Exception.class)
 public class PlatformManagementService {
+    @org.springframework.beans.factory.annotation.Autowired(required=false) private com.junzhou.service.MembershipDefaults membershipDefaults;
     private final JdbcTemplate db;
     private final PasswordHashService passwords;
     private final Environment environment;
@@ -52,6 +53,7 @@ public class PlatformManagementService {
         Map<String,Object> first=(Map<String,Object>)store;validateStore(first);
         Long id=insert("insert into tenant(code,name,status) values(?,?,1)",code,name);
         Long storeId=insertStore(id,first);
+        if(membershipDefaults!=null) membershipDefaults.initialize(id);
         String[] roles={"MERCHANT_ADMIN","MANAGER","CLERK"};String[] names={"商户管理员","店长","店员"};
         for(int i=0;i<roles.length;i++) db.update("insert into rbac_role(tenant_id,code,name) values(?,?,?)",id,roles[i],names[i]);
         for(PermissionAction action:PermissionAction.values()) {

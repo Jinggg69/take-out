@@ -12,13 +12,15 @@ import java.util.UUID;
 
 @Service
 public class DiningServiceImpl implements DiningService {
+    @org.springframework.beans.factory.annotation.Autowired(required=false) private com.junzhou.membership.MembershipCheckoutService members;
     private final DiningMapper mapper;
     private final com.junzhou.mapper.OrderMapper orders;
     public DiningServiceImpl(DiningMapper mapper,com.junzhou.mapper.OrderMapper orders){this.mapper=mapper;this.orders=orders;}
     /** 按类型、支付和履约前置条件完成堂食订单。 */
-    @Override public void complete(Long id){
+    @Override @Transactional public void complete(Long id){
         RequestScope.requireEmployeeTenantId();
         if(id==null || id<=0 || orders.dineComplete(id)!=1)throw new OrderBusinessException("堂食订单尚未接单、已完成或支付退款状态异常");
+        if(members!=null) members.complete(orders.getByIdForUpdate(id));
     }
     private Long tenant(){return RequestScope.requireTenantId();}
     private Long store(){return RequestScope.requireStoreId();}

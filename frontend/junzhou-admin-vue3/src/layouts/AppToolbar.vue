@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { breadcrumbsFor } from '@/router/navigation'
 import StoreSelector from './components/StoreSelector.vue'
-import { workspace } from '@/stores/workspace'
-import { onMounted, onUnmounted, ref } from 'vue'
+import { workspace, canVisit } from '@/stores/workspace'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElButton, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage } from 'element-plus'
 import AppIcon from '@/components/AppIcon.vue'
@@ -16,6 +17,7 @@ const app = useAppStore()
 const user = useUserStore()
 const route = useRoute()
 const router = useRouter()
+const breadcrumbs = computed(() => breadcrumbsFor(route.path, route.meta.pageTitle || '', canVisit))
 const status = ref<ShopStatus | null>(null)
 const statusLoading = ref(true)
 const shopVisible = ref(false)
@@ -56,10 +58,33 @@ async function accountCommand(command: string) {
       >
         <AppIcon :name="app.isMobile ? 'menu' : 'collapse'" />
       </ElButton>
-      <span
-        class="current-location"
-        :title="route.meta.pageTitle || '管理系统'"
-      >{{ route.meta.pageTitle || '管理系统' }}</span>
+      <nav
+        class="breadcrumbs"
+        aria-label="面包屑导航"
+      >
+        <ol>
+          <li
+            v-for="(crumb, index) in breadcrumbs"
+            :key="index"
+          >
+            <span
+              v-if="index"
+              class="breadcrumb-separator"
+              aria-hidden="true"
+            >/</span>
+            <RouterLink
+              v-if="crumb.path"
+              :to="crumb.path"
+            >
+              {{ crumb.label }}
+            </RouterLink>
+            <span
+              v-else
+              :aria-current="index === breadcrumbs.length - 1 ? 'page' : undefined"
+            >{{ crumb.label }}</span>
+          </li>
+        </ol>
+      </nav>
     </div>
     <div class="toolbar-actions">
       <StoreSelector />
@@ -121,7 +146,13 @@ async function accountCommand(command: string) {
 .toolbar-location, .toolbar-actions { display: flex; align-items: center; gap: var(--jz-space-3); min-width: 0; }
 .toolbar-location { flex: 1; }
 .toolbar-actions { flex-shrink: 0; }
-.current-location { min-width: 0; overflow: hidden; color: var(--jz-text-secondary); font-size: var(--jz-font-control); text-overflow: ellipsis; white-space: nowrap; }
+.breadcrumbs { min-width: 0; overflow-x: auto; }
+.breadcrumbs ol { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0; list-style: none; white-space: nowrap; font-size: 14px; }
+.breadcrumbs li { display: flex; align-items: center; gap: 8px; color: var(--jz-text-secondary); }
+.breadcrumbs a { color: var(--jz-text-secondary); text-decoration: none; }
+.breadcrumbs a:hover { color: var(--jz-brand-primary); text-decoration: underline; }
+.breadcrumbs [aria-current="page"] { color: var(--jz-text-primary); }
+.breadcrumb-separator { color: var(--jz-text-secondary); }
 .toolbar-icon { flex: none; min-width: 36px; min-height: 36px; }
 .toolbar-actions > .el-button { margin-left: 0; }
 .business-status { flex: none; padding: var(--jz-space-1) var(--jz-space-2); border-radius: var(--jz-radius-control); color: var(--jz-text-secondary); background: var(--jz-page-background); font-size: var(--jz-font-caption); white-space: nowrap; }
@@ -131,9 +162,11 @@ async function accountCommand(command: string) {
 .account-trigger { gap: var(--jz-space-2); }
 .account-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 767px) {
-  .toolbar { padding-inline: var(--jz-space-3); gap: var(--jz-space-2); }
+  .toolbar { flex-wrap: wrap; padding-inline: var(--jz-space-3); gap: var(--jz-space-2); }
   .toolbar-location, .toolbar-actions { gap: var(--jz-space-1); }
-  .settings-label, .current-location { display: none; }
+  .toolbar-location { flex-basis: 100%; }
+  .toolbar-actions { flex-wrap: wrap; width: 100%; justify-content: flex-end; padding-bottom: 8px; }
+  .settings-label { display: none; }
   .account-name { max-width: 64px; }
   .toolbar-icon, .account-trigger { min-height: 44px; min-width: 44px; padding-inline: var(--jz-space-2); }
 }

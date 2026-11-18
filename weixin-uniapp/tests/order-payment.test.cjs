@@ -351,3 +351,7 @@ test('正常核查最多六次且保持两秒间隔',async()=>{
  const waits=[];const h=setup({delayHook:ms=>waits.push(ms)})
  await h.page.handleSave();assert.equal(h.confirmations,6);assert.deepEqual(waits,[2000,2000,2000,2000,2000])
 })
+test('全余额和零元订单使用服务端 BALANCE 确认，不调用微信或模拟收银台', async () => {
+ const h = setup({prepay:async()=>({code:1,data:{channel:'BALANCE',orderId:'10'}}),confirm:async()=>({code:1,data:{status:2,payStatus:1}})})
+ await h.page.handleSave();assert.equal(h.paymentCalls,0);assert.equal(h.confirmations,1);assert.equal(h.page.mockCashier,false);assert.ok(h.routes[0].url.includes('/success/'))
+})

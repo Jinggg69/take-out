@@ -13,6 +13,7 @@ public class RefundRequest {
     private String outTradeNo;
     private String transactionId;
     private Long amountFen;
+    private java.math.BigDecimal orderAmount; // immutable total used to validate split refund inserts
     private String status;
     private Boolean queryOnly;
     private String providerRefundId;

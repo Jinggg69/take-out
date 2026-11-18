@@ -252,6 +252,8 @@ export default {
 			const obj = {
 				orderNumber: this.orderDetailsData.number,
 				orderAmount: this.orderDetailsData.amount,
+                externalPayAmount: this.orderDetailsData.externalPayAmount,
+                membership: this.orderDetailsData.membership,
                 fulfillmentType: this.orderDetailsData.fulfillmentType,
                 storeId: this.orderDetailsData.storeId,
 				orderTime: this.orderDetailsData.orderTime
