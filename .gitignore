@@ -32,6 +32,7 @@ tools/redis/
 **/unpackage/
 
 # Local delivery notes and verification reports
+/.workbuddy/memory/
 /docs/
 /backend/ADDRESS_SAVE_FIX.md
 /backend/ADDRESS_BOOK_TEST_REPORT.md
